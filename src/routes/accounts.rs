@@ -1,0 +1,356 @@
+/// Account management endpoints
+use axum::{extract::{Path, State}, http::StatusCode, Json};
+use serde::{Deserialize, Serialize};
+use sqlx::SqlitePool;
+use crate::models::account::{Account, EmailProvider};
+use crate::services::account_service;
+
+#[derive(Debug, Deserialize)]
+pub struct AddAccountRequest {
+    pub email: String,
+    pub password: Option<String>, // Optional for OAuth2
+    pub provider: String, // "gmail", "outlook", "yahoo", "icloud", "custom"
+    pub display_name: Option<String>,
+    // For custom provider
+    pub imap_host: Option<String>,
+    pub imap_port: Option<u16>,
+    pub smtp_host: Option<String>,
+    pub smtp_port: Option<u16>,
+    // OAuth2 fields
+    pub auth_method: Option<String>, // "password" or "oauth2"
+    pub oauth_access_token: Option<String>,
+    pub oauth_refresh_token: Option<String>,
+    pub oauth_expires_at: Option<i64>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct AddAccountResponse {
+    pub success: bool,
+    pub account_id: String,
+    pub message: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct AccountResponse {
+    pub id: String,
+    pub email: String,
+    pub provider: String,
+    pub display_name: Option<String>,
+    pub imap_host: String,
+    pub imap_port: u16,
+    pub smtp_host: String,
+    pub smtp_port: u16,
+    pub enabled: bool,
+    pub last_sync_ts: Option<i64>,
+}
+
+impl From<Account> for AccountResponse {
+    fn from(acc: Account) -> Self {
+        Self {
+            id: acc.id,
+            email: acc.email,
+            provider: acc.provider.as_str().to_string(),
+            display_name: acc.display_name,
+            imap_host: acc.imap_host,
+            imap_port: acc.imap_port,
+            smtp_host: acc.smtp_host,
+            smtp_port: acc.smtp_port,
+            enabled: acc.enabled,
+            last_sync_ts: acc.last_sync_ts,
+        }
+    }
+}
+
+/// POST /accounts - Add a new email account
+pub async fn add_account(
+    State(pool): State<SqlitePool>,
+    Json(req): Json<AddAccountRequest>,
+) -> Result<Json<AddAccountResponse>, StatusCode> {
+    let provider = EmailProvider::from_str(&req.provider);
+    
+    // Check if OAuth2 or password auth
+    let is_oauth = req.auth_method.as_deref() == Some("oauth2");
+    
+    if is_oauth {
+        // OAuth2 flow - validate tokens
+        if req.oauth_access_token.is_none() {
+            return Ok(Json(AddAccountResponse {
+                success: false,
+                account_id: String::new(),
+                message: "OAuth2 requires access_token".to_string(),
+            }));
+        }
+        
+        // Add OAuth2 account
+        match add_oauth_account(
+            &pool,
+            &req.email,
+            provider,
+            req.display_name,
+            req.oauth_access_token.unwrap(),
+            req.oauth_refresh_token,
+            req.oauth_expires_at,
+        )
+        .await
+        {
+            Ok(account) => {
+                tracing::info!("OAuth2 account added: {}", account.email);
+                Ok(Json(AddAccountResponse {
+                    success: true,
+                    account_id: account.id,
+                    message: format!("Account {} added successfully via OAuth2", account.email),
+                }))
+            }
+            Err(e) => {
+                tracing::error!("Failed to add OAuth2 account: {}", e);
+                Ok(Json(AddAccountResponse {
+                    success: false,
+                    account_id: String::new(),
+                    message: format!("Failed to add account: {}", e),
+                }))
+            }
+        }
+    } else {
+        // Password flow - validate password
+        if req.password.is_none() {
+            return Ok(Json(AddAccountResponse {
+                success: false,
+                account_id: String::new(),
+                message: "Password is required for non-OAuth authentication".to_string(),
+            }));
+        }
+        
+        // Validate custom provider
+        let custom_config = if provider == EmailProvider::Custom {
+            if req.imap_host.is_none() || req.smtp_host.is_none() {
+                return Ok(Json(AddAccountResponse {
+                    success: false,
+                    account_id: String::new(),
+                    message: "Custom provider requires imap_host and smtp_host".to_string(),
+                }));
+            }
+            Some((
+                req.imap_host.unwrap(),
+                req.imap_port.unwrap_or(993),
+                req.smtp_host.unwrap(),
+                req.smtp_port.unwrap_or(587),
+            ))
+        } else {
+            None
+        };
+        
+        match account_service::add_account(
+            &pool,
+            &req.email,
+            &req.password.unwrap(),
+            provider,
+            req.display_name,
+            custom_config,
+        )
+        .await
+        {
+            Ok(account) => {
+                tracing::info!("Account added: {}", account.email);
+                Ok(Json(AddAccountResponse {
+                    success: true,
+                    account_id: account.id,
+                    message: format!("Account {} added successfully", account.email),
+                }))
+            }
+            Err(e) => {
+                tracing::error!("Failed to add account: {}", e);
+                Ok(Json(AddAccountResponse {
+                    success: false,
+                    account_id: String::new(),
+                    message: format!("Failed to add account: {}", e),
+                }))
+            }
+        }
+    }
+}
+        }
+        Err(e) => {
+            tracing::error!("Failed to add account: {}", e);
+            Ok(Json(AddAccountResponse {
+                success: false,
+                account_id: String::new(),
+                message: format!("Failed to add account: {}", e),
+            }))
+        }
+    }
+}
+
+/// Helper: Add OAuth2 account
+async fn add_oauth_account(
+    pool: &SqlitePool,
+    email: &str,
+    provider: EmailProvider,
+    display_name: Option<String>,
+    access_token: String,
+    refresh_token: Option<String>,
+    expires_at: Option<i64>,
+) -> Result<Account, String> {
+    let account_id = uuid::Uuid::new_v4().to_string();
+    let display = display_name.unwrap_or_else(|| format!("{} Account", email));
+    
+    let (imap_host, imap_port, smtp_host, smtp_port) = match provider {
+        EmailProvider::Gmail => (
+            "imap.gmail.com".to_string(),
+            993,
+            "smtp.gmail.com".to_string(),
+            587,
+        ),
+        EmailProvider::Outlook => (
+            "outlook.office365.com".to_string(),
+            993,
+            "smtp.office365.com".to_string(),
+            587,
+        ),
+        EmailProvider::Yahoo => (
+            "imap.mail.yahoo.com".to_string(),
+            993,
+            "smtp.mail.yahoo.com".to_string(),
+            587,
+        ),
+        EmailProvider::ICloud => (
+            "imap.mail.me.com".to_string(),
+            993,
+            "smtp.mail.me.com".to_string(),
+            587,
+        ),
+        _ => return Err("OAuth2 not supported for this provider".to_string()),
+    };
+    
+    // Insert account with OAuth2 credentials
+    sqlx::query(
+        r#"
+        INSERT INTO accounts (
+            id, email, provider, display_name,
+            imap_host, imap_port, smtp_host, smtp_port,
+            auth_method, oauth_access_token, oauth_refresh_token, oauth_expires_at,
+            credentials_encrypted, enabled, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'oauth2', ?, ?, ?, '', 1, CURRENT_TIMESTAMP)
+        "#,
+    )
+    .bind(&account_id)
+    .bind(email)
+    .bind(provider.as_str())
+    .bind(&display)
+    .bind(&imap_host)
+    .bind(imap_port as i64)
+    .bind(&smtp_host)
+    .bind(smtp_port as i64)
+    .bind(&access_token)
+    .bind(&refresh_token)
+    .bind(expires_at)
+    .execute(pool)
+    .await
+    .map_err(|e| format!("Database error: {}", e))?;
+    
+    Ok(Account {
+        id: account_id,
+        email: email.to_string(),
+        provider,
+        display_name: Some(display),
+        imap_host,
+        imap_port,
+        smtp_host,
+        smtp_port,
+        credentials_encrypted: String::new(),
+        enabled: true,
+        last_sync_ts: None,
+        created_at: chrono::Utc::now().timestamp(),
+    })
+}
+
+/// GET /accounts - List all accounts
+pub async fn list_accounts(
+    State(pool): State<SqlitePool>,
+) -> Result<Json<Vec<AccountResponse>>, StatusCode> {
+    match account_service::list_accounts(&pool).await {
+        Ok(accounts) => {
+            let response: Vec<AccountResponse> = accounts.into_iter().map(Into::into).collect();
+            Ok(Json(response))
+        }
+        Err(e) => {
+            tracing::error!("Failed to list accounts: {}", e);
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
+        }
+    }
+}
+
+/// GET /accounts/:id - Get account by ID
+pub async fn get_account(
+    State(pool): State<SqlitePool>,
+    Path(account_id): Path<String>,
+) -> Result<Json<AccountResponse>, StatusCode> {
+    match account_service::get_account(&pool, &account_id).await {
+        Ok(Some(account)) => Ok(Json(account.into())),
+        Ok(None) => Err(StatusCode::NOT_FOUND),
+        Err(e) => {
+            tracing::error!("Failed to get account: {}", e);
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
+        }
+    }
+}
+
+/// DELETE /accounts/:id - Delete account
+pub async fn delete_account(
+    State(pool): State<SqlitePool>,
+    Path(account_id): Path<String>,
+) -> Result<StatusCode, StatusCode> {
+    match account_service::delete_account(&pool, &account_id).await {
+        Ok(true) => {
+            tracing::info!("Account deleted: {}", account_id);
+            Ok(StatusCode::NO_CONTENT)
+        }
+        Ok(false) => Err(StatusCode::NOT_FOUND),
+        Err(e) => {
+            tracing::error!("Failed to delete account: {}", e);
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
+        }
+    }
+}
+
+/// GET /providers - List available email providers with configs
+#[derive(Debug, Serialize)]
+pub struct ProviderInfo {
+    pub id: String,
+    pub name: String,
+    pub imap_host: String,
+    pub imap_port: u16,
+    pub smtp_host: String,
+    pub smtp_port: u16,
+}
+
+pub async fn list_providers() -> Json<Vec<ProviderInfo>> {
+    let providers = vec![
+        EmailProvider::Gmail,
+        EmailProvider::Outlook,
+        EmailProvider::Yahoo,
+        EmailProvider::Icloud,
+    ];
+    
+    let info: Vec<ProviderInfo> = providers
+        .into_iter()
+        .map(|p| {
+            let config = p.default_config();
+            ProviderInfo {
+                id: p.as_str().to_string(),
+                name: match p {
+                    EmailProvider::Gmail => "Gmail".to_string(),
+                    EmailProvider::Outlook => "Outlook / Office 365".to_string(),
+                    EmailProvider::Yahoo => "Yahoo Mail".to_string(),
+                    EmailProvider::Icloud => "iCloud Mail".to_string(),
+                    EmailProvider::Custom => "Custom".to_string(),
+                },
+                imap_host: config.imap_host,
+                imap_port: config.imap_port,
+                smtp_host: config.smtp_host,
+                smtp_port: config.smtp_port,
+            }
+        })
+        .collect();
+    
+    Json(info)
+}
