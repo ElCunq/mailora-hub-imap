@@ -2,13 +2,14 @@
 use axum::{
     extract::{Path, State},
     http::StatusCode,
-    Json, response::sse::{Event, KeepAlive, Sse},
+    response::sse::{Event, KeepAlive, Sse},
+    Json,
 };
+use futures::stream::Stream;
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
-use std::sync::Arc;
 use std::convert::Infallible;
-use futures::stream::Stream;
+use std::sync::Arc;
 
 use crate::services::{account_service, idle_watcher_service::IdleWatcherManager};
 
@@ -20,18 +21,32 @@ pub async fn start_idle_watcher(
 ) -> Result<Json<IdleResponse>, (StatusCode, String)> {
     let account = account_service::get_account(&pool, &account_id)
         .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Database error: {}", e)))?
-        .ok_or_else(|| (StatusCode::NOT_FOUND, format!("Account {} not found", account_id)))?;
-    
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Database error: {}", e),
+            )
+        })?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                format!("Account {} not found", account_id),
+            )
+        })?;
+
     tracing::info!("Starting IDLE watcher for account: {}", account.email);
-    
-    idle_manager.start_watcher(account.clone())
+
+    idle_manager
+        .start_watcher(account.clone())
         .await
         .map_err(|e| {
             tracing::error!("Failed to start IDLE watcher: {}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to start watcher: {}", e))
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to start watcher: {}", e),
+            )
         })?;
-    
+
     Ok(Json(IdleResponse {
         success: true,
         message: format!("IDLE watcher started for {}", account.email),
@@ -45,14 +60,15 @@ pub async fn stop_idle_watcher(
     Path(account_id): Path<String>,
 ) -> Result<Json<IdleResponse>, (StatusCode, String)> {
     tracing::info!("Stopping IDLE watcher for account: {}", account_id);
-    
-    idle_manager.stop_watcher(&account_id)
-        .await
-        .map_err(|e| {
-            tracing::error!("Failed to stop IDLE watcher: {}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to stop watcher: {}", e))
-        })?;
-    
+
+    idle_manager.stop_watcher(&account_id).await.map_err(|e| {
+        tracing::error!("Failed to stop IDLE watcher: {}", e);
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Failed to stop watcher: {}", e),
+        )
+    })?;
+
     Ok(Json(IdleResponse {
         success: true,
         message: format!("IDLE watcher stopped for {}", account_id),
@@ -65,7 +81,7 @@ pub async fn idle_status(
     State(idle_manager): State<Arc<IdleWatcherManager>>,
 ) -> Result<Json<IdleStatusResponse>, (StatusCode, String)> {
     let active_count = idle_manager.active_count().await;
-    
+
     Ok(Json(IdleStatusResponse {
         active_watchers: active_count,
     }))
@@ -76,7 +92,7 @@ pub async fn idle_events_stream(
     State(idle_manager): State<Arc<IdleWatcherManager>>,
 ) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
     let mut rx = idle_manager.subscribe();
-    
+
     let stream = async_stream::stream! {
         loop {
             match rx.recv().await {
@@ -91,7 +107,7 @@ pub async fn idle_events_stream(
             }
         }
     };
-    
+
     Sse::new(stream).keep_alive(KeepAlive::default())
 }
 

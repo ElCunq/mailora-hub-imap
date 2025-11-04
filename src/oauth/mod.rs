@@ -1,13 +1,13 @@
-use oauth2::{
-    AuthUrl, AuthorizationCode, ClientId, ClientSecret, CsrfToken, PkceCodeChallenge, PkceCodeVerifier,
-    RedirectUrl, RevocationUrl, Scope, TokenResponse, TokenUrl,
-};
 use oauth2::basic::BasicClient;
 use oauth2::reqwest::async_http_client;
+use oauth2::{
+    AuthUrl, AuthorizationCode, ClientId, ClientSecret, CsrfToken, PkceCodeChallenge,
+    PkceCodeVerifier, RedirectUrl, RevocationUrl, Scope, TokenResponse, TokenUrl,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use tokio::sync::RwLock;
 use std::sync::Arc;
+use tokio::sync::RwLock;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OAuthConfig {
@@ -60,7 +60,8 @@ impl OAuthManager {
                     .unwrap_or_else(|_| "YOUR_MICROSOFT_CLIENT_ID".to_string()),
                 client_secret: std::env::var("MICROSOFT_CLIENT_SECRET")
                     .unwrap_or_else(|_| "YOUR_MICROSOFT_CLIENT_SECRET".to_string()),
-                auth_url: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize".to_string(),
+                auth_url: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize"
+                    .to_string(),
                 token_url: "https://login.microsoftonline.com/common/oauth2/v2.0/token".to_string(),
                 redirect_uri: "http://localhost:3030/oauth/callback".to_string(),
                 scopes: vec![
@@ -114,13 +115,10 @@ impl OAuthManager {
         let (auth_url, csrf_state) = auth_request.url();
 
         // Store state and PKCE verifier for validation
-        self.pending_auths
-            .write()
-            .await
-            .insert(
-                csrf_state.secret().clone(), 
-                (provider.to_string(), account_id.to_string(), pkce_verifier)
-            );
+        self.pending_auths.write().await.insert(
+            csrf_state.secret().clone(),
+            (provider.to_string(), account_id.to_string(), pkce_verifier),
+        );
 
         Ok(auth_url.to_string())
     }
@@ -173,10 +171,7 @@ impl OAuthManager {
     }
 
     /// Refresh access token using refresh token
-    pub async fn refresh_token(
-        provider: &str,
-        refresh_token: &str,
-    ) -> Result<OAuthTokens, String> {
+    pub async fn refresh_token(provider: &str, refresh_token: &str) -> Result<OAuthTokens, String> {
         let config = Self::get_provider_config(provider)?;
 
         let client = BasicClient::new(
@@ -232,8 +227,5 @@ impl OAuthManager {
 
 /// XOAUTH2 authentication string for IMAP/SMTP
 pub fn generate_xoauth2_string(email: &str, access_token: &str) -> String {
-    format!(
-        "user={}\x01auth=Bearer {}\x01\x01",
-        email, access_token
-    )
+    format!("user={}\x01auth=Bearer {}\x01\x01", email, access_token)
 }

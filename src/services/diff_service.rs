@@ -28,7 +28,11 @@ pub struct DiffResponse {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct FolderCursor { pub name: String, pub uidvalidity: u32, pub last_uid: u32 }
+pub struct FolderCursor {
+    pub name: String,
+    pub uidvalidity: u32,
+    pub last_uid: u32,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CursorToken {
@@ -53,12 +57,24 @@ pub fn decode_cursor(s: &str) -> Result<CursorToken> {
 }
 
 #[derive(Serialize)]
-#[serde(tag="type", rename_all="camelCase")]
+#[serde(tag = "type", rename_all = "camelCase")]
 pub enum ChangeItem {
     // include folder so client can fetch body from correct mailbox
-    MessageAdded { folder: String, uid: u32, subject: String, from: String, date: Option<String>, size: Option<u32> },
-    MessageRemoved { uid: u32 },
-    MessageFlagsUpdated { uid: u32, flags: Vec<String> },
+    MessageAdded {
+        folder: String,
+        uid: u32,
+        subject: String,
+        from: String,
+        date: Option<String>,
+        size: Option<u32>,
+    },
+    MessageRemoved {
+        uid: u32,
+    },
+    MessageFlagsUpdated {
+        uid: u32,
+        flags: Vec<String>,
+    },
 }
 
 #[derive(Serialize)]
@@ -69,24 +85,64 @@ pub struct DiffResponseWire {
     pub changes: Vec<ChangeItem>,
 }
 
-pub async fn initial_diff_with_folder(account_id: &str, folder: &str, uidvalidity: u32, last_uid: u32) -> DiffResponseWire {
-    let cur = CursorToken { folder: folder.into(), uidvalidity, last_uid, modseq: None, folders: None };
+pub async fn initial_diff_with_folder(
+    account_id: &str,
+    folder: &str,
+    uidvalidity: u32,
+    last_uid: u32,
+) -> DiffResponseWire {
+    let cur = CursorToken {
+        folder: folder.into(),
+        uidvalidity,
+        last_uid,
+        modseq: None,
+        folders: None,
+    };
     let token = encode_cursor(&cur);
-    DiffResponseWire { accountId: account_id.into(), since: token.clone(), next: token, changes: vec![] }
+    DiffResponseWire {
+        accountId: account_id.into(),
+        since: token.clone(),
+        next: token,
+        changes: vec![],
+    }
 }
 
 pub async fn initial_diff(account_id: &str, uidvalidity: u32, last_uid: u32) -> DiffResponseWire {
     initial_diff_with_folder(account_id, "INBOX", uidvalidity, last_uid).await
 }
 
-pub async fn incremental_diff(account_id: &str, cursor: &CursorToken, new_last_uid: u32, new_msgs: Vec<crate::imap::sync::NewMessageMeta>) -> DiffResponseWire {
+pub async fn incremental_diff(
+    account_id: &str,
+    cursor: &CursorToken,
+    new_last_uid: u32,
+    new_msgs: Vec<crate::imap::sync::NewMessageMeta>,
+) -> DiffResponseWire {
     let mut next_cur = cursor.clone();
     next_cur.last_uid = new_last_uid;
     let next_tok = encode_cursor(&next_cur);
     let folder_hint = cursor.folder.clone();
-    let changes = new_msgs.into_iter().map(|m| crate::services::diff_service::ChangeItem::MessageAdded { folder: folder_hint.clone(), uid: m.uid, subject: m.subject, from: m.from, date: m.date, size: m.size }).collect();
-    DiffResponseWire { accountId: account_id.into(), since: encode_cursor(cursor), next: next_tok, changes }
+    let changes = new_msgs
+        .into_iter()
+        .map(
+            |m| crate::services::diff_service::ChangeItem::MessageAdded {
+                folder: folder_hint.clone(),
+                uid: m.uid,
+                subject: m.subject,
+                from: m.from,
+                date: m.date,
+                size: m.size,
+            },
+        )
+        .collect();
+    DiffResponseWire {
+        accountId: account_id.into(),
+        since: encode_cursor(cursor),
+        next: next_tok,
+        changes,
+    }
 }
 
 // Placeholder diff compute (not used by routes::diff which has its own handler for now)
-pub async fn compute_diff(_req: DiffRequest) -> DiffResponse { DiffResponse { changes: vec![] } }
+pub async fn compute_diff(_req: DiffRequest) -> DiffResponse {
+    DiffResponse { changes: vec![] }
+}

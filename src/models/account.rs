@@ -1,6 +1,6 @@
+use anyhow::Result;
 /// Account models for multi-provider email integration
 use serde::{Deserialize, Serialize};
-use anyhow::Result;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 #[serde(rename_all = "lowercase")]
@@ -23,7 +23,7 @@ impl EmailProvider {
             _ => Self::Custom,
         }
     }
-    
+
     pub fn as_str(&self) -> &str {
         match self {
             Self::Gmail => "gmail",
@@ -33,7 +33,7 @@ impl EmailProvider {
             Self::Custom => "custom",
         }
     }
-    
+
     /// Get default IMAP/SMTP settings for known providers
     pub fn default_config(&self) -> ProviderConfig {
         match self {
@@ -97,7 +97,7 @@ pub struct Account {
     pub last_sync_ts: Option<i64>,
     pub created_at: i64,
     pub updated_at: i64,
-    
+
     // Helper field for password (populated from credentials_encrypted)
     #[sqlx(skip)]
     #[serde(skip)]
@@ -118,14 +118,14 @@ impl Account {
     pub fn generate_id(email: &str) -> String {
         format!("acc_{}", email.replace('@', "_").replace('.', "_"))
     }
-    
+
     /// Encode credentials (simple base64, upgrade to OS keychain later)
     pub fn encode_credentials(email: &str, password: &str) -> String {
         use base64::Engine;
         let creds = format!("{}:{}", email, password);
         base64::engine::general_purpose::STANDARD.encode(creds.as_bytes())
     }
-    
+
     /// Decode credentials
     pub fn decode_credentials(encoded: &str) -> Result<(String, String)> {
         use base64::Engine;
@@ -137,7 +137,7 @@ impl Account {
         }
         Ok((parts[0].to_string(), parts[1].to_string()))
     }
-    
+
     /// Get credentials for this account
     pub fn get_credentials(&self) -> Result<(String, String)> {
         Self::decode_credentials(&self.credentials_encrypted)

@@ -1,8 +1,8 @@
 // filepath: /mailora-hub-imap/mailora-hub-imap/tests/integration_action.rs
 use axum::{http::StatusCode, Router};
 use hyper::Body;
-use tower::ServiceExt; // for `app.oneshot()`
-use mailora_hub_imap::main; // assuming main.rs contains the app setup
+use mailora_hub_imap::main;
+use tower::ServiceExt; // for `app.oneshot()` // assuming main.rs contains the app setup
 
 #[tokio::test]
 async fn test_action_send() {

@@ -13,7 +13,7 @@
             min-height: 100vh;
             padding: 20px;
             color: #e5e7eb;
-        }
+    }
         
         .container {
             max-width: 1400px;
@@ -693,20 +693,16 @@
             .grid-2 {
                 grid-template-columns: 1fr;
             }
-            
-            .account-grid {
-                grid-template-columns: 1fr;
-            }
         }
         
         pre {
             background: #0b0e13;
-            color: #e5e7eb;
             padding: 12px;
             border-radius: 8px;
-            overflow-x: auto;
+            overflow: auto;
             font-size: 13px;
             border: 1px solid #1f2937;
+            color: #e5e7eb;
         }
         
         textarea {
@@ -770,14 +766,38 @@
             <div class="form-group">
                 <label>Mesaj Sayısı:</label>
                 <input type="number" id="message-limit" value="10" min="1" max="50">
-                <button class="btn btn-primary" onclick="loadMessages()">Mesajları Yükle</button>
+                <button class="btn btn-primary" onclick="loadMessages()">Gelen Kutusu</button>
+                <button class="btn btn-secondary" onclick="loadJunkMessages()">Junk (Spam)</button>
             </div>
             <div class="message-list" id="message-list"></div>
             <div class="message-body-view" id="message-body-view" style="display:none;"></div>
         </div>
         
         <div id="add-account" class="tab-content">
+            <h2 style="margin-top:32px;color:#10b981;">JMAP Bağlantı & Test</h2>
+            <div class="form-group">
+                <label>JMAP API URL:</label>
+                <input type="text" id="jmap-api-url" placeholder="https://mail.example.com/jmap">
+            </div>
+            <div class="form-group">
+                <label>API Token:</label>
+                <input type="text" id="jmap-api-token" placeholder="Bearer Token">
+            </div>
+            <div class="form-group">
+                <label>Account ID:</label>
+                <input type="text" id="jmap-account-id" placeholder="user-account-id">
+            </div>
+            <button class="btn btn-primary" onclick="testJmapConnection()">JMAP Bağlantı Testi</button>
+            <button class="btn btn-secondary" onclick="testJmapInbox()">Inbox Mesajlarını Getir</button>
+            <pre id="jmap-test-result" style="margin-top:12px;display:none;"></pre>
             <h2>Yeni Hesap Ekle</h2>
+            <h2 style="margin-top:32px;color:#10b981;">Stalwart API ile Bağlantı</h2>
+            <div class="form-group">
+                <label>Stalwart API Key:</label>
+                <input type="text" id="stalwart-api-key" placeholder="API Key'i buraya yapıştırın">
+            </div>
+            <button class="btn btn-primary" onclick="connectStalwartApi()">API ile Bağlan & Mailleri Çek</button>
+             <pre id="stalwart-api-result" style="margin-top:12px;display:none;"></pre>
             
             <!-- Provider Info Banner -->
             <div id="provider-info" style="background: #1f2937; padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #10b981;">
@@ -790,24 +810,11 @@
             </div>
             
             <div class="form-group">
-                <label>Provider:</label>
-                <select id="provider-select" onchange="updateProviderFields()">
-                    <option value="gmail">Gmail</option>
-                    <option value="yahoo">Yahoo</option>
-                    <option value="icloud">iCloud</option>
-                    <option value="custom">Custom</option>
-                </select>
+                <!-- Provider seçimi devre dışı: Sadece Gmail/App Password -->
             </div>
             
             <!-- OAuth2 Login Button (Gmail Only) -->
-            <div id="oauth-section" style="margin-bottom: 20px;">
-                <button class="btn btn-success" onclick="loginWithOAuth()" style="width: 100%; font-size: 16px;">
-                    🔐 OAuth2 ile Giriş
-                </button>
-                <p style="font-size: 12px; color: #94a3b8; margin-top: 8px; text-align: center;">
-                    Gmail için önerilen yöntem (Şifre gerektirmez)
-                </p>
-            </div>
+            <!-- OAuth2 login devre dışı -->
             
             <div style="text-align: center; margin: 15px 0; color: #6b7280; font-size: 13px;">
                 veya App Password ile manuel ekle ↓
@@ -816,6 +823,22 @@
             <div class="form-group">
                 <label>Email:</label>
                 <input type="email" id="new-email" placeholder="your@email.com">
+            </div>
+            <div class="form-group">
+                <label>IMAP Host:</label>
+                <input type="text" id="new-imap-host" placeholder="imap.example.com">
+            </div>
+            <div class="form-group">
+                <label>IMAP Port:</label>
+                <input type="number" id="new-imap-port" value="993">
+            </div>
+            <div class="form-group">
+                <label>SMTP Host:</label>
+                <input type="text" id="new-smtp-host" placeholder="smtp.example.com">
+            </div>
+            <div class="form-group">
+                <label>SMTP Port:</label>
+                <input type="number" id="new-smtp-port" value="587">
             </div>
             <div class="form-group">
                 <label>Password / App Password:</label>
@@ -829,23 +852,7 @@
                 <input type="text" id="new-display-name" placeholder="İş Hesabı">
             </div>
                 <div id="custom-fields" style="display:none;">
-                    <h3>Custom Provider Ayarları</h3>
-                    <div class="form-group">
-                        <label>IMAP Host:</label>
-                        <input type="text" id="custom-imap-host" placeholder="imap.example.com">
-                    </div>
-                    <div class="form-group">
-                        <label>IMAP Port:</label>
-                        <input type="number" id="custom-imap-port" value="993">
-                    </div>
-                    <div class="form-group">
-                        <label>SMTP Host:</label>
-                        <input type="text" id="custom-smtp-host" placeholder="smtp.example.com">
-                    </div>
-                    <div class="form-group">
-                        <label>SMTP Port:</label>
-                        <input type="number" id="custom-smtp-port" value="587">
-                    </div>
+                    <!-- Custom provider alanları devre dışı: Sadece düz IMAP/SMTP -->
                 </div>
             </div>
             <button class="btn btn-success" onclick="addAccount()">✅ Hesap Ekle</button>
@@ -880,11 +887,120 @@
             </div>
             <button class="btn btn-primary" onclick="testConnection()">🔌 IMAP Bağlantı Testi</button>
             <button class="btn btn-secondary" onclick="loadTestAccounts()">📋 Hesap Listesi</button>
+            <hr style="margin:24px 0;">
+            <h3>SMTP Testi (lettre)</h3>
+            <div class="form-group">
+                <label>Alıcı Email:</label>
+                <input type="email" id="smtp-test-to" placeholder="test@email.com">
+            </div>
+            <div class="form-group">
+                <label>Konu:</label>
+                <input type="text" id="smtp-test-subject" placeholder="Test Konusu">
+            </div>
+            <div class="form-group">
+                <label>Mesaj:</label>
+                <textarea id="smtp-test-body" rows="3" placeholder="Test mesajı içeriği..."></textarea>
+            </div>
+            <button class="btn btn-success" onclick="sendSmtpTest()">📤 SMTP ile Test Mail Gönder</button>
+            <pre id="smtp-test-result" style="margin-top:12px;"></pre>
+
+            <hr style="margin:24px 0;">
+            <h3>SMTP Testi (async-smtp)</h3>
+            <div class="form-group">
+                <label>Alıcı Email:</label>
+                <input type="email" id="async-smtp-test-to" placeholder="test@email.com">
+            </div>
+            <div class="form-group">
+                <label>Konu:</label>
+                <input type="text" id="async-smtp-test-subject" placeholder="Test Konusu">
+            </div>
+            <div class="form-group">
+                <label>Mesaj:</label>
+                <textarea id="async-smtp-test-body" rows="3" placeholder="Test mesajı içeriği..."></textarea>
+            </div>
+            <button class="btn btn-primary" onclick="sendAsyncSmtpTest()">⚡ async-smtp ile Test Mail Gönder</button>
+            <pre id="async-smtp-test-result" style="margin-top:12px;"></pre>
             <pre id="test-result"></pre>
         </div>
     </div>
 
     <script>
+        async function loadJunkMessages() {
+            const accountId = document.getElementById('message-account-select').value;
+            const limit = document.getElementById('message-limit').value;
+            if (!accountId) {
+                alert('Önce hesap seçin!');
+                return;
+            }
+            try {
+                const res = await fetch(`/test/messages/${accountId}?limit=${limit}&folder=Junk Mail`);
+                const data = await res.json();
+                currentMessages = data.messages;
+                const listEl = document.getElementById('message-list');
+                listEl.innerHTML = currentMessages.map((msg, idx) => `
+                    <div class="message-item" onclick="viewMessage(${idx})">
+                        <div class="message-subject">${decodeSubject(msg.subject)}</div>
+                        <div class="message-from">From: ${msg.from}</div>
+                        <div class="message-date">${msg.date || 'No date'}</div>
+                    </div>
+                `).join('');
+            } catch (e) {
+                console.error('Junk messages failed:', e);
+            }
+        }
+        // Sync account messages (global scope)
+        async function syncAccount(accountId) {
+            if (!confirm('Bu hesabın tüm klasörlerini sync etmek istiyor musunuz? Bu işlem birkaç dakika sürebilir.')) {
+                return;
+            }
+            const btn = event.target;
+            btn.disabled = true;
+            btn.textContent = '⏳ Syncing...';
+            try {
+                const res = await fetch(`/sync/${accountId}`, { method: 'POST' });
+                const result = await res.json();
+                alert(`Sync tamamlandı!\n\n` +
+                    `Yeni: ${result.total_new}\n` +
+                    `Güncellenen: ${result.total_updated}\n` +
+                    `Silinen: ${result.total_deleted}\n\n` +
+                    `Klasörler: ${result.stats.length}`
+                );
+                btn.textContent = '✅ Synced!';
+                setTimeout(() => {
+                    btn.textContent = '🔄 Sync';
+                    btn.disabled = false;
+                }, 2000);
+            } catch (e) {
+                alert('Sync hatası: ' + e.message);
+                btn.textContent = '🔄 Sync';
+                btn.disabled = false;
+            }
+        }
+        async function sendAsyncSmtpTest() {
+            const accountId = document.getElementById('test-account-select').value;
+            const to = document.getElementById('async-smtp-test-to').value;
+            const subject = document.getElementById('async-smtp-test-subject').value;
+            const body = document.getElementById('async-smtp-test-body').value;
+            const resultEl = document.getElementById('async-smtp-test-result');
+
+            if (!accountId || !to || !subject || !body) {
+                alert('Hesap, alıcı, konu ve mesaj zorunlu!');
+                return;
+            }
+
+            resultEl.textContent = 'Gönderiliyor...';
+            try {
+                const res = await fetch(`/test/async-smtp/${accountId}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ to, subject, body })
+                });
+                const result = await res.json();
+                resultEl.textContent = JSON.stringify(result, null, 2);
+            } catch (e) {
+                resultEl.textContent = 'async-smtp gönderim hatası: ' + e.message;
+            }
+        }
         let accounts = [];
         let currentMessages = [];
         
@@ -947,25 +1063,19 @@
         }
         
         async function addAccount() {
-            const provider = document.getElementById('provider-select').value;
             const email = document.getElementById('new-email').value;
             const password = document.getElementById('new-password').value;
             const display_name = document.getElementById('new-display-name').value;
-            
-            if (!email || !password) {
-                alert('Email ve password gerekli!');
+            const imap_host = document.getElementById('new-imap-host').value;
+            const imap_port = parseInt(document.getElementById('new-imap-port').value);
+            const smtp_host = document.getElementById('new-smtp-host').value;
+            const smtp_port = parseInt(document.getElementById('new-smtp-port').value);
+            if (!email || !password || !imap_host || !imap_port || !smtp_host || !smtp_port) {
+                alert('Tüm alanları doldurun!');
                 return;
             }
-            
-            const body = { provider, email, password };
+            const body = { email, password, provider: 'custom', imap_host, imap_port, smtp_host, smtp_port };
             if (display_name) body.display_name = display_name;
-            
-            if (provider === 'custom') {
-                body.imap_host = document.getElementById('custom-imap-host').value;
-                body.imap_port = parseInt(document.getElementById('custom-imap-port').value);
-                body.smtp_host = document.getElementById('custom-smtp-host').value;
-                body.smtp_port = parseInt(document.getElementById('custom-smtp-port').value);
-            }
             
             try {
                 const res = await fetch('/accounts', {
@@ -973,16 +1083,19 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(body)
                 });
-                
-                const result = await res.json();
                 const resultEl = document.getElementById('add-account-result');
                 resultEl.style.display = 'block';
+                if (!res.ok) {
+                    const text = await res.text();
+                    resultEl.textContent = 'Hesap eklenirken hata: ' + text;
+                    alert('Hesap eklenirken hata: ' + text);
+                    return;
+                }
+                const result = await res.json();
                 resultEl.textContent = JSON.stringify(result, null, 2);
-                
                 if (result.success) {
                     setTimeout(() => {
                         loadAccounts();
-                        // Switch to accounts tab
                         document.querySelector('.tab[data-tab="accounts"]').click();
                     }, 1000);
                 }
@@ -1144,13 +1257,38 @@
             </div>` + logEl.innerHTML;
         }
         
+        async function sendSmtpTest() {
+            const accountId = document.getElementById('test-account-select').value;
+            const to = document.getElementById('smtp-test-to').value;
+            const subject = document.getElementById('smtp-test-subject').value;
+            const body = document.getElementById('smtp-test-body').value;
+            const resultEl = document.getElementById('smtp-test-result');
+
+            if (!accountId || !to || !subject || !body) {
+                alert('Hesap, alıcı, konu ve mesaj zorunlu!');
+                return;
+            }
+
+            resultEl.textContent = 'Gönderiliyor...';
+            try {
+                const res = await fetch(`/test/smtp/${accountId}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ to, subject, body })
+                });
+                const result = await res.json();
+                resultEl.textContent = JSON.stringify(result, null, 2);
+            } catch (e) {
+                resultEl.textContent = 'SMTP gönderim hatası: ' + e.message;
+            }
+        }
+
         async function testConnection() {
             const accountId = document.getElementById('test-account-select').value;
             if (!accountId) {
                 alert('Önce hesap seçin!');
                 return;
             }
-            
             try {
                 const res = await fetch(`/test/connection/${accountId}`);
                 const result = await res.json();
@@ -1162,90 +1300,64 @@
         
         async function loadTestAccounts() {
             try {
-                const res = await fetch('/test/accounts');
-                const result = await res.json();
-                document.getElementById('test-result').textContent = JSON.stringify(result, null, 2);
+                const res = await fetch('/accounts', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        email,
+                        password,
+                        provider: 'custom',
+                        display_name,
+                        imap_host,
+                        imap_port,
+                        smtp_host,
+                        smtp_port
+                    })
+                });
+                let result;
+                if (!res.ok || res.status !== 200) {
+                    const text = await res.text();
+                    result = { success: false, message: text };
+                } else {
+                    try {
+                        result = await res.json();
+                    } catch (e) {
+                        const text = await res.text();
+                        result = { success: false, message: text };
+                    }
+                }
+                if (result.success) {
+                    resultEl.style.display = 'block';
+                    resultEl.textContent = 'Hesap başarıyla eklendi!';
+                    setTimeout(() => { resultEl.style.display = 'none'; }, 3000);
+                    await loadAccounts();
+                } else {
+                    resultEl.style.display = 'block';
+                    resultEl.textContent = 'Hesap eklenirken hata: ' + (result.message || 'Bilinmeyen hata');
+                }
             } catch (e) {
-                document.getElementById('test-result').textContent = 'Error: ' + e.message;
+                resultEl.style.display = 'block';
+                resultEl.textContent = 'Hesap eklenirken hata: ' + (e.message || 'Bilinmeyen hata');
             }
         }
-        
-        function updateProviderFields() {
-            const provider = document.getElementById('provider-select').value;
-            document.getElementById('custom-fields').style.display = 
-                provider === 'custom' ? 'block' : 'none';
-            
-            // Show OAuth button only for Gmail
-            const oauthSection = document.getElementById('oauth-section');
-            oauthSection.style.display = provider === 'gmail' ? 'block' : 'none';
-            
-            // Update provider-specific info
-            const infoText = document.getElementById('provider-info-text');
-            const providerInfos = {
-                gmail: `<strong>Gmail Kurulumu:</strong><br>
-                    <strong>Yöntem 1 (Önerilen):</strong> OAuth2 ile Giriş butonu (Şifre gerektirmez)<br>
-                    <strong>Yöntem 2:</strong> App Password kullan:<br>
-                    1. <a href="https://myaccount.google.com/security" target="_blank" style="color: #60a5fa;">Google Account Security</a> sayfasına gidin<br>
-                    2. "2-Step Verification" aktif olmalı<br>
-                    3. <a href="https://myaccount.google.com/apppasswords" target="_blank" style="color: #60a5fa;">App Passwords</a> oluşturun<br>
-                    4. "Mail" seçin ve 16 haneli şifreyi alın`,
-                    
-                yahoo: `<strong>Yahoo Kurulumu:</strong><br>
-                    1. <a href="https://login.yahoo.com/account/security" target="_blank" style="color: #60a5fa;">Yahoo Account Security</a> sayfasına gidin<br>
-                    2. "Generate app password" veya "Manage app passwords" tıklayın<br>
-                    3. "Other App" seçin ve "Mailora" yazın<br>
-                    4. Verilen şifreyi kopyalayın<br>
-                    5. Normal şifre yerine bu App Password'u kullanın`,
-                    
-                icloud: `<strong>iCloud Kurulumu:</strong><br>
-                    1. <a href="https://appleid.apple.com/account/manage" target="_blank" style="color: #60a5fa;">Apple ID</a> sayfasına gidin<br>
-                    2. Security → App-Specific Passwords<br>
-                    3. "Generate Password" tıklayın<br>
-                    4. Verilen şifreyi kopyalayın<br>
-                    5. Normal şifre yerine bu App Password'u kullanın`,
-                    
-                custom: `<strong>Custom Provider:</strong><br>
-                    IMAP ve SMTP ayarlarını manuel olarak giriniz. Genellikle:<br>
-                    • IMAP Port: 993 (SSL/TLS)<br>
-                    • SMTP Port: 587 (STARTTLS) veya 465 (SSL)<br>
-                    • App Password kullanmanız önerilir`
-            };
-            
-            infoText.innerHTML = providerInfos[provider] || providerInfos.gmail;
-        }
-        
-        function decodeSubject(subject) {
-            // Simple subject decoding
-            return subject.replace(/=\?UTF-8\?Q\?(.+?)\?=/gi, (match, encoded) => {
-                try {
-                    return decodeURIComponent(encoded.replace(/=([0-9A-F]{2})/g, '%$1'));
-                } catch {
-                    return match;
-                }
-            });
-        }
-        
-        // Sync account messages
-        async function syncAccount(accountId) {
+
+        // Hesap ekleme sonrası sync işlemi
+        async function syncAccountAfterAdd(accountId, event) {
             if (!confirm('Bu hesabın tüm klasörlerini sync etmek istiyor musunuz? Bu işlem birkaç dakika sürebilir.')) {
                 return;
             }
-            
             const btn = event.target;
             btn.disabled = true;
             btn.textContent = '⏳ Syncing...';
-            
             try {
                 const res = await fetch(`/sync/${accountId}`, { method: 'POST' });
                 const result = await res.json();
-                
                 alert(`Sync tamamlandı!\n\n` +
                     `Yeni: ${result.total_new}\n` +
                     `Güncellenen: ${result.total_updated}\n` +
                     `Silinen: ${result.total_deleted}\n\n` +
                     `Klasörler: ${result.stats.length}`
                 );
-                
                 btn.textContent = '✅ Synced!';
                 setTimeout(() => {
                     btn.textContent = '🔄 Sync';
@@ -1256,7 +1368,7 @@
                 btn.textContent = '🔄 Sync';
                 btn.disabled = false;
             }
-        }
+        
         
         // View account messages
         async function viewAccountMessages(accountId) {
@@ -1284,14 +1396,8 @@
         
         // OAuth2 Login
         async function loginWithOAuth() {
-            const provider = document.getElementById('provider-select').value;
+            // Provider mantığı devre dışı: Sadece email ile çalışacak
             const email = document.getElementById('new-email').value.trim();
-            
-            if (provider !== 'gmail') {
-                alert('OAuth2 sadece Gmail için destekleniyor.');
-                return;
-            }
-            
             if (!email) {
                 alert('Lütfen önce Gmail adresinizi girin!');
                 return;
@@ -1378,10 +1484,91 @@
                 alert('OAuth hatası: ' + e.message);
             }
         }
-        
+        }
         // Initialize
         loadAccounts();
-        updateProviderFields(); // Initialize OAuth section visibility
+    // Provider mantığı devre dışı: çağrı kaldırıldı
+
+    // JMAP Test Functions
+    function testJmapConnection() {
+        // Use backend proxy to avoid CORS
+        const apiUrl = '/jmap';
+         const token = document.getElementById('jmap-api-token').value;
+         const resultDiv = document.getElementById('jmap-test-result');
+         resultDiv.style.display = 'block';
+         resultDiv.textContent = 'Testing JMAP connection...';
+         fetch('/jmap/session', {
+             method: 'GET',
+             headers: {
+                 'Authorization': 'Bearer ' + token,
+                 'Accept': 'application/json'
+             }
+         })
+         .then(response => response.json())
+         .then(data => {
+             resultDiv.textContent = JSON.stringify(data, null, 2);
+             if (data.accounts) {
+                 const keys = Object.keys(data.accounts);
+                 if (keys.length > 0) {
+                     document.getElementById('jmap-account-id').value = keys[0];
+                 }
+             }
+         })
+         .catch(err => {
+             resultDiv.textContent = 'Error: ' + err;
+         });
+     }
+ 
+     function testJmapInbox() {
+        const apiUrl = '/jmap';
+         const token = document.getElementById('jmap-api-token').value;
+         const accountId = document.getElementById('jmap-account-id').value;
+         const resultDiv = document.getElementById('jmap-test-result');
+         resultDiv.style.display = 'block';
+         resultDiv.textContent = 'Fetching inbox...';
+         const body = {
+             "using": [
+                 "urn:ietf:params:jmap:core",
+                 "urn:ietf:params:jmap:mail"
+             ],
+             "methodCalls": [
+                 [
+                     "Mailbox/query",
+                     {"accountId": accountId, "filter": {"role": "inbox"}},
+                     "a"
+                 ],
+                 [
+                     "Email/query",
+                     {"accountId": accountId, "filter": {}, "limit": 10},
+                     "b"
+                 ]
+             ]
+         };
+         fetch(apiUrl, {
+             method: 'POST',
+             headers: {
+                 'Authorization': 'Bearer ' + token,
+                 'Content-Type': 'application/json',
+                 'Accept': 'application/json'
+             },
+             body: JSON.stringify(body)
+         })
+         .then(response => response.json())
+         .then(data => {
+             resultDiv.textContent = JSON.stringify(data, null, 2);
+         })
+         .catch(err => {
+             resultDiv.textContent = 'Error: ' + err;
+         });
+     }
+         // Subject decode helper (fixes ReferenceError)
+    function decodeSubject(subject) {
+        try {
+            return decodeURIComponent(escape(subject));
+        } catch (e) {
+            return subject;
+        }
+    }
     </script>
 </body>
 </html>

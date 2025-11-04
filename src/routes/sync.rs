@@ -5,7 +5,9 @@ use axum::{
 };
 use serde_json::{json, Value};
 
-use crate::services::message_sync_service::{sync_account_messages, sync_folder_messages, SyncStats};
+use crate::services::message_sync_service::{
+    sync_account_messages, sync_folder_messages, SyncStats,
+};
 
 /// POST /sync/:account_id - Sync all folders for an account
 pub async fn sync_account(
@@ -13,16 +15,15 @@ pub async fn sync_account(
     Path(account_id): Path<String>,
 ) -> Result<Json<Value>, (StatusCode, String)> {
     // Get account from DB
-    let account = sqlx::query_as::<_, crate::models::account::Account>(
-        "SELECT * FROM accounts WHERE id = ?",
-    )
-    .bind(&account_id)
-    .fetch_optional(&pool)
-    .await
-    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
-    .ok_or_else(|| (StatusCode::NOT_FOUND, "Account not found".to_string()))?
-    .with_password()
-    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let account =
+        sqlx::query_as::<_, crate::models::account::Account>("SELECT * FROM accounts WHERE id = ?")
+            .bind(&account_id)
+            .fetch_optional(&pool)
+            .await
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+            .ok_or_else(|| (StatusCode::NOT_FOUND, "Account not found".to_string()))?
+            .with_password()
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     // Start sync
     let stats = sync_account_messages(&pool, &account)
@@ -45,16 +46,15 @@ pub async fn sync_folder(
     Path((account_id, folder)): Path<(String, String)>,
 ) -> Result<Json<SyncStats>, (StatusCode, String)> {
     // Get account from DB
-    let account = sqlx::query_as::<_, crate::models::account::Account>(
-        "SELECT * FROM accounts WHERE id = ?",
-    )
-    .bind(&account_id)
-    .fetch_optional(&pool)
-    .await
-    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
-    .ok_or_else(|| (StatusCode::NOT_FOUND, "Account not found".to_string()))?
-    .with_password()
-    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let account =
+        sqlx::query_as::<_, crate::models::account::Account>("SELECT * FROM accounts WHERE id = ?")
+            .bind(&account_id)
+            .fetch_optional(&pool)
+            .await
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+            .ok_or_else(|| (StatusCode::NOT_FOUND, "Account not found".to_string()))?
+            .with_password()
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     // Start sync
     let stats = sync_folder_messages(&pool, &account, &folder)

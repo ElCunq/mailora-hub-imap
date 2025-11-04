@@ -5,7 +5,7 @@ Current focus:
 - **Gmail IMAP Testi ✅ BAŞARILI** - 311 mesaj, 11 klasör
 - **Sonraki Adım:** Milestone 1.2 - IDLE Watchers & Real-time Sync
 
-Recent changes (18 Ekim 2025 - Öğleden Sonra):
+Recent changes (3 Kasım 2025):
 - ✅ IMAP test servisi oluşturuldu (`src/services/imap_test_service.rs`)
 - ✅ Test endpoints eklendi (`src/routes/test.rs`)
   - `GET /test/connection/:account_id` - IMAP bağlantı testi
@@ -15,6 +15,11 @@ Recent changes (18 Ekim 2025 - Öğleden Sonra):
   - 311 mesaj INBOX'ta
   - 11 klasör başarıyla listelendi
   - IDLE, UIDPLUS, CONDSTORE capabilities doğrulandı
+Test Sonuçları:
+- ✅ IMAP bağlantı: 1.5 saniye
+- ✅ Folder listesi: 11 klasör (INBOX, Spam, Sent, etc.)
+- ✅ Message fetch: 10 mesaj/1.5 saniye
+- ✅ Capabilities: IDLE, CONDSTORE, UIDPLUS ✓
 - ✅ `test_gmail_imap.sh` - Kapsamlı test scripti
 - ✅ `GMAIL_TEST_RESULTS.md` - Detaylı test raporu
 

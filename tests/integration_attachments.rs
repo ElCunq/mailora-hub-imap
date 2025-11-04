@@ -1,14 +1,13 @@
 // filepath: /mailora-hub-imap/mailora-hub-imap/tests/integration_attachments.rs
 use axum::{body::Body, http::StatusCode, Router};
 use hyper::Client;
-use tower::ServiceExt; // for `app.oneshot()`
 use std::net::SocketAddr;
+use tower::ServiceExt; // for `app.oneshot()`
 
 #[tokio::test]
 async fn test_attachments_endpoint() {
     // Setup the application and routes
-    let app = Router::new()
-        .route("/attachments", axum::routing::get(attachments_handler));
+    let app = Router::new().route("/attachments", axum::routing::get(attachments_handler));
 
     // Define the address to run the server
     let addr = SocketAddr::from(([127, 0, 0, 1], 3000));

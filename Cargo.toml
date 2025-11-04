@@ -7,6 +7,7 @@ edition = "2021"
 
 # Dependencies
 [dependencies]
+async-smtp = { version = "0.8", features = ["tokio"] }
 axum = "0.7"
 tokio = { version = "1", features = ["rt-multi-thread","macros","signal"] }
 serde = { version="1", features=["derive"] }
@@ -15,7 +16,7 @@ anyhow = "1"
 async-imap = "0.9"
 native-tls = "0.2"
 tokio-native-tls = "0.3"
-lettre = { version="0.11", default-features = false, features=["builder","smtp-transport","tokio1","tokio1-native-tls"] }
+lettre = { version = "0.11", default-features = false, features = ["builder", "smtp-transport", "rustls-tls"] }
 # Database
 sqlx = { version = "0.7", features=["sqlite","runtime-tokio","macros"] }
 # Misc utilities

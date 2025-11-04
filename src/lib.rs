@@ -8,8 +8,9 @@ pub mod persist;
 pub mod routes;
 pub mod services;
 pub mod smtp;
-pub mod telemetry;
-// pub mod stalwart_client; // Deprecated - using direct IMAP/SMTP now
+#[path = "telemetry/mod.rs"]
+pub mod telemetry; // explicitly use directory module
+                   // pub mod stalwart_client; // Deprecated - using direct IMAP/SMTP now
 
 // static dizini altındaki kaynakları include_str! ile alıyoruz.
 // const _: () = {

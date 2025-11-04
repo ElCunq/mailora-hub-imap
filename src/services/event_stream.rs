@@ -18,11 +18,14 @@ impl EventStream {
 }
 
 pub fn create_routes(event_stream: Arc<EventStream>) -> Router {
-    Router::new().route("/events", axum::routing::get({
-        let es = event_stream.clone();
-        move || {
-            let es = es.clone();
-            async move { es.handle_events().await }
-        }
-    }))
+    Router::new().route(
+        "/events",
+        axum::routing::get({
+            let es = event_stream.clone();
+            move || {
+                let es = es.clone();
+                async move { es.handle_events().await }
+            }
+        }),
+    )
 }

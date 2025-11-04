@@ -1,10 +1,10 @@
 /// IMAP IDLE watcher for real-time mail notifications
 use anyhow::Result;
 use async_imap::{Client, Session};
+use std::time::Duration;
 use tokio::net::TcpStream;
 use tokio_native_tls::TlsStream;
 use tokio_util::compat::Compat;
-use std::time::Duration;
 
 type ImapSession = Session<Compat<TlsStream<TcpStream>>>;
 
@@ -56,19 +56,20 @@ async fn run_idle_session(
     config: &IdleConfig,
     on_new_mail: &(impl Fn(String, String) + Send + Sync),
 ) -> Result<()> {
-    let mut session = connect_and_login(&config.host, config.port, &config.email, &config.password).await?;
-    
+    let mut session =
+        connect_and_login(&config.host, config.port, &config.email, &config.password).await?;
+
     tracing::info!(account=%config.account_id, folder=%config.folder, "Selecting folder for IDLE");
     session.select(&config.folder).await?;
 
     loop {
         tracing::debug!(account=%config.account_id, folder=%config.folder, "Entering IDLE");
         let mut idle_handle = session.idle();
-        
+
         // Wait for server notification (EXISTS, EXPUNGE, FETCH, etc.)
         // async-imap 0.9 API: idle_handle.wait() returns (Future, StopSource)
         let (idle_wait, _interrupt) = idle_handle.wait();
-        
+
         match tokio::time::timeout(Duration::from_secs(29 * 60), idle_wait).await {
             Ok(Ok(_)) => {
                 tracing::info!(account=%config.account_id, folder=%config.folder, "IDLE notification received");
@@ -83,9 +84,10 @@ async fn run_idle_session(
                 tracing::debug!(account=%config.account_id, "IDLE timeout, reconnecting");
             }
         }
-        
+
         // After notification, reconnect the session (IDLE consumes it)
-        session = connect_and_login(&config.host, config.port, &config.email, &config.password).await?;
+        session =
+            connect_and_login(&config.host, config.port, &config.email, &config.password).await?;
         session.select(&config.folder).await?;
     }
 }
@@ -97,11 +99,11 @@ async fn connect_and_login(host: &str, port: u16, user: &str, pass: &str) -> Res
     let tls_stream = tls.connect(host, stream).await?;
     let compat = tokio_util::compat::TokioAsyncReadCompatExt::compat(tls_stream);
     let client = Client::new(compat);
-    
+
     let session = client
         .login(user, pass)
         .await
         .map_err(|e| anyhow::anyhow!("login failed: {:?}", e))?;
-    
+
     Ok(session)
 }

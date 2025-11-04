@@ -1,8 +1,95 @@
+use lettre::transport::smtp::authentication::Mechanism;
+use lettre::transport::smtp::client::{Tls, TlsParameters};
+use tracing_subscriber::FmtSubscriber;
+pub fn gmail_smtp_test() -> anyhow::Result<()> {
+    // 0) Debug log aç (lettre diyaloğunu görmek için)
+    let sub = FmtSubscriber::builder()
+        .with_env_filter("info,lettre=trace")
+        .finish();
+    tracing::subscriber::set_global_default(sub).ok();
+
+    // 1) Kimlik bilgilerini **temizle**
+    let user_raw = std::env::var("GMAIL_USER")?;
+    let pass_raw = std::env::var("GMAIL_APP_PASS")?;
+    let user = user_raw.trim().to_string();
+    let pass = pass_raw.split_whitespace().collect::<String>();
+    println!(
+        "user='{}' (len {})  app_pass_len={}",
+        user,
+        user.len(),
+        pass.len()
+    );
+
+    let creds = Credentials::new(user.clone(), pass.clone());
+    let tls = TlsParameters::builder("smtp.gmail.com".into()).build()?;
+
+    // 2) STARTTLS + tek mekanizma (LOGIN)
+    let mailer = SmtpTransport::starttls_relay("smtp.gmail.com")?
+        .hello_name(ClientId::Domain("mailora.local".into()))
+        .tls(Tls::Required(tls))
+        .authentication(vec![Mechanism::Login])
+        .credentials(creds)
+        .build();
+
+    // 3) From == Gmail adresinle başla
+    let email = Message::builder()
+        .from(user.parse()?)
+        .to(user.parse()?)
+        .subject("gmail starttls test")
+        .body(String::from("hi"))?;
+
+    mailer.send(&email)?;
+    Ok(())
+}
+use lettre::transport::smtp::extension::ClientId;
+/// Gmail SMTP için async-smtp ile test fonksiyonu (0.8 API)
+pub async fn send_async_smtp_test(
+    host: &str,
+    username: &str,
+    password: &str,
+    to: &str,
+    subject: &str,
+    body: &str,
+) -> anyhow::Result<()> {
+    use async_smtp::{authentication::Credentials, Envelope, SendableEmail, SmtpClient};
+
+    // App Password'daki tüm whitespace karakterlerini kaldır
+    let clean_password: String = password.chars().filter(|c| !c.is_whitespace()).collect();
+    let creds = Credentials::new(username.to_string(), clean_password);
+
+    let envelope_587 = Envelope::new(Some(username.parse()?), vec![to.parse()?])?;
+    let message_587 = format!(
+        "From: <{}>\r\nTo: <{}>\r\nSubject: {}\r\n\r\n{}",
+        username, to, subject, body
+    );
+    let email_587 = SendableEmail::new(envelope_587, message_587.into_bytes());
+
+    let envelope_465 = Envelope::new(Some(username.parse()?), vec![to.parse()?])?;
+    let message_465 = format!(
+        "From: <{}>\r\nTo: <{}>\r\nSubject: {}\r\n\r\n{}",
+        username, to, subject, body
+    );
+    let email_465 = SendableEmail::new(envelope_465, message_465.into_bytes());
+
+    use async_smtp::authentication::Mechanism;
+    use tokio::net::TcpStream;
+
+    // Sadece 587 (STARTTLS) ile dene
+    let stream = TcpStream::connect((host, 587)).await?;
+    let client = SmtpClient::new().smtp_utf8(true);
+    let mut transport = async_smtp::SmtpTransport::new(client, stream).await?;
+    // Kimlik doğrulama
+    transport
+        .try_login(&creds, &[Mechanism::Login, Mechanism::Plain])
+        .await?;
+    transport.send(email_587).await?;
+    Ok(())
+}
 // filepath: /mailora-hub-imap/mailora-hub-imap/src/smtp/mod.rs
-use lettre::{Message, SmtpTransport, Transport};
-use lettre::transport::smtp::authentication::Credentials;
-use std::env;
 use anyhow::Result;
+use lettre::transport::smtp::authentication::Credentials;
+use lettre::{Message, SmtpTransport, Transport};
+use std::env;
 
 pub struct SmtpClient {
     smtp_transport: SmtpTransport,
@@ -24,7 +111,12 @@ impl SmtpClient {
         SmtpClient { smtp_transport }
     }
 
-    pub fn send_email(&self, to: &str, subject: &str, body: &str) -> Result<(), lettre::transport::smtp::Error> {
+    pub fn send_email(
+        &self,
+        to: &str,
+        subject: &str,
+        body: &str,
+    ) -> Result<(), lettre::transport::smtp::Error> {
         let email = Message::builder()
             .from("no-reply@example.com".parse().unwrap())
             .to(to.parse().unwrap())
@@ -37,16 +129,80 @@ impl SmtpClient {
     }
 }
 
-pub fn send_simple(host:&str, username:&str, password:&str, to:&str, subject:&str, body:&str) -> Result<()> {
-    let creds = Credentials::new(username.to_string(), password.to_string());
-    let mailer = SmtpTransport::relay(host)?.credentials(creds).build();
+pub fn send_simple(
+    host: &str,
+    port: u16,
+    username: &str,
+    password: &str,
+    to: &str,
+    subject: &str,
+    body: &str,
+) -> Result<()> {
+    use lettre::{
+        transport::smtp::{
+            authentication::{Credentials, Mechanism},
+            client::{Tls, TlsParameters},
+        },
+        Message, SmtpTransport, Transport,
+    };
+    use std::net::IpAddr;
+    use std::time::Duration;
+
+    // Trim whitespace that may sneak in from copied app passwords
+    let clean_password: String = password.chars().filter(|c| !c.is_whitespace()).collect();
+    let creds = Credentials::new(username.to_string(), clean_password);
+
+    let tls = TlsParameters::builder(host.into())
+        .dangerous_accept_invalid_certs(true)
+        .build()?;
+
+    let mut builder = match SmtpTransport::relay(host) {
+        Ok(b) => b,
+        Err(_) => SmtpTransport::builder_dangerous(host),
+    };
+
+    let client_id = std::env::var("SMTP_HELLO_NAME")
+        .ok()
+        .and_then(|val| match val.parse::<IpAddr>() {
+            Ok(ip) => Some(ClientId::new(ip.to_string())),
+            Err(_) => Some(ClientId::Domain(val)),
+        })
+        .unwrap_or_else(|| {
+            host.parse::<IpAddr>()
+                .map(|ip| ClientId::new(ip.to_string()))
+                .unwrap_or_else(|_| ClientId::Domain(host.to_string()))
+        });
+
+    builder = builder
+        .port(port)
+        .hello_name(client_id)
+        .authentication(vec![Mechanism::Plain, Mechanism::Login])
+        .credentials(creds)
+        .timeout(Some(Duration::from_secs(20)));
+
+    let builder = if port == 465 {
+        builder.tls(Tls::Wrapper(tls))
+    } else {
+        builder.tls(Tls::Required(tls))
+    };
+
+    let mailer = builder.build();
+
+    let from_addr = username.parse()?;
+    let to_addr = to.parse()?;
     let email = Message::builder()
-        .from(username.parse()?)
-        .to(to.parse()?)
+        .from(from_addr)
+        .to(to_addr)
         .subject(subject)
         .body(body.to_string())?;
-    mailer.send(&email)?;
-    Ok(())
+
+    match mailer.send(&email) {
+        Ok(_) => Ok(()),
+        Err(e) => {
+            tracing::error!("SMTP gönderim başarısız: {:?}", e);
+            Err(e.into())
+        }
+    }
 }
 
 /// Send email and log to events table
@@ -62,13 +218,14 @@ pub async fn send_and_log(
     body: &str,
 ) -> Result<()> {
     // Send email
-    send_simple(host, username, password, to, subject, body)?;
-    
+    // Varsayılan olarak 587 portu kullanılır, istenirse parametre eklenebilir
+    send_simple(host, 587, username, password, to, subject, body)?;
+
     // Log OUT event
     let ts = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)?
         .as_secs() as i64;
-    
+
     sqlx::query!(
         "INSERT INTO events (direction, mailbox, actor, peer, subject, ts) VALUES (?, ?, ?, ?, ?, ?)",
         "OUT",
@@ -80,7 +237,7 @@ pub async fn send_and_log(
     )
     .execute(pool)
     .await?;
-    
+
     tracing::info!(mailbox, to, subject, "Email sent and logged");
     Ok(())
 }

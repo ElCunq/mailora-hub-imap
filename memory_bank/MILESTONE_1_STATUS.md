@@ -7,68 +7,21 @@
 ✅ **REMOVED STALWART DEPENDENCY** - Direct IMAP/SMTP implementation
 - Using `async-imap` 0.9.7 for IMAP operations
 - Using `lettre` 0.11 for SMTP sending
-- SQLite for local message storage and caching
-- No external mail server dependencies
 
----
-
-## Milestone 1.1: Multi-Account IMAP Management ✅ COMPLETED
 
 **Status**: ✅ Production Ready  
-**Completion Date**: October 3, 2025
-
-### Features Implemented
-
-- ✅ Account CRUD operations (Add, List, Get, Delete)
 - ✅ Multi-provider support (Gmail, Outlook, Yahoo, iCloud, Custom)
 - ✅ Encrypted credential storage (Base64)
-- ✅ Provider auto-configuration
-- ✅ Database: `accounts` table with full schema
-
-### API Endpoints
-
-```
-POST   /accounts          - Add new account
 GET    /accounts          - List all accounts
 GET    /accounts/:id      - Get account details
-DELETE /accounts/:id      - Delete account
-GET    /providers         - List supported providers
-```
-
-### Database Schema
-
-```sql
-CREATE TABLE accounts (
-    id TEXT PRIMARY KEY,
-    email TEXT UNIQUE NOT NULL,
-    provider TEXT NOT NULL,
-    display_name TEXT,
-    imap_host TEXT NOT NULL,
     imap_port INTEGER NOT NULL,
     smtp_host TEXT NOT NULL,
-    smtp_port INTEGER NOT NULL,
-    credentials_encrypted TEXT NOT NULL,
-    enabled BOOLEAN DEFAULT 1,
-    sync_frequency_secs INTEGER DEFAULT 300,
-    last_sync_ts INTEGER,
-    created_at INTEGER NOT NULL,
-    updated_at INTEGER NOT NULL
-);
 ```
 
-### Test Results
-
-- Gmail: ✅ Working (4 test accounts)
-- Outlook: ⚠️ Not tested
-- Yahoo: ⚠️ Not tested
-- iCloud: ⚠️ Not tested
 
 ---
-
 ## Milestone 1.2: Message Body Fetch + IDLE Watcher ✅ COMPLETED
 
-**Status**: ✅ Production Ready  
-**Completion Date**: October 14, 2025
 
 ### Features Implemented
 
@@ -77,25 +30,12 @@ CREATE TABLE accounts (
 - ✅ Attachment detection
 - ✅ Encoding handling (UTF-8, Base64, Quoted-Printable)
 - ✅ Service: `message_body_service.rs`
-
-#### IDLE Watcher
-- ✅ Real-time IMAP IDLE protocol support
 - ✅ Server-Sent Events (SSE) for live updates
 - ✅ Multi-account concurrent watching
-- ✅ Automatic reconnection on disconnect
-- ✅ Service: `idle_watcher_service.rs`
-
-### API Endpoints
 
 ```
-GET  /test/body/:account_id/:uid    - Fetch message body
-POST /idle/start/:account_id        - Start IDLE watching
 POST /idle/stop/:account_id         - Stop IDLE watching
 GET  /idle/status                   - Get watcher status
-GET  /idle/events                   - SSE event stream
-```
-
-### Test Results
 
 - Message Body Fetch: ✅ Working (UID 3906, 64KB HTML)
 - IDLE Watcher: ✅ Working (1 active watcher)

@@ -110,14 +110,6 @@ Mailora Hub IMAP is a unified email client that aggregates multiple external ema
 - **Rust**: Backend language
 - **Axum**: Web framework for REST API
 - **async-imap**: IMAP client library for email fetching
-- **lettre**: SMTP client library for sending (TODO)
-- **SQLite**: Primary database (accounts, messages, cache)
-- **Tokio**: Async runtime for concurrent IMAP connections
-- **Tower-HTTP**: Static file serving for Web UI
-- **HTML/CSS/JS**: Frontend (no framework, vanilla)
-
-## Design Principles
-
 1. **Simplicity**: Direct IMAP/SMTP, no intermediate mail server
 2. **Performance**: SQLite cache for fast queries, async I/O
 3. **Privacy**: Local storage, no cloud dependency

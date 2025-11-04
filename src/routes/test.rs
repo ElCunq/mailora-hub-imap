@@ -1,3 +1,105 @@
+/// POST /test/async-smtp/:account_id - async-smtp ile test mail gönder
+#[derive(Debug, Deserialize)]
+pub struct AsyncSmtpTestRequest {
+    pub to: String,
+    pub subject: String,
+    pub body: String,
+}
+
+pub async fn async_smtp_test(
+    State(pool): State<SqlitePool>,
+    Path(account_id): Path<String>,
+    AxumJson(req): AxumJson<AsyncSmtpTestRequest>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let account = account_service::get_account(&pool, &account_id)
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Database error: {}", e),
+            )
+        })?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                format!("Account {} not found", account_id),
+            )
+        })?;
+
+    let result = crate::smtp::send_async_smtp_test(
+        &account.smtp_host,
+        &account.email,
+        &account.password,
+        &req.to,
+        &req.subject,
+        &req.body,
+    )
+    .await;
+
+    match result {
+        Ok(_) => Ok(Json(
+            serde_json::json!({"success": true, "message": "async-smtp ile test mail gönderildi."}),
+        )),
+        Err(e) => Ok(Json(serde_json::json!({
+            "success": false,
+            "error": format!("async-smtp gönderim hatası: {}", e)
+        }))),
+    }
+}
+/// POST /test/smtp/:account_id - SMTP ile test mail gönder
+use crate::smtp;
+use axum::extract::Json as AxumJson;
+
+#[derive(Debug, Deserialize)]
+pub struct SmtpTestRequest {
+    pub to: String,
+    pub subject: String,
+    pub body: String,
+}
+
+pub async fn smtp_test(
+    State(pool): State<SqlitePool>,
+    Path(account_id): Path<String>,
+    AxumJson(req): AxumJson<SmtpTestRequest>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let account = account_service::get_account(&pool, &account_id)
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Database error: {}", e),
+            )
+        })?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                format!("Account {} not found", account_id),
+            )
+        })?;
+
+    let result = smtp::send_simple(
+        &account.smtp_host,
+        account.smtp_port,
+        &account.email,
+        &account.password,
+        &req.to,
+        &req.subject,
+        &req.body,
+    );
+
+    match result {
+        Ok(_) => Ok(Json(
+            serde_json::json!({"success": true, "message": "SMTP test mail gönderildi."}),
+        )),
+        Err(e) => {
+            tracing::error!("SMTP gönderim hatası: {:?}", e);
+            Ok(Json(serde_json::json!({
+                "success": false,
+                "error": format!("SMTP gönderim hatası: {}", e)
+            })))
+        }
+    }
+}
 /// IMAP Test Endpoints
 use axum::{
     extract::{Path, Query, State},
@@ -22,52 +124,64 @@ pub async fn test_connection(
 ) -> Result<Json<imap_test_service::ImapConnectionTestResult>, (StatusCode, String)> {
     let account = account_service::get_account(&pool, &account_id)
         .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Database error: {}", e)))?
-        .ok_or_else(|| (StatusCode::NOT_FOUND, format!("Account {} not found", account_id)))?;
-    
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Database error: {}", e),
+            )
+        })?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                format!("Account {} not found", account_id),
+            )
+        })?;
+
     tracing::info!("Testing IMAP connection for account: {}", account.email);
-    
+
     let result = imap_test_service::test_imap_connection(&account)
         .await
         .map_err(|e| {
             tracing::error!("IMAP connection test failed: {}", e);
-            
+
             // Provider-specific error messages
             let error_msg = e.to_string();
-            let helpful_msg = if error_msg.contains("login failed") || error_msg.contains("LOGIN failed") {
-                match account.provider.as_str() {
-                    "gmail" => {
-                        "Gmail bağlantı hatası:\n\
+            let helpful_msg =
+                if error_msg.contains("login failed") || error_msg.contains("LOGIN failed") {
+                    match account.provider.as_str() {
+                        "gmail" => {
+                            "Gmail bağlantı hatası:\n\
                         • 2-Step Verification aktif olmalı\n\
                         • App Password kullanın: https://myaccount.google.com/apppasswords\n\
                         • IMAP aktif olmalı (Gmail Settings > Forwarding and POP/IMAP)"
-                    },
-                    "outlook" => {
-                        "Outlook/Hotmail bağlantı hatası:\n\
+                        }
+                        "outlook" => {
+                            "Outlook/Hotmail bağlantı hatası:\n\
                         • 2-Step Verification aktif olmalı\n\
                         • App Password kullanın: https://account.microsoft.com/security\n\
                         • IMAP aktif olmalı (Outlook.com > Settings > Sync email)\n\
                         • Host: outlook.office365.com, Port: 993"
-                    },
-                    "yahoo" => {
-                        "Yahoo bağlantı hatası:\n\
+                        }
+                        "yahoo" => {
+                            "Yahoo bağlantı hatası:\n\
                         • App Password kullanın: https://login.yahoo.com/account/security\n\
                         • IMAP aktif olmalı"
-                    },
-                    _ => &error_msg
-                }
-            } else {
-                &error_msg
-            };
-            
+                        }
+                        _ => &error_msg,
+                    }
+                } else {
+                    &error_msg
+                };
+
             (StatusCode::BAD_REQUEST, helpful_msg.to_string())
         })?;
-    
-    tracing::info!("IMAP connection successful. Folders: {}, Messages: {}", 
-        result.folders.len(), 
+
+    tracing::info!(
+        "IMAP connection successful. Folders: {}, Messages: {}",
+        result.folders.len(),
         result.inbox_stats.exists
     );
-    
+
     Ok(Json(result))
 }
 
@@ -79,18 +193,32 @@ pub async fn fetch_messages(
 ) -> Result<Json<FetchMessagesResponse>, (StatusCode, String)> {
     let account = account_service::get_account(&pool, &account_id)
         .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Database error: {}", e)))?
-        .ok_or_else(|| (StatusCode::NOT_FOUND, format!("Account {} not found", account_id)))?;
-    
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Database error: {}", e),
+            )
+        })?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                format!("Account {} not found", account_id),
+            )
+        })?;
+
     let limit = query.limit.unwrap_or(10).min(50); // Max 50 messages
-    
-    tracing::info!("Fetching {} recent messages for account: {}", limit, account.email);
-    
+
+    tracing::info!(
+        "Fetching {} recent messages for account: {}",
+        limit,
+        account.email
+    );
+
     let messages = imap_test_service::fetch_recent_messages(&account, limit)
         .await
         .map_err(|e| {
             tracing::error!("Failed to fetch messages: {}", e);
-            
+
             // Provider-specific error messages
             let error_msg = e.to_string();
             let helpful_msg = if error_msg.contains("LOGIN failed") {
@@ -100,33 +228,35 @@ pub async fn fetch_messages(
                         1. 2-Step Verification aktif olmalı\n\
                         2. App Password oluşturun: https://myaccount.google.com/apppasswords\n\
                         3. Normal şifre yerine App Password kullanın"
-                    },
+                    }
                     "outlook" => {
                         "LOGIN başarısız. Outlook/Hotmail için:\n\
                         1. 2-Step Verification aktif olmalı\n\
                         2. App Password oluşturun: https://account.microsoft.com/security\n\
                         3. Normal şifre yerine App Password kullanın\n\
                         4. IMAP erişimi aktif olmalı (Settings > Sync email)"
-                    },
+                    }
                     "yahoo" => {
                         "LOGIN başarısız. Yahoo için:\n\
                         1. App Password oluşturun: https://login.yahoo.com/account/security\n\
                         2. Normal şifre yerine App Password kullanın"
-                    },
-                    _ => "LOGIN başarısız. Lütfen:\n\
+                    }
+                    _ => {
+                        "LOGIN başarısız. Lütfen:\n\
                         1. Email ve şifrenizi kontrol edin\n\
                         2. IMAP erişimi aktif olmalı\n\
                         3. Büyük provider'lar için App Password gereklidir"
+                    }
                 }
             } else {
                 &error_msg
             };
-            
+
             (StatusCode::BAD_REQUEST, helpful_msg.to_string())
         })?;
-    
+
     tracing::info!("Fetched {} messages", messages.len());
-    
+
     Ok(Json(FetchMessagesResponse {
         account_id: account.id,
         email: account.email,
@@ -139,10 +269,13 @@ pub async fn fetch_messages(
 pub async fn list_test_accounts(
     State(pool): State<SqlitePool>,
 ) -> Result<Json<Vec<TestAccountInfo>>, (StatusCode, String)> {
-    let accounts = account_service::list_accounts(&pool)
-        .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Database error: {}", e)))?;
-    
+    let accounts = account_service::list_accounts(&pool).await.map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Database error: {}", e),
+        )
+    })?;
+
     let test_info: Vec<TestAccountInfo> = accounts
         .into_iter()
         .map(|acc| TestAccountInfo {
@@ -153,7 +286,7 @@ pub async fn list_test_accounts(
             last_sync_ts: acc.last_sync_ts,
         })
         .collect();
-    
+
     Ok(Json(test_info))
 }
 
@@ -165,11 +298,25 @@ pub async fn fetch_message_body(
 ) -> Result<Json<message_body_service::MessageBody>, (StatusCode, String)> {
     let account = account_service::get_account(&pool, &account_id)
         .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Database error: {}", e)))?
-        .ok_or_else(|| (StatusCode::NOT_FOUND, format!("Account {} not found", account_id)))?;
-    
-    tracing::info!("Fetching body for message {} from account: {}", uid, account.email);
-    
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Database error: {}", e),
+            )
+        })?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                format!("Account {} not found", account_id),
+            )
+        })?;
+
+    tracing::info!(
+        "Fetching body for message {} from account: {}",
+        uid,
+        account.email
+    );
+
     let folder = query.folder.as_deref();
     let body = message_body_service::fetch_message_body(&account, uid, folder)
         .await
@@ -177,9 +324,9 @@ pub async fn fetch_message_body(
             tracing::error!("Failed to fetch message body: {}", e);
             (StatusCode::BAD_REQUEST, format!("Fetch failed: {}", e))
         })?;
-    
+
     tracing::info!("Fetched message body: {} bytes", body.raw_size);
-    
+
     Ok(Json(body))
 }
 

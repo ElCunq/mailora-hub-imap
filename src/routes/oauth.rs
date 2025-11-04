@@ -6,8 +6,8 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
-use crate::oauth::OAuthManager;
 use crate::models::account::EmailProvider;
+use crate::oauth::OAuthManager;
 
 #[derive(Deserialize)]
 pub struct StartAuthQuery {
@@ -33,9 +33,9 @@ pub async fn start_oauth(
     Query(params): Query<StartAuthQuery>,
 ) -> Result<Json<AuthUrlResponse>, String> {
     // Generate temporary account_id if not provided
-    let account_id = params.account_id.unwrap_or_else(|| {
-        format!("temp_{}", uuid::Uuid::new_v4().to_string())
-    });
+    let account_id = params
+        .account_id
+        .unwrap_or_else(|| format!("temp_{}", uuid::Uuid::new_v4().to_string()));
 
     let auth_url = oauth_manager
         .start_auth_flow(&params.provider, &account_id)
@@ -248,9 +248,7 @@ pub struct OAuthSetupGuide {
 }
 
 /// Get OAuth setup instructions for providers
-pub async fn oauth_setup_guide(
-    Query(params): Query<StartAuthQuery>,
-) -> Json<OAuthSetupGuide> {
+pub async fn oauth_setup_guide(Query(params): Query<StartAuthQuery>) -> Json<OAuthSetupGuide> {
     let (setup_url, instructions) = match params.provider.as_str() {
         "gmail" => (
             "https://console.cloud.google.com/apis/credentials",
@@ -284,7 +282,10 @@ pub async fn oauth_setup_guide(
                 "Set YAHOO_CLIENT_ID and YAHOO_CLIENT_SECRET env vars".to_string(),
             ],
         ),
-        _ => ("", vec!["OAuth not supported for this provider".to_string()]),
+        _ => (
+            "",
+            vec!["OAuth not supported for this provider".to_string()],
+        ),
     };
 
     Json(OAuthSetupGuide {
