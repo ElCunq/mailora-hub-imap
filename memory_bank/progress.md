@@ -1,87 +1,23 @@
 # Progress
 
-What works:
-- /diff multi-folder aggregation; minimal emission when meta missing.
-- /body refetch flow with SEARCH and multiple UID query forms; detailed logs.
-- **Multi-Account Management:** Add/list/get/delete accounts via API
-- **Provider Presets:** Gmail, Outlook, Yahoo, iCloud default configs
-- **Accounts Table:** SQLite schema with provider, credentials, sync settings
+## 2025-11-05 – v0.2.0 branch, IMAP/SMTP sadeleştirme tamam
+- Yeni branch: `v0.2.0` oluşturuldu ve upstream’e pushlandı.
+- Kaldırılanlar: `async-smtp` bağımlılığı ve ilgili test endpoint’i; Stalwart API entegrasyonu ve UI öğeleri; JMAP proxy rotaları.
+- SMTP test akışı: `/test/smtp/:account_id` yeniden route’a eklendi ve tüm patikalarda JSON dönecek şekilde sabitlendi (UI’de JSON parse hataları giderildi).
+- SMTP (lettre): `ClientId::new` kullanımı derleniyor ancak deprecate uyarısı veriyor; ileride `ClientId::Domain` ile temizlenecek (fonksiyonellik etkilenmiyor).
+- Sunucu: `cargo run` başarılı; yalnızca uyarılar mevcut. Test UI (static/app.html) sade ve işlevsel, tam mail arayüzü Faz 2’ye ertelendi.
 
-What's left:
-- BODYSTRUCTURE-driven precise part selection.
-- Better error semantics to UI on fetch-empty when UID present.
-- **External IMAP sync:** Per-account IMAP connection & message fetch
-- **IDLE watchers:** Background tasks for each account
-- **Credential security:** Upgrade from base64 to OS keychain
+Öne çıkan kararlar
+- Sadece IMAP/SMTP (app password) – OAuth2, Stalwart ve JMAP kaldırıldı.
+- Backend hataları daima yapılandırılmış JSON dönecek (front-end dayanıklılığı için).
 
-Status:
-- Multi-account management API ready for testing
-- Provider presets configured (Gmail, Outlook, Yahoo, iCloud, Custom)
-- Accounts table created with proper schema
-
-Known issues:
-- Occasionally UID exists but FETCH returns empty; mitigated by retries/NOOP.
-- SQLite type mismatches in account_service (boolean/integer) - IN PROGRESS
-- Credential storage currently base64 (needs OS keychain integration)
-
-Evolution:
-- Added folder to ChangeItem; expanded logging; created memory_bank for continuity.
-- **NEW:** Multi-provider account management system
-- **NEW:** Account CRUD endpoints (/accounts, /providers)
-- **NEW:** Email provider abstraction layer
+Kısa vadeli odak (Faz 1)
+- SMTP sonrası IMAP APPEND ile “Sent” klasörüne kayıt ve UID takibi.
+- IMAP delta senkron: folder başına UIDVALIDITY + last_uid persist ve reset stratejisi.
+- Bayraklar (\\Seen/\\Flagged/\\Deleted) iki yönlü senkron; Trash/Sent/Junk rol eşlemesi.
+- Dayanıklılık: timeout, exponential backoff, idempotency.
 
 ---
-
-Meta
-- Güncelleme: 2025-10-10
-- Sürüm: 0.2
-- Sahip: TODO
-
-Yakın Vade Yapılacaklar
-- BODYSTRUCTURE ile parça-seçimli fetch akışını uygulama ve test etme.
-- FETCH-empty (UID mevcut ama gövde yok) durumları için UI’ye yapılandırılmış hata kodları sağlama.
-- Gmail, O365, Dovecot, Fastmail üzerinde uçtan uca duman testleri.
-
-Kabul Kriterleri
-- BODYSTRUCTURE odaklı seçim:
-  - multipart/alternative içinde text/plain öncelikli, yoksa text/html fallback.
-  - multipart/mixed ve gömülü message/rfc822 için ek parça/ek sayımı doğru.
-  - Tek sefer BODYSTRUCTURE al, sonra yalnız gerekli BODY[<section>] parçalarını getir; gereksiz byte indirimi < 30%.
-  - 50 rastgele mail üzerinde decode (charset, transfer-encoding) hatası: 0.
-- FETCH-empty hata semantiği:
-  - IMAP_EMPTY_FETCH, IMAP_UID_STALE, IMAP_PERM gibi ayrık kodlar ve kullanıcıya eylem önerisi.
-  - Yeniden deneme politikası: 3 deneme, NOOP/IDLE ile tazeleme; metriklere işlenmiş.
-
-Tanılama ve Gözlemlenebilirlik
-- Oturum başında CAPABILITY, PERMANENTFLAGS, UIDVALIDITY, HIGHESTMODSEQ logla.
-- BODYSTRUCTURE ağacını tek satır özetle (tip, alt-tip, parça sayısı, en büyük ek boyutu).
-- FETCH/SEARCH istek/yanıt sayaçları ve toplam indirilen byte metriği.
-- FETCH-empty vakalarında: kullanılan UID listesi, SEARCH sonucunun ham çıktısı ve server tag’ı kaydı.
-
-Test Matrisi
-- Sunucular: Gmail, O365/Outlook, Fastmail, Dovecot.
-- Klasörler: INBOX, All Mail/Archive, rastgele etiket.
-- Durumlar: büyük ek (>10MB), yalnız HTML, yalnız Plain, nested message/rfc822, bozuk MIME sınırları.
-- Sorgular: tek UID, aralıklı UID seti, karışık UID ve SEQ, ESEARCH destekli/desteksiz.
-
-Performans Bütçesi
-- 100 ileti için toplam istek sayısı ≤ 12 (SEARCH + 2 FETCH dalgası maksimumu).
-- Ortalama indirilen byte/ileti ≤ 80KB (ekler hariç gövde + başlık).
-- Zaman bütçesi: 100 ileti ≤ 3.5 sn (Gmail) ve ≤ 4.5 sn (IMAP genel) 50ms RTT’de.
-
-Karar Günlüğü
-- UID tabanlı FETCH tercih edildi; sıra numarası yalnız kısa ömürlü oturumlarda fallback.
-- BODYSTRUCTURE ön-okuma zorunlu; tam RFC822 indirme yalnız hatada veya kullanıcı isteğinde.
-- Yeniden deneme: sabit 250ms artan bekleme ile 3 deneme; NOOP sonrası tek deneme daha.
-
-Açık Sorular ve Riskler
-- BODYSTRUCTURE cache’i (UID→ağaç) için TTL ve invalidation stratejisi.
-- Gmail X-GM-EXT parametreleri ile optimize arama; taşınabilirlik etkisi.
-- Paralellik: klasör başına eşzamanlı FETCH sınırı (öneri: 3-5).
-
-Playbook Ekleri
-- playbooks/body_fetch.md içine "FETCH-empty triage" ve "BODYSTRUCTURE okunması" bölümleri eklenecek.
-- facts/imap.md içine sunucu farklılıkları (Gmail/Outlook/Dovecot) tablosu eklenecek.
 
 # Progress Log
 

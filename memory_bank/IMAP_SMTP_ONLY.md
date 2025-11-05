@@ -1,18 +1,20 @@
 # IMAP/SMTP-only Destek
-Bu projede OAuth2 ile giriş ve senkronizasyon tamamen kaldırılmıştır. Artık sadece IMAP/SMTP (uygulama şifresi) ile e-posta hesapları eklenebilir ve senkronize edilebilir.
 
-## Kaldırılanlar
-- OAuth2 ile ilgili tüm backend kodları
-- UI'daki OAuth2 butonları ve açıklamalar
-- Veritabanındaki OAuth2 alanları
-- Outlook, Gmail OAuth2, Yahoo OAuth2 desteği
+Son Güncelleme: 2025-11-05
 
-## Kalanlar
-- Sadece IMAP/SMTP (app password) ile giriş ve senkronizasyon
-- Temizlenmiş kod tabanı ve arayüz
+Özet
+- OAuth2, JMAP ve Stalwart entegrasyonları kaldırıldı.
+- SMTP sadece `lettre` ile; async-smtp tamamen çıkarıldı.
+- UI tarafında sadece test sayfası var; tam arayüz Faz 2’ye ertelendi.
 
-## Kullanım
-Hesap eklerken e-posta adresinizi ve uygulama şifrenizi girin. OAuth2 ile ilgili hiçbir alan veya seçenek yoktur.
+Ne Değişti
+- `async-smtp` bağımlılığı ve `/test/async-smtp/:account_id` uçları kaldırıldı.
+- Stalwart API bağlantısı ve ilgili UI formları silindi.
+- JMAP proxy rotaları ve durumu kaldırıldı.
+- `/test/smtp/:account_id` JSON kontratı garanti altına alındı.
 
----
-Son güncelleme: 23 Ekim 2025
+Sonraki Adımlar (Faz 1)
+- Sent’e APPEND + UID takibi
+- UID cursors & delta sync
+- Bayraklar iki yönlü + rol eşlemesi
+- Dayanıklılık & güvenlik sertleştirmeleri
