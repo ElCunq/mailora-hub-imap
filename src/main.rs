@@ -12,7 +12,6 @@ mod persist;
 mod routes;
 mod services;
 mod smtp;
-use routes::jmap_proxy::JmapProxyState;
 
 #[derive(Clone)]
 struct AppState {
@@ -115,23 +114,6 @@ async fn main() -> Result<()> {
             .nest_service("/static", ServeDir::new("static"))
             // App state
             .with_state(state.clone());
-
-        // Build JMAP proxy router with its own state and merge
-        let jmap_state = JmapProxyState {
-            http: reqwest::Client::new(),
-            jmap_base: std::env::var("JMAP_BASE")
-                .unwrap_or_else(|_| "http://127.0.0.1:8787".to_string()),
-        };
-        let jmap_router = Router::new()
-            .route("/jmap", axum::routing::post(routes::jmap_proxy::proxy_jmap))
-            .route(
-                "/.well-known/jmap",
-                get(routes::jmap_proxy::proxy_well_known),
-            )
-            .route("/jmap/session", get(routes::jmap_proxy::proxy_session))
-            .with_state(jmap_state);
-
-        let app = app.merge(jmap_router);
 
         let port: u16 = std::env::var("PORT")
             .ok()

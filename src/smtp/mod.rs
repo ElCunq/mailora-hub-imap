@@ -1,5 +1,5 @@
+use lettre::transport::smtp::client::{TlsParameters, Tls};
 use lettre::transport::smtp::authentication::Mechanism;
-use lettre::transport::smtp::client::{Tls, TlsParameters};
 use tracing_subscriber::FmtSubscriber;
 pub fn gmail_smtp_test() -> anyhow::Result<()> {
     // 0) Debug log aç (lettre diyaloğunu görmek için)
@@ -42,50 +42,7 @@ pub fn gmail_smtp_test() -> anyhow::Result<()> {
     Ok(())
 }
 use lettre::transport::smtp::extension::ClientId;
-/// Gmail SMTP için async-smtp ile test fonksiyonu (0.8 API)
-pub async fn send_async_smtp_test(
-    host: &str,
-    username: &str,
-    password: &str,
-    to: &str,
-    subject: &str,
-    body: &str,
-) -> anyhow::Result<()> {
-    use async_smtp::{authentication::Credentials, Envelope, SendableEmail, SmtpClient};
-
-    // App Password'daki tüm whitespace karakterlerini kaldır
-    let clean_password: String = password.chars().filter(|c| !c.is_whitespace()).collect();
-    let creds = Credentials::new(username.to_string(), clean_password);
-
-    let envelope_587 = Envelope::new(Some(username.parse()?), vec![to.parse()?])?;
-    let message_587 = format!(
-        "From: <{}>\r\nTo: <{}>\r\nSubject: {}\r\n\r\n{}",
-        username, to, subject, body
-    );
-    let email_587 = SendableEmail::new(envelope_587, message_587.into_bytes());
-
-    let envelope_465 = Envelope::new(Some(username.parse()?), vec![to.parse()?])?;
-    let message_465 = format!(
-        "From: <{}>\r\nTo: <{}>\r\nSubject: {}\r\n\r\n{}",
-        username, to, subject, body
-    );
-    let email_465 = SendableEmail::new(envelope_465, message_465.into_bytes());
-
-    use async_smtp::authentication::Mechanism;
-    use tokio::net::TcpStream;
-
-    // Sadece 587 (STARTTLS) ile dene
-    let stream = TcpStream::connect((host, 587)).await?;
-    let client = SmtpClient::new().smtp_utf8(true);
-    let mut transport = async_smtp::SmtpTransport::new(client, stream).await?;
-    // Kimlik doğrulama
-    transport
-        .try_login(&creds, &[Mechanism::Login, Mechanism::Plain])
-        .await?;
-    transport.send(email_587).await?;
-    Ok(())
-}
-// filepath: /mailora-hub-imap/mailora-hub-imap/src/smtp/mod.rs
+/// filepath: /mailora-hub-imap/mailora-hub-imap/src/smtp/mod.rs
 use anyhow::Result;
 use lettre::transport::smtp::authentication::Credentials;
 use lettre::{Message, SmtpTransport, Transport};

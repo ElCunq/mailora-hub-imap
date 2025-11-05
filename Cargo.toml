@@ -7,7 +7,6 @@ edition = "2021"
 
 # Dependencies
 [dependencies]
-async-smtp = { version = "0.8", features = ["tokio"] }
 axum = "0.7"
 tokio = { version = "1", features = ["rt-multi-thread","macros","signal"] }
 serde = { version="1", features=["derive"] }

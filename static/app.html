@@ -791,13 +791,6 @@
             <button class="btn btn-secondary" onclick="testJmapInbox()">Inbox Mesajlarını Getir</button>
             <pre id="jmap-test-result" style="margin-top:12px;display:none;"></pre>
             <h2>Yeni Hesap Ekle</h2>
-            <h2 style="margin-top:32px;color:#10b981;">Stalwart API ile Bağlantı</h2>
-            <div class="form-group">
-                <label>Stalwart API Key:</label>
-                <input type="text" id="stalwart-api-key" placeholder="API Key'i buraya yapıştırın">
-            </div>
-            <button class="btn btn-primary" onclick="connectStalwartApi()">API ile Bağlan & Mailleri Çek</button>
-             <pre id="stalwart-api-result" style="margin-top:12px;display:none;"></pre>
             
             <!-- Provider Info Banner -->
             <div id="provider-info" style="background: #1f2937; padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #10b981;">
@@ -903,24 +896,6 @@
             </div>
             <button class="btn btn-success" onclick="sendSmtpTest()">📤 SMTP ile Test Mail Gönder</button>
             <pre id="smtp-test-result" style="margin-top:12px;"></pre>
-
-            <hr style="margin:24px 0;">
-            <h3>SMTP Testi (async-smtp)</h3>
-            <div class="form-group">
-                <label>Alıcı Email:</label>
-                <input type="email" id="async-smtp-test-to" placeholder="test@email.com">
-            </div>
-            <div class="form-group">
-                <label>Konu:</label>
-                <input type="text" id="async-smtp-test-subject" placeholder="Test Konusu">
-            </div>
-            <div class="form-group">
-                <label>Mesaj:</label>
-                <textarea id="async-smtp-test-body" rows="3" placeholder="Test mesajı içeriği..."></textarea>
-            </div>
-            <button class="btn btn-primary" onclick="sendAsyncSmtpTest()">⚡ async-smtp ile Test Mail Gönder</button>
-            <pre id="async-smtp-test-result" style="margin-top:12px;"></pre>
-            <pre id="test-result"></pre>
         </div>
     </div>
 
@@ -974,31 +949,6 @@
                 alert('Sync hatası: ' + e.message);
                 btn.textContent = '🔄 Sync';
                 btn.disabled = false;
-            }
-        }
-        async function sendAsyncSmtpTest() {
-            const accountId = document.getElementById('test-account-select').value;
-            const to = document.getElementById('async-smtp-test-to').value;
-            const subject = document.getElementById('async-smtp-test-subject').value;
-            const body = document.getElementById('async-smtp-test-body').value;
-            const resultEl = document.getElementById('async-smtp-test-result');
-
-            if (!accountId || !to || !subject || !body) {
-                alert('Hesap, alıcı, konu ve mesaj zorunlu!');
-                return;
-            }
-
-            resultEl.textContent = 'Gönderiliyor...';
-            try {
-                const res = await fetch(`/test/async-smtp/${accountId}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ to, subject, body })
-                });
-                const result = await res.json();
-                resultEl.textContent = JSON.stringify(result, null, 2);
-            } catch (e) {
-                resultEl.textContent = 'async-smtp gönderim hatası: ' + e.message;
             }
         }
         let accounts = [];

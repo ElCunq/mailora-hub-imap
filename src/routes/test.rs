@@ -1,51 +1,3 @@
-/// POST /test/async-smtp/:account_id - async-smtp ile test mail gönder
-#[derive(Debug, Deserialize)]
-pub struct AsyncSmtpTestRequest {
-    pub to: String,
-    pub subject: String,
-    pub body: String,
-}
-
-pub async fn async_smtp_test(
-    State(pool): State<SqlitePool>,
-    Path(account_id): Path<String>,
-    AxumJson(req): AxumJson<AsyncSmtpTestRequest>,
-) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
-    let account = account_service::get_account(&pool, &account_id)
-        .await
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Database error: {}", e),
-            )
-        })?
-        .ok_or_else(|| {
-            (
-                StatusCode::NOT_FOUND,
-                format!("Account {} not found", account_id),
-            )
-        })?;
-
-    let result = crate::smtp::send_async_smtp_test(
-        &account.smtp_host,
-        &account.email,
-        &account.password,
-        &req.to,
-        &req.subject,
-        &req.body,
-    )
-    .await;
-
-    match result {
-        Ok(_) => Ok(Json(
-            serde_json::json!({"success": true, "message": "async-smtp ile test mail gönderildi."}),
-        )),
-        Err(e) => Ok(Json(serde_json::json!({
-            "success": false,
-            "error": format!("async-smtp gönderim hatası: {}", e)
-        }))),
-    }
-}
 /// POST /test/smtp/:account_id - SMTP ile test mail gönder
 use crate::smtp;
 use axum::extract::Json as AxumJson;
@@ -61,21 +13,23 @@ pub async fn smtp_test(
     State(pool): State<SqlitePool>,
     Path(account_id): Path<String>,
     AxumJson(req): AxumJson<SmtpTestRequest>,
-) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
-    let account = account_service::get_account(&pool, &account_id)
-        .await
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Database error: {}", e),
-            )
-        })?
-        .ok_or_else(|| {
-            (
-                StatusCode::NOT_FOUND,
-                format!("Account {} not found", account_id),
-            )
-        })?;
+) -> Json<serde_json::Value> {
+    // Always return JSON on all paths
+    let account = match account_service::get_account(&pool, &account_id).await {
+        Ok(Some(acc)) => acc,
+        Ok(None) => {
+            return Json(serde_json::json!({
+                "success": false,
+                "error": format!("Account {} not found", account_id)
+            }))
+        }
+        Err(e) => {
+            return Json(serde_json::json!({
+                "success": false,
+                "error": format!("Database error: {}", e)
+            }))
+        }
+    };
 
     let result = smtp::send_simple(
         &account.smtp_host,
@@ -88,15 +42,13 @@ pub async fn smtp_test(
     );
 
     match result {
-        Ok(_) => Ok(Json(
-            serde_json::json!({"success": true, "message": "SMTP test mail gönderildi."}),
-        )),
+        Ok(_) => Json(serde_json::json!({"success": true, "message": "SMTP test mail gönderildi."})),
         Err(e) => {
             tracing::error!("SMTP gönderim hatası: {:?}", e);
-            Ok(Json(serde_json::json!({
+            Json(serde_json::json!({
                 "success": false,
                 "error": format!("SMTP gönderim hatası: {}", e)
-            })))
+            }))
         }
     }
 }

@@ -1,5 +1,4 @@
 pub mod jmap_proxy;
-pub mod stalwart;
 use crate::persist;
 use crate::services::diff_service::AccountCreds;
 use crate::services::diff_service::ACCOUNTS; // add account store
@@ -124,7 +123,7 @@ async fn send_action(AxumJson(req): AxumJson<SendReq>) -> impl IntoResponse {
         store.get(&req.accountId).cloned()
     };
     if creds_opt.is_none() {
-        return StatusCode::NOT_FOUND.into_response();
+        return AxumJson(serde_json::json!({"ok": false, "error": "account not found"})).into_response();
     }
     // Simple SMTP send using lettre; fallback to env SMTP if not available
     let smtp_host = std::env::var("SMTP_HOST").unwrap_or_else(|_| "smtp.gmail.com".into());
@@ -145,8 +144,8 @@ async fn send_action(AxumJson(req): AxumJson<SendReq>) -> impl IntoResponse {
         &req.subject,
         &req.body,
     ) {
-        Ok(_) => AxumJson(SendResp { ok: true }).into_response(),
-        Err(e) => AxumJson(serde_json::json!({"ok":false,"error":e.to_string()})).into_response(),
+        Ok(_) => AxumJson(serde_json::json!({"ok": true})).into_response(),
+        Err(e) => AxumJson(serde_json::json!({"ok": false, "error": e.to_string()})).into_response(),
     }
 }
 
@@ -175,7 +174,6 @@ where
         .route("/test/connection/:account_id", get(test::test_connection))
         .route("/test/messages/:account_id", get(test::fetch_messages))
         .route("/test/smtp/:account_id", post(test::smtp_test))
-        .route("/test/async-smtp/:account_id", post(test::async_smtp_test))
         .route("/test/body/:account_id/:uid", get(test::fetch_message_body))
         .route("/test/accounts", get(test::list_test_accounts))
         .route("/send", post(send_action))
@@ -188,5 +186,4 @@ where
             "/messages/:account_id/:folder",
             get(sync::get_folder_messages),
         )
-        .route("/stalwart/connect", post(stalwart::connect_stalwart_api))
 }
