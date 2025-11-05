@@ -18,6 +18,7 @@ pub mod oauth;
 pub mod sync;
 pub mod test;
 pub mod unified;
+pub mod flags;
 
 #[derive(Deserialize)]
 struct LoginReq {
@@ -174,6 +175,7 @@ where
         .route("/test/connection/:account_id", get(test::test_connection))
         .route("/test/messages/:account_id", get(test::fetch_messages))
         .route("/test/smtp/:account_id", post(test::smtp_test))
+        .route("/test/smtp-append/:account_id", post(test::smtp_send_and_append))
         .route("/test/body/:account_id/:uid", get(test::fetch_message_body))
         .route("/test/accounts", get(test::list_test_accounts))
         .route("/send", post(send_action))
@@ -186,4 +188,5 @@ where
             "/messages/:account_id/:folder",
             get(sync::get_folder_messages),
         )
+        .route("/messages/:account_id/:folder/:uid/flags", post(flags::update_flags))
 }

@@ -896,6 +896,47 @@
             </div>
             <button class="btn btn-success" onclick="sendSmtpTest()">📤 SMTP ile Test Mail Gönder</button>
             <pre id="smtp-test-result" style="margin-top:12px;"></pre>
+
+            <!-- SMTP + APPEND (Sent) Testi -->
+            <hr style="margin:24px 0;">
+            <h3>SMTP + APPEND (Sent Kopyası)</h3>
+            <div class="form-group">
+                <label>Alıcı Email:</label>
+                <input type="email" id="smtp-append-to" placeholder="test@email.com">
+            </div>
+            <div class="form-group">
+                <label>Konu:</label>
+                <input type="text" id="smtp-append-subject" placeholder="Test Konusu">
+            </div>
+            <div class="form-group">
+                <label>Mesaj:</label>
+                <textarea id="smtp-append-body" rows="3" placeholder="Test mesajı içeriği..."></textarea>
+            </div>
+            <button class="btn btn-primary" onclick="sendSmtpAppendTest()">📤 Gönder ve Sent'e Kaydet</button>
+            <pre id="smtp-append-result" style="margin-top:12px;"></pre>
+
+            <!-- Flags Güncelleme Testi -->
+            <hr style="margin:24px 0;">
+            <h3>Mesaj Bayrakları (Flags) Güncelle</h3>
+            <div class="form-group">
+                <label>Klasör Adı:</label>
+                <input type="text" id="flags-folder" placeholder="Örn: INBOX veya [Gmail]/Sent Mail">
+            </div>
+            <div class="form-group">
+                <label>UID:</label>
+                <input type="number" id="flags-uid" placeholder="Örn: 1234">
+            </div>
+            <div class="form-group">
+                <label><input type="checkbox" id="flags-seen"> Seen (\\Seen)</label>
+            </div>
+            <div class="form-group">
+                <label><input type="checkbox" id="flags-flagged"> Flagged (\\Flagged)</label>
+            </div>
+            <div class="form-group">
+                <label><input type="checkbox" id="flags-deleted"> Deleted (\\Deleted)</label>
+            </div>
+            <button class="btn btn-secondary" onclick="updateMessageFlags()">🔖 Bayrakları Güncelle</button>
+            <pre id="flags-result" style="margin-top:12px;"></pre>
         </div>
     </div>
 
@@ -1233,6 +1274,48 @@
             }
         }
 
+        async function sendSmtpAppendTest() {
+          const accountId = document.getElementById('test-account-select')?.value;
+          const to = document.getElementById('smtp-append-to').value;
+          const subject = document.getElementById('smtp-append-subject').value;
+          const body = document.getElementById('smtp-append-body').value;
+          const out = document.getElementById('smtp-append-result');
+          if (!accountId || !to || !subject || !body) { out.textContent = 'Hesap, alıcı, konu ve mesaj zorunlu!'; return; }
+          out.textContent = 'Gönderiliyor...';
+          try {
+            const res = await fetch(`/test/smtp-append/${accountId}`, {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ to, subject, body })
+            });
+            const json = await res.json().catch(() => ({ ok: false, error: 'JSON parse failed' }));
+            out.textContent = JSON.stringify(json, null, 2);
+          } catch (e) {
+            out.textContent = 'Hata: ' + e.message;
+          }
+        }
+
+        async function updateMessageFlags() {
+          const accountId = document.getElementById('test-account-select')?.value;
+          const folder = document.getElementById('flags-folder').value;
+          const uid = document.getElementById('flags-uid').value;
+          const seen = document.getElementById('flags-seen').checked;
+          const flagged = document.getElementById('flags-flagged').checked;
+          const deleted = document.getElementById('flags-deleted').checked;
+          const out = document.getElementById('flags-result');
+          if (!accountId || !folder || !uid) { out.textContent = 'Hesap, klasör ve UID zorunlu!'; return; }
+          out.textContent = 'Güncelleniyor...';
+          try {
+            const res = await fetch(`/messages/${encodeURIComponent(accountId)}/${encodeURIComponent(folder)}/${encodeURIComponent(uid)}/flags`, {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ seen, flagged, deleted })
+            });
+            const json = await res.json().catch(() => ({ ok: false, error: 'JSON parse failed' }));
+            out.textContent = JSON.stringify(json, null, 2);
+          } catch (e) {
+            out.textContent = 'Hata: ' + e.message;
+          }
+        }
+        
         async function testConnection() {
             const accountId = document.getElementById('test-account-select').value;
             if (!accountId) {

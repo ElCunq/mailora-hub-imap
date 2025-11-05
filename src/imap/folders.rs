@@ -60,3 +60,25 @@ pub async fn list_mailboxes(
     let _ = session.logout().await;
     Ok(out)
 }
+
+pub fn detect_sent_candidates(names: &[String]) -> Vec<String> {
+    let mut out = Vec::new();
+    for n in names {
+        let l = n.to_lowercase();
+        if l.contains("[gmail]/sent mail")
+            || l.ends_with("/sent")
+            || l.contains("sent items")
+            || l.contains("sent messages")
+        {
+            out.push(n.clone());
+        }
+    }
+    if out.is_empty() {
+        out.push("Sent".into());
+        out.push("Sent Items".into());
+        out.push("[Gmail]/Sent Mail".into());
+        out.push("Sent Messages".into());
+        out.push("INBOX.Sent".into());
+    }
+    out
+}

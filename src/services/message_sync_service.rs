@@ -353,3 +353,46 @@ pub async fn sync_account_messages(pool: &SqlitePool, account: &Account) -> Resu
 
     Ok(stats)
 }
+
+/// Upsert a minimal message row for Sent APPEND results
+pub async fn upsert_sent_message(
+    pool: &SqlitePool,
+    account: &Account,
+    folder: &str,
+    uid: u32,
+    subject: Option<&str>,
+    to: Option<&str>,
+) -> Result<()> {
+    let flags_json = serde_json::to_string(&vec!["\\Seen".to_string()])?;
+
+    // Try update, else insert
+    let updated = sqlx::query(
+        "UPDATE messages SET subject = COALESCE(?, subject), to_addrs = COALESCE(?, to_addrs), flags = ?, synced_at = datetime('now') WHERE account_id = ? AND folder = ? AND uid = ?",
+    )
+    .bind(subject)
+    .bind(to)
+    .bind(&flags_json)
+    .bind(&account.id)
+    .bind(folder)
+    .bind(uid as i64)
+    .execute(pool)
+    .await?
+    .rows_affected();
+
+    if updated == 0 {
+        sqlx::query(
+            r#"INSERT OR IGNORE INTO messages (account_id, folder, uid, subject, to_addrs, flags, internaldate, size)
+               VALUES (?, ?, ?, ?, ?, ?, STRFTIME('%s','now'), 0)"#,
+        )
+        .bind(&account.id)
+        .bind(folder)
+        .bind(uid as i64)
+        .bind(subject)
+        .bind(to)
+        .bind(&flags_json)
+        .execute(pool)
+        .await?;
+    }
+
+    Ok(())
+}

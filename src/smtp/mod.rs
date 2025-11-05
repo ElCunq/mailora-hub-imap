@@ -162,7 +162,135 @@ pub fn send_simple(
     }
 }
 
-/// Send email and log to events table
+/// Build a Message with explicit Message-Id. Returns (message, message_id)
+pub fn build_email(from: &str, to: &str, subject: &str, body: &str) -> Result<(Message, String)> {
+    use lettre::message::Mailbox;
+    use lettre::message::header::MessageId;
+    use uuid::Uuid;
+
+    let from_mb: Mailbox = from.parse()?;
+    let to_mb: Mailbox = to.parse()?;
+    let domain = from.split('@').nth(1).unwrap_or("mailora.local");
+    let msg_id_value = format!("{}@{}", Uuid::new_v4(), domain);
+
+    let builder = Message::builder()
+        .from(from_mb)
+        .to(to_mb)
+        .subject(subject)
+        .header(MessageId::from(msg_id_value.clone()));
+
+    let message = builder.body(body.to_string())?;
+    Ok((message, msg_id_value))
+}
+
+/// Send a prebuilt Message via lettre
+pub fn send_prebuilt(
+    host: &str,
+    port: u16,
+    username: &str,
+    password: &str,
+    msg: &Message,
+) -> Result<()> {
+    use lettre::transport::smtp::{authentication::Mechanism, client::{Tls, TlsParameters}};
+
+    let clean_password: String = password.chars().filter(|c| !c.is_whitespace()).collect();
+    let creds = Credentials::new(username.to_string(), clean_password);
+
+    let tls = TlsParameters::builder(host.into())
+        .dangerous_accept_invalid_certs(true)
+        .build()?;
+
+    let mut builder = match SmtpTransport::relay(host) {
+        Ok(b) => b,
+        Err(_) => SmtpTransport::builder_dangerous(host),
+    };
+
+    let client_id = std::env::var("SMTP_HELLO_NAME")
+        .ok()
+        .map(|val| ClientId::Domain(val))
+        .unwrap_or_else(|| ClientId::Domain(host.to_string()));
+
+    builder = builder
+        .port(port)
+        .hello_name(client_id)
+        .authentication(vec![Mechanism::Plain, Mechanism::Login])
+        .credentials(creds);
+
+    let builder = if port == 465 { builder.tls(Tls::Wrapper(tls)) } else { builder.tls(Tls::Required(tls)) };
+
+    let mailer = builder.build();
+    mailer.send(msg)?;
+    Ok(())
+}
+
+#[derive(Debug, serde::Serialize, serde::Deserialize, Clone)]
+pub struct AppendResult {
+    pub folder: String,
+    pub uid: Option<u32>,
+}
+
+/// Append raw RFC822 to a Sent-like folder and resolve UID via Message-Id search
+pub async fn append_to_sent(account: &crate::models::account::Account, raw: &[u8], message_id: &str) -> Result<AppendResult> {
+    use crate::imap::conn;
+
+    let mut imap = conn::connect(&account.imap_host, account.imap_port, &account.email, &account.password).await?;
+    let session = &mut imap.session;
+
+    let mut candidates: Vec<String> = Vec::new();
+    if let Ok(list_stream) = session.list(None, Some("*" )).await {
+        use futures::StreamExt;
+        let mut names = Vec::new();
+        let mut s = list_stream;
+        while let Some(item) = s.next().await { if let Ok(m) = item { names.push(m.name().to_string()); } }
+        candidates = crate::imap::folders::detect_sent_candidates(&names);
+    }
+    if candidates.is_empty() {
+        candidates = vec![
+            "Sent".into(),
+            "Sent Items".into(),
+            "[Gmail]/Sent Mail".into(),
+            "Sent Messages".into(),
+            "INBOX.Sent".into(),
+        ];
+    }
+
+    let mut chosen: Option<String> = None;
+    for cand in candidates.iter() {
+        let _ = session.select(cand).await; // best-effort
+        match session.append(cand, raw).await {
+            Ok(()) => {
+                chosen = Some(cand.to_string());
+                break;
+            }
+            Err(e) => {
+                tracing::debug!(folder = %cand, error = %e, "APPEND failed, trying next candidate");
+            }
+        }
+    }
+
+    let folder = chosen.ok_or_else(|| anyhow::anyhow!("No Sent-like folder accepted APPEND"))?;
+
+    // Try UIDSEARCH by Message-ID header (without angle brackets)
+    let _ = session.select(&folder).await;
+    let mid = message_id.trim_matches(['<','>']);
+    let query = format!("HEADER Message-ID {}", mid);
+    let mut uid_opt: Option<u32> = None;
+    if let Ok(uids) = session.uid_search(&query).await {
+        if !uids.is_empty() {
+            uid_opt = uids.iter().copied().max();
+        }
+    }
+
+    if let Some(uid) = uid_opt {
+        let _ = session.uid_store(&uid.to_string(), "+FLAGS (\\Seen)").await;
+    }
+
+    let _ = session.logout().await;
+
+    Ok(AppendResult { folder, uid: uid_opt })
+}
+
+/// Send email and log to events table (legacy). Prefer building and appending via append_to_sent.
 pub async fn send_and_log(
     pool: &sqlx::SqlitePool,
     mailbox: &str,

@@ -298,3 +298,76 @@ pub struct TestAccountInfo {
     pub enabled: bool,
     pub last_sync_ts: Option<i64>,
 }
+
+#[derive(Debug, Deserialize)]
+pub struct SmtpSendAndAppendRequest {
+    pub to: String,
+    pub subject: String,
+    pub body: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct SmtpSendAndAppendResponse {
+    pub success: bool,
+    pub folder: Option<String>,
+    pub uid: Option<u32>,
+    pub message_id: Option<String>,
+    pub error: Option<String>,
+}
+
+/// POST /test/smtp-append/:account_id - Send email and append to Sent
+pub async fn smtp_send_and_append(
+    State(pool): State<SqlitePool>,
+    Path(account_id): Path<String>,
+    AxumJson(req): AxumJson<SmtpSendAndAppendRequest>,
+) -> Json<SmtpSendAndAppendResponse> {
+    use crate::services::account_service;
+
+    let account = match account_service::get_account(&pool, &account_id).await {
+        Ok(Some(acc)) => acc,
+        Ok(None) => {
+            return Json(SmtpSendAndAppendResponse { success: false, folder: None, uid: None, message_id: None, error: Some(format!("Account {} not found", account_id)) })
+        }
+        Err(e) => {
+            return Json(SmtpSendAndAppendResponse { success: false, folder: None, uid: None, message_id: None, error: Some(format!("Database error: {}", e)) })
+        }
+    };
+
+    // Build message
+    let (msg, message_id) = match crate::smtp::build_email(&account.email, &req.to, &req.subject, &req.body) {
+        Ok(v) => v,
+        Err(e) => {
+            return Json(SmtpSendAndAppendResponse { success: false, folder: None, uid: None, message_id: None, error: Some(format!("Build email failed: {}", e)) })
+        }
+    };
+
+    // Render raw RFC822 before sending
+    let raw = msg.formatted();
+
+    // Send via SMTP
+    if let Err(e) = crate::smtp::send_prebuilt(&account.smtp_host, account.smtp_port, &account.email, &account.password, &msg) {
+        return Json(SmtpSendAndAppendResponse { success: false, folder: None, uid: None, message_id: Some(message_id), error: Some(format!("SMTP send failed: {}", e)) });
+    }
+
+    // Append to Sent via IMAP (resolve UID by Message-Id)
+    let append_res = match crate::smtp::append_to_sent(&account, &raw, &message_id).await {
+        Ok(r) => r,
+        Err(e) => {
+            return Json(SmtpSendAndAppendResponse { success: false, folder: None, uid: None, message_id: Some(message_id), error: Some(format!("IMAP APPEND failed: {}", e)) })
+        }
+    };
+
+    if let (Some(folder), Some(uid)) = (Some(append_res.folder.clone()), append_res.uid) {
+        let _ = crate::services::message_sync_service::upsert_sent_message(
+            &pool,
+            &account,
+            &folder,
+            uid,
+            Some(&req.subject),
+            Some(&req.to),
+        )
+        .await;
+    }
+
+    Json(SmtpSendAndAppendResponse { success: true, folder: Some(append_res.folder), uid: append_res.uid, message_id: Some(message_id), error: None })
+}
