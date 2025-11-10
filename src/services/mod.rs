@@ -7,3 +7,4 @@ pub mod imap_test_service;
 pub mod message_body_service;
 pub mod message_service;
 pub mod message_sync_service;
+pub mod scheduler; // expose scheduler module

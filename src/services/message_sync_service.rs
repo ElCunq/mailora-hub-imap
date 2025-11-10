@@ -396,3 +396,174 @@ pub async fn upsert_sent_message(
 
     Ok(())
 }
+
+/// Quick-scan Sent folder(s) to resolve UID of a just-sent message by Message-Id.
+/// Returns Some((folder, uid)) when found.
+pub async fn quick_sync_sent_and_upsert(
+    pool: &SqlitePool,
+    account: &Account,
+    message_id: &str,
+    subject: Option<&str>,
+    to: Option<&str>,
+    max_scan: usize,
+) -> Result<Option<(String, u32)>> {
+    use futures::StreamExt;
+
+    let mut imap = conn::connect(
+        &account.imap_host,
+        account.imap_port,
+        &account.email,
+        &account.password,
+    )
+    .await
+    .context("Failed to connect to IMAP")?;
+
+    let session = &mut imap.session;
+
+    // Build Sent candidates
+    let mut candidates: Vec<String> = Vec::new();
+    if let Ok(list_stream) = session.list(None, Some("*")).await {
+        let mut names = Vec::new();
+        let mut s = list_stream;
+        while let Some(item) = s.next().await {
+            if let Ok(m) = item {
+                names.push(m.name().to_string());
+            }
+        }
+        candidates = crate::imap::folders::detect_sent_candidates(&names);
+    }
+    if candidates.is_empty() {
+        candidates = vec![
+            "[Gmail]/Sent Mail".into(),
+            "Sent".into(),
+            "Sent Items".into(),
+            "Sent Messages".into(),
+            "INBOX.Sent".into(),
+        ];
+    }
+    if account.provider.as_str() == "gmail" {
+        if let Some(pos) = candidates.iter().position(|f| f == "[Gmail]/Sent Mail") {
+            if pos != 0 {
+                let f = candidates.remove(pos);
+                candidates.insert(0, f);
+            }
+        }
+        // Also consider All Mail for Gmail, sometimes visible before Sent label indexing
+        if !candidates.iter().any(|f| f == "[Gmail]/All Mail") {
+            candidates.insert(1.min(candidates.len()), "[Gmail]/All Mail".into());
+        }
+    }
+
+    let target = message_id.trim_matches(['<', '>']);
+
+    // Build search variants (prefer Gmail raw search when provider is gmail)
+    let header_variants = vec![
+        format!("HEADER Message-ID \"{}\"", target),
+        format!("HEADER Message-ID \"<{}>\"", target),
+        format!("HEADER Message-Id \"{}\"", target),
+        format!("HEADER Message-Id \"<{}>\"", target),
+    ];
+    let gmail_variants = vec![
+        format!("X-GM-RAW \"rfc822msgid:{}\"", target),
+        format!("X-GM-RAW \"rfc822msgid:\\<{}\\>\"", target),
+    ];
+
+    for folder in candidates {
+        if session.select(&folder).await.is_err() {
+            continue;
+        }
+
+        // 1) Direct UID SEARCH by Message-Id (fast path)
+        // Gmail raw search first for gmail accounts
+        if account.provider.as_str() == "gmail" {
+            for q in &gmail_variants {
+                if let Ok(uids) = session.uid_search(q).await {
+                    if let Some(uid) = uids.iter().copied().max() {
+                        let _ = session.uid_store(&uid.to_string(), "+FLAGS (\\Seen)").await;
+                        upsert_sent_message(pool, account, &folder, uid, subject, to).await?;
+                        let _ = session.logout().await;
+                        return Ok(Some((folder, uid)));
+                    }
+                }
+            }
+        }
+        // Standard header variants
+        for q in &header_variants {
+            if let Ok(uids) = session.uid_search(q).await {
+                if let Some(uid) = uids.iter().copied().max() {
+                    let _ = session.uid_store(&uid.to_string(), "+FLAGS (\\Seen)").await;
+                    upsert_sent_message(pool, account, &folder, uid, subject, to).await?;
+                    let _ = session.logout().await;
+                    return Ok(Some((folder, uid)));
+                }
+            }
+        }
+
+        // 2) Fallback: quick scan of recent messages in folder
+        let uids_res = match session.uid_search("ALL").await {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
+        if uids_res.is_empty() {
+            continue;
+        }
+        let mut uid_vec: Vec<u32> = uids_res.into_iter().collect();
+        uid_vec.sort_unstable();
+        let take = if max_scan == 0 { 100 } else { max_scan.min(uid_vec.len()) };
+        let recent: Vec<u32> = uid_vec.iter().rev().take(take).copied().collect();
+        let mut recent_sorted = recent.clone();
+        recent_sorted.sort_unstable();
+
+        // Fetch in chunks
+        for chunk in recent_sorted.chunks(50) {
+            let uid_set = chunk
+                .iter()
+                .map(|u| u.to_string())
+                .collect::<Vec<_>>()
+                .join(",");
+
+            let fetches = match session
+                .uid_fetch(&uid_set, "(UID ENVELOPE BODY.PEEK[HEADER.FIELDS (MESSAGE-ID)])")
+                .await
+            {
+                Ok(s) => s,
+                Err(_) => continue,
+            };
+
+            // Process fetch stream in its own scope to drop the borrow before reusing `session`
+            let mut found: Option<u32> = None;
+            {
+                use futures::StreamExt;
+                let mut stream = fetches;
+                while let Some(item) = stream.next().await {
+                    if let Ok(f) = item {
+                        let uid = match f.uid { Some(u) => u, None => continue };
+                        let env_mid = f
+                            .envelope()
+                            .and_then(|e| e.message_id.as_ref())
+                            .and_then(|id| std::str::from_utf8(id).ok())
+                            .map(|s| s.trim_matches(['<', '>']).to_string());
+                        if let Some(mid) = env_mid {
+                            if mid == target {
+                                found = Some(uid);
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+
+            if let Some(uid) = found {
+                let _ = session
+                    .uid_store(&uid.to_string(), "+FLAGS (\\Seen)")
+                    .await;
+                upsert_sent_message(pool, account, &folder, uid, subject, to).await?;
+                let _ = session.logout().await;
+                return Ok(Some((folder, uid)));
+            }
+        }
+    }
+
+    let _ = session.logout().await;
+    Ok(None)
+}

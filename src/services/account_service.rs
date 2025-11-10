@@ -2,6 +2,7 @@
 use crate::models::account::{Account, EmailProvider};
 use anyhow::Result;
 use sqlx::SqlitePool;
+use sqlx::Row;
 
 /// Add a new email account
 pub async fn add_account(
@@ -86,10 +87,12 @@ pub async fn add_account(
         credentials_encrypted,
         enabled: true,
         sync_frequency_secs: 300,
-        last_sync_ts: Some(initial_last_uid as i64), // Set last_sync_ts to 0 for first sync
+        last_sync_ts: Some(initial_last_uid as i64),
         created_at: now,
         updated_at: now,
-        password: String::new(), // Will be populated on demand
+        append_policy: Some("auto".to_string()),
+        sent_folder_hint: None,
+        password: String::new(),
     };
 
     Ok(account)
@@ -97,88 +100,106 @@ pub async fn add_account(
 
 /// Get all accounts
 pub async fn list_accounts(pool: &SqlitePool) -> Result<Vec<Account>> {
-    let rows = sqlx::query!(
-        r#"
-        SELECT 
-            id, email, provider, display_name,
-            imap_host, imap_port, smtp_host, smtp_port,
-            credentials_encrypted, enabled, sync_frequency_secs,
-            last_sync_ts, created_at, updated_at
-        FROM accounts
-        ORDER BY created_at DESC
-        "#
+    let rows = sqlx::query(
+        r#"SELECT * FROM accounts ORDER BY created_at DESC"#
     )
     .fetch_all(pool)
     .await?;
 
-    let accounts = rows
-        .into_iter()
-        .map(|row| {
-            Account {
-                id: row.id.unwrap_or_default(),
-                email: row.email,
-                provider: EmailProvider::from_str(&row.provider),
-                display_name: row.display_name,
-                imap_host: row.imap_host,
-                imap_port: row.imap_port as u16,
-                smtp_host: row.smtp_host,
-                smtp_port: row.smtp_port as u16,
-                credentials_encrypted: row.credentials_encrypted,
-                enabled: row.enabled,
-                sync_frequency_secs: row.sync_frequency_secs.unwrap_or(300),
-                last_sync_ts: row.last_sync_ts,
-                created_at: row.created_at,
-                updated_at: row.updated_at,
-                password: String::new(), // Will be populated on demand
-            }
-        })
-        .collect();
+    let mut accounts = Vec::with_capacity(rows.len());
+    for row in rows {
+        let id: String = row.try_get("id").unwrap_or_default();
+        let email: String = row.try_get("email").unwrap_or_default();
+        let provider_s: String = row.try_get("provider").unwrap_or_else(|_| "custom".to_string());
+        let display_name: Option<String> = row.try_get("display_name").ok();
+        let imap_host: String = row.try_get("imap_host").unwrap_or_default();
+        let imap_port_i: i64 = row.try_get("imap_port").unwrap_or(993);
+        let smtp_host: String = row.try_get("smtp_host").unwrap_or_default();
+        let smtp_port_i: i64 = row.try_get("smtp_port").unwrap_or(587);
+        let credentials_encrypted: String = row.try_get("credentials_encrypted").unwrap_or_default();
+        let enabled_i: i64 = row.try_get("enabled").unwrap_or(1);
+        let sync_frequency_secs: i64 = row.try_get("sync_frequency_secs").unwrap_or(300);
+        let last_sync_ts: Option<i64> = row.try_get("last_sync_ts").ok();
+        let created_at: i64 = row.try_get("created_at").unwrap_or(0);
+        let updated_at: i64 = row.try_get("updated_at").unwrap_or(0);
+        let append_policy: Option<String> = row.try_get("append_policy").ok();
+        let sent_folder_hint: Option<String> = row.try_get("sent_folder_hint").ok();
+
+        accounts.push(Account {
+            id,
+            email,
+            provider: EmailProvider::from_str(&provider_s),
+            display_name,
+            imap_host,
+            imap_port: imap_port_i as u16,
+            smtp_host,
+            smtp_port: smtp_port_i as u16,
+            credentials_encrypted,
+            enabled: enabled_i != 0,
+            sync_frequency_secs,
+            last_sync_ts,
+            created_at,
+            updated_at,
+            append_policy,
+            sent_folder_hint,
+            password: String::new(),
+        });
+    }
 
     Ok(accounts)
 }
 
 /// Get account by ID
 pub async fn get_account(pool: &SqlitePool, account_id: &str) -> Result<Option<Account>> {
-    let row = sqlx::query!(
-        r#"
-        SELECT 
-            id, email, provider, display_name,
-            imap_host, imap_port, smtp_host, smtp_port,
-            credentials_encrypted, enabled, sync_frequency_secs,
-            last_sync_ts, created_at, updated_at
-        FROM accounts
-        WHERE id = ?
-        "#,
-        account_id
-    )
-    .fetch_optional(pool)
-    .await?;
+    let row_opt = sqlx::query("SELECT * FROM accounts WHERE id = ?")
+        .bind(account_id)
+        .fetch_optional(pool)
+        .await?;
 
-    Ok(match row {
-        Some(r) => {
-            let mut account = Account {
-                id: r.id.unwrap_or_default(),
-                email: r.email,
-                provider: EmailProvider::from_str(&r.provider),
-                display_name: r.display_name,
-                imap_host: r.imap_host,
-                imap_port: r.imap_port as u16,
-                smtp_host: r.smtp_host,
-                smtp_port: r.smtp_port as u16,
-                credentials_encrypted: r.credentials_encrypted,
-                enabled: r.enabled,
-                sync_frequency_secs: r.sync_frequency_secs.unwrap_or(300),
-                last_sync_ts: r.last_sync_ts,
-                created_at: r.created_at,
-                updated_at: r.updated_at,
-                password: String::new(), // populated below when available
+    Ok(match row_opt {
+        Some(row) => {
+            let id: String = row.try_get("id").unwrap_or_default();
+            let email: String = row.try_get("email").unwrap_or_default();
+            let provider_s: String = row.try_get("provider").unwrap_or_else(|_| "custom".to_string());
+            let display_name: Option<String> = row.try_get("display_name").ok();
+            let imap_host: String = row.try_get("imap_host").unwrap_or_default();
+            let imap_port_i: i64 = row.try_get("imap_port").unwrap_or(993);
+            let smtp_host: String = row.try_get("smtp_host").unwrap_or_default();
+            let smtp_port_i: i64 = row.try_get("smtp_port").unwrap_or(587);
+            let credentials_encrypted: String = row.try_get("credentials_encrypted").unwrap_or_default();
+            let enabled_i: i64 = row.try_get("enabled").unwrap_or(1);
+            let sync_frequency_secs: i64 = row.try_get("sync_frequency_secs").unwrap_or(300);
+            let last_sync_ts: Option<i64> = row.try_get("last_sync_ts").ok();
+            let created_at: i64 = row.try_get("created_at").unwrap_or(0);
+            let updated_at: i64 = row.try_get("updated_at").unwrap_or(0);
+            let append_policy: Option<String> = row.try_get("append_policy").ok();
+            let sent_folder_hint: Option<String> = row.try_get("sent_folder_hint").ok();
+
+            let mut acc = Account {
+                id,
+                email,
+                provider: EmailProvider::from_str(&provider_s),
+                display_name,
+                imap_host,
+                imap_port: imap_port_i as u16,
+                smtp_host,
+                smtp_port: smtp_port_i as u16,
+                credentials_encrypted,
+                enabled: enabled_i != 0,
+                sync_frequency_secs,
+                last_sync_ts,
+                created_at,
+                updated_at,
+                append_policy,
+                sent_folder_hint,
+                password: String::new(),
             };
 
-            if !account.credentials_encrypted.is_empty() {
-                account = account.with_password()?;
+            if !acc.credentials_encrypted.is_empty() {
+                acc = acc.with_password()?;
             }
 
-            Some(account)
+            Some(acc)
         }
         None => None,
     })

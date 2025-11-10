@@ -65,3 +65,6 @@ Kısa vadeli odak (Faz 1)
 - [ ] Thread grouping
 - [ ] Full-text search (SQLite FTS5)
 - [ ] Unified inbox aggregation
+
+## 2025-11-06
+- Implemented background finalize with retry (10s x 6) and Gmail-specific raw search. Gmail UID may still be pending within first minute; documented in KNOWN_ISSUES.md. Proceeding to next milestone.

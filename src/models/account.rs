@@ -97,7 +97,9 @@ pub struct Account {
     pub last_sync_ts: Option<i64>,
     pub created_at: i64,
     pub updated_at: i64,
-
+    // New per-account send behavior hints
+    pub append_policy: Option<String>, // stored as text column (auto|never|force)
+    pub sent_folder_hint: Option<String>,
     // Helper field for password (populated from credentials_encrypted)
     #[sqlx(skip)]
     #[serde(skip)]
@@ -141,6 +143,45 @@ impl Account {
     /// Get credentials for this account
     pub fn get_credentials(&self) -> Result<(String, String)> {
         Self::decode_credentials(&self.credentials_encrypted)
+    }
+
+    pub fn append_policy_enum(&self) -> AppendPolicy {
+        self.append_policy
+            .as_ref()
+            .map(|s| AppendPolicy::from_str(s))
+            .unwrap_or(AppendPolicy::Auto)
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum AppendPolicy {
+    Auto,   // search-first then maybe APPEND (default)
+    Never,  // never APPEND (only rely on provider auto-sent copy)
+    Force,  // always APPEND regardless of provider
+}
+
+impl Default for AppendPolicy {
+    fn default() -> Self {
+        AppendPolicy::Auto
+    }
+}
+
+impl AppendPolicy {
+    pub fn from_str(s: &str) -> Self {
+        match s.to_lowercase().as_str() {
+            "auto" => Self::Auto,
+            "never" => Self::Never,
+            "force" => Self::Force,
+            _ => Self::Auto,
+        }
+    }
+    pub fn as_str(&self) -> &str {
+        match self {
+            Self::Auto => "auto",
+            Self::Never => "never",
+            Self::Force => "force",
+        }
     }
 }
 

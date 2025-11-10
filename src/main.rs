@@ -61,19 +61,17 @@ async fn main() -> Result<()> {
     if std::path::Path::new("migrations").exists() {
         // Ensure file exists for file-based sqlite (avoid open error on some setups)
         if let Some(path) = db_file_path(&db_url) {
-            if let Some(parent) = path.parent() {
-                std::fs::create_dir_all(parent).ok();
-            }
-            if !path.exists() {
-                std::fs::File::create(&path).ok();
-            }
+            if let Some(parent) = path.parent() { std::fs::create_dir_all(parent).ok(); }
+            if !path.exists() { std::fs::File::create(&path).ok(); }
         }
         let pool = sqlx::SqlitePool::connect(&db_url).await?;
         if let Err(e) = db::run_migrations(&pool).await {
-            tracing::warn!("migration error: {e}");
+            // Ignore common "already exists" failures, log as info
+            let msg = e.to_string();
+            if msg.contains("already exists") { tracing::info!("migration benign: {msg}"); } else { tracing::warn!("migration error: {msg}"); }
         }
         if let Err(e) = db::seed_account(&pool).await {
-            tracing::warn!("seed error: {e}");
+            tracing::info!("seed skipped: {e}");
         }
 
         // Create idle watcher manager
@@ -87,6 +85,9 @@ async fn main() -> Result<()> {
             idle_manager: idle_manager.clone(),
             oauth_manager: oauth_manager.clone(),
         };
+
+        // Start background scheduler
+        crate::services::scheduler::start(pool.clone());
 
         let idle_routes = Router::new()
             .route(

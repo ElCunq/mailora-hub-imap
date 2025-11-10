@@ -880,6 +880,12 @@
             </div>
             <button class="btn btn-primary" onclick="testConnection()">🔌 IMAP Bağlantı Testi</button>
             <button class="btn btn-secondary" onclick="loadTestAccounts()">📋 Hesap Listesi</button>
+            <pre id="test-result" style="margin-top:12px;"></pre>
+            <pre id="test-accounts-result" style="margin-top:12px;"></pre>
+            <div class="form-group" style="margin-top:12px;">
+                <button class="btn btn-secondary" onclick="loadMetrics()">📈 Metrics</button>
+            </div>
+            <pre id="metrics-result" style="margin-top:12px;"></pre>
             <hr style="margin:24px 0;">
             <h3>SMTP Testi (lettre)</h3>
             <div class="form-group">
@@ -914,7 +920,16 @@
             </div>
             <button class="btn btn-primary" onclick="sendSmtpAppendTest()">📤 Gönder ve Sent'e Kaydet</button>
             <pre id="smtp-append-result" style="margin-top:12px;"></pre>
-
+            <!-- New: Sent finalize controls -->
+            <div class="form-group" style="margin-top:12px;">
+                <label>Message-Id (otomatik):</label>
+                <input type="text" id="smtp-append-message-id" placeholder="(gönderimden sonra dolar)" readonly>
+            </div>
+            <div class="form-group" style="display:flex;gap:10px;align-items:center;">
+                <input type="number" id="smtp-append-max-scan" placeholder="max_scan (200)" style="width:180px;">
+                <button class="btn btn-secondary" onclick="finalizeSentResolve()">🔎 Sent Finalize</button>
+            </div>
+            
             <!-- Flags Güncelleme Testi -->
             <hr style="margin:24px 0;">
             <h3>Mesaj Bayrakları (Flags) Güncelle</h3>
@@ -937,6 +952,22 @@
             </div>
             <button class="btn btn-secondary" onclick="updateMessageFlags()">🔖 Bayrakları Güncelle</button>
             <pre id="flags-result" style="margin-top:12px;"></pre>
+            <hr style="margin:24px 0;">
+            <h3>Gönderim Politikası (Sent)</h3>
+            <div class="form-group">
+                <label>Append Policy:</label>
+                <select id="append-policy-select">
+                    <option value="auto">auto</option>
+                    <option value="never">never</option>
+                    <option value="force">force</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Sent Folder Hint (opsiyonel):</label>
+                <input type="text" id="sent-folder-hint" placeholder="[Gmail]/Sent Mail">
+            </div>
+            <button class="btn btn-secondary" onclick="updateAppendPolicy()">⚙️ Güncelle</button>
+            <pre id="append-policy-result" style="margin-top:12px;"></pre>
         </div>
     </div>
 
@@ -1289,8 +1320,32 @@
             });
             const json = await res.json().catch(() => ({ ok: false, error: 'JSON parse failed' }));
             out.textContent = JSON.stringify(json, null, 2);
+            if (json && json.message_id) {
+              const midEl = document.getElementById('smtp-append-message-id');
+              if (midEl) midEl.value = json.message_id;
+            }
           } catch (e) {
             out.textContent = 'Hata: ' + e.message;
+          }
+        }
+
+        // New: invoke /test/sent-finalize using Message-Id
+        async function finalizeSentResolve() {
+          const accountId = document.getElementById('test-account-select')?.value;
+          const messageId = document.getElementById('smtp-append-message-id').value.trim();
+          const maxScan = document.getElementById('smtp-append-max-scan').value.trim() || '300';
+          const subject = document.getElementById('smtp-append-subject').value.trim();
+          const out = document.getElementById('smtp-append-result');
+          if (!accountId || !messageId) { out.textContent += '\n[finalize] Hesap ve Message-Id zorunlu.'; return; }
+          let url = `/test/sent-finalize/${encodeURIComponent(accountId)}?message_id=${encodeURIComponent(messageId)}&max_scan=${encodeURIComponent(maxScan)}`;
+          if (subject) url += `&subject=${encodeURIComponent(subject)}`;
+          out.textContent += '\n\n[finalize] çağrılıyor... (Gmail ise 10-60sn gecikme olabilir, tekrar deneyin)';
+          try {
+            const res = await fetch(url);
+            const json = await res.json().catch(() => ({ success:false, error:'parse failed' }));
+            out.textContent += '\n' + JSON.stringify(json, null, 2);
+          } catch (e) {
+            out.textContent += '\n[finalize error] ' + e.message;
           }
         }
 
@@ -1331,49 +1386,31 @@
             }
         }
         
-        async function loadTestAccounts() {
-            try {
-                const res = await fetch('/accounts', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        email,
-                        password,
-                        provider: 'custom',
-                        display_name,
-                        imap_host,
-                        imap_port,
-                        smtp_host,
-                        smtp_port
-                    })
-                });
-                let result;
-                if (!res.ok || res.status !== 200) {
-                    const text = await res.text();
-                    result = { success: false, message: text };
-                } else {
-                    try {
-                        result = await res.json();
-                    } catch (e) {
-                        const text = await res.text();
-                        result = { success: false, message: text };
-                    }
-                }
-                if (result.success) {
-                    resultEl.style.display = 'block';
-                    resultEl.textContent = 'Hesap başarıyla eklendi!';
-                    setTimeout(() => { resultEl.style.display = 'none'; }, 3000);
-                    await loadAccounts();
-                } else {
-                    resultEl.style.display = 'block';
-                    resultEl.textContent = 'Hesap eklenirken hata: ' + (result.message || 'Bilinmeyen hata');
-                }
-            } catch (e) {
-                resultEl.style.display = 'block';
-                resultEl.textContent = 'Hesap eklenirken hata: ' + (e.message || 'Bilinmeyen hata');
-            }
-        }
+        // Test Accounts list (fix wrong impl)
+    async function loadTestAccounts() {
+      const out = document.getElementById('test-accounts-result') || document.getElementById('test-result');
+      if (out) { out.textContent = 'Yükleniyor...'; out.style.display = 'block'; }
+      try {
+        const res = await fetch('/test/accounts');
+        const data = await res.json();
+        if (out) out.textContent = JSON.stringify(data, null, 2);
+      } catch (e) {
+        if (out) out.textContent = 'Hata: ' + e.message;
+      }
+    }
 
+    async function loadMetrics() {
+      const out = document.getElementById('metrics-result');
+      if (out) out.textContent = 'Yükleniyor...';
+      try {
+        const res = await fetch('/debug/metrics');
+        const data = await res.json();
+        if (out) out.textContent = JSON.stringify(data, null, 2);
+      } catch (e) {
+        if (out) out.textContent = 'Hata: ' + e.message;
+      }
+    }
+        
         // Hesap ekleme sonrası sync işlemi
         async function syncAccountAfterAdd(accountId, event) {
             if (!confirm('Bu hesabın tüm klasörlerini sync etmek istiyor musunuz? Bu işlem birkaç dakika sürebilir.')) {
@@ -1401,7 +1438,7 @@
                 btn.textContent = '🔄 Sync';
                 btn.disabled = false;
             }
-        
+        }
         
         // View account messages
         async function viewAccountMessages(accountId) {
@@ -1517,7 +1554,6 @@
                 alert('OAuth hatası: ' + e.message);
             }
         }
-        }
         // Initialize
         loadAccounts();
     // Provider mantığı devre dışı: çağrı kaldırıldı
@@ -1601,6 +1637,252 @@
         } catch (e) {
             return subject;
         }
+    }
+
+    // Test Accounts list (fix wrong impl)
+    async function loadTestAccounts() {
+      const out = document.getElementById('test-accounts-result') || document.getElementById('test-result');
+      if (out) { out.textContent = 'Yükleniyor...'; out.style.display = 'block'; }
+      try {
+        const res = await fetch('/test/accounts');
+        const data = await res.json();
+        if (out) out.textContent = JSON.stringify(data, null, 2);
+      } catch (e) {
+        if (out) out.textContent = 'Hata: ' + e.message;
+      }
+    }
+
+    async function loadMetrics() {
+      const out = document.getElementById('metrics-result');
+      if (out) out.textContent = 'Yükleniyor...';
+      try {
+        const res = await fetch('/debug/metrics');
+        const data = await res.json();
+        if (out) out.textContent = JSON.stringify(data, null, 2);
+      } catch (e) {
+        if (out) out.textContent = 'Hata: ' + e.message;
+      }
+    }
+        // Initialize
+        loadAccounts();
+    // Provider mantığı devre dışı: çağrı kaldırıldı
+
+    // JMAP Test Functions
+    function testJmapConnection() {
+        // Use backend proxy to avoid CORS
+        const apiUrl = '/jmap';
+         const token = document.getElementById('jmap-api-token').value;
+         const resultDiv = document.getElementById('jmap-test-result');
+         resultDiv.style.display = 'block';
+         resultDiv.textContent = 'Testing JMAP connection...';
+         fetch('/jmap/session', {
+             method: 'GET',
+             headers: {
+                 'Authorization': 'Bearer ' + token,
+                 'Accept': 'application/json'
+             }
+         })
+         .then(response => response.json())
+         .then(data => {
+             resultDiv.textContent = JSON.stringify(data, null, 2);
+             if (data.accounts) {
+                 const keys = Object.keys(data.accounts);
+                 if (keys.length > 0) {
+                     document.getElementById('jmap-account-id').value = keys[0];
+                 }
+             }
+         })
+         .catch(err => {
+             resultDiv.textContent = 'Error: ' + err;
+         });
+     }
+ 
+     function testJmapInbox() {
+        const apiUrl = '/jmap';
+         const token = document.getElementById('jmap-api-token').value;
+         const accountId = document.getElementById('jmap-account-id').value;
+         const resultDiv = document.getElementById('jmap-test-result');
+         resultDiv.style.display = 'block';
+         resultDiv.textContent = 'Fetching inbox...';
+         const body = {
+             "using": [
+                 "urn:ietf:params:jmap:core",
+                 "urn:ietf:params:jmap:mail"
+             ],
+             "methodCalls": [
+                 [
+                     "Mailbox/query",
+                     {"accountId": accountId, "filter": {"role": "inbox"}},
+                     "a"
+                 ],
+                 [
+                     "Email/query",
+                     {"accountId": accountId, "filter": {}, "limit": 10},
+                     "b"
+                 ]
+             ]
+         };
+         fetch(apiUrl, {
+             method: 'POST',
+             headers: {
+                 'Authorization': 'Bearer ' + token,
+                 'Content-Type': 'application/json',
+                 'Accept': 'application/json'
+             },
+             body: JSON.stringify(body)
+         })
+         .then(response => response.json())
+         .then(data => {
+             resultDiv.textContent = JSON.stringify(data, null, 2);
+         })
+         .catch(err => {
+             resultDiv.textContent = 'Error: ' + err;
+         });
+     }
+         // Subject decode helper (fixes ReferenceError)
+    function decodeSubject(subject) {
+        try {
+            return decodeURIComponent(escape(subject));
+        } catch (e) {
+            return subject;
+        }
+    }
+
+    // Test Accounts list (fix wrong impl)
+    async function loadTestAccounts() {
+      const out = document.getElementById('test-accounts-result') || document.getElementById('test-result');
+      if (out) { out.textContent = 'Yükleniyor...'; out.style.display = 'block'; }
+      try {
+        const res = await fetch('/test/accounts');
+        const data = await res.json();
+        if (out) out.textContent = JSON.stringify(data, null, 2);
+      } catch (e) {
+        if (out) out.textContent = 'Hata: ' + e.message;
+      }
+    }
+
+    async function loadMetrics() {
+      const out = document.getElementById('metrics-result');
+      if (out) out.textContent = 'Yükleniyor...';
+      try {
+        const res = await fetch('/debug/metrics');
+        const data = await res.json();
+        if (out) out.textContent = JSON.stringify(data, null, 2);
+      } catch (e) {
+        if (out) out.textContent = 'Hata: ' + e.message;
+      }
+    }
+        // Initialize
+        loadAccounts();
+    // Provider mantığı devre dışı: çağrı kaldırıldı
+
+    // JMAP Test Functions
+    function testJmapConnection() {
+        // Use backend proxy to avoid CORS
+        const apiUrl = '/jmap';
+         const token = document.getElementById('jmap-api-token').value;
+         const resultDiv = document.getElementById('jmap-test-result');
+         resultDiv.style.display = 'block';
+         resultDiv.textContent = 'Testing JMAP connection...';
+         fetch('/jmap/session', {
+             method: 'GET',
+             headers: {
+                 'Authorization': 'Bearer ' + token,
+                 'Accept': 'application/json'
+             }
+         })
+         .then(response => response.json())
+         .then(data => {
+             resultDiv.textContent = JSON.stringify(data, null, 2);
+             if (data.accounts) {
+                 const keys = Object.keys(data.accounts);
+                 if (keys.length > 0) {
+                     document.getElementById('jmap-account-id').value = keys[0];
+                 }
+             }
+         })
+         .catch(err => {
+             resultDiv.textContent = 'Error: ' + err;
+         });
+     }
+ 
+     function testJmapInbox() {
+        const apiUrl = '/jmap';
+         const token = document.getElementById('jmap-api-token').value;
+         const accountId = document.getElementById('jmap-account-id').value;
+         const resultDiv = document.getElementById('jmap-test-result');
+         resultDiv.style.display = 'block';
+         resultDiv.textContent = 'Fetching inbox...';
+         const body = {
+             "using": [
+                 "urn:ietf:params:jmap:core",
+                 "urn:ietf:params:jmap:mail"
+             ],
+             "methodCalls": [
+                 [
+                     "Mailbox/query",
+                     {"accountId": accountId, "filter": {"role": "inbox"}},
+                     "a"
+                 ],
+                 [
+                     "Email/query",
+                     {"accountId": accountId, "filter": {}, "limit": 10},
+                     "b"
+                 ]
+             ]
+         };
+         fetch(apiUrl, {
+             method: 'POST',
+             headers: {
+                 'Authorization': 'Bearer ' + token,
+                 'Content-Type': 'application/json',
+                 'Accept': 'application/json'
+             },
+             body: JSON.stringify(body)
+         })
+         .then(response => response.json())
+         .then(data => {
+             resultDiv.textContent = JSON.stringify(data, null, 2);
+         })
+         .catch(err => {
+             resultDiv.textContent = 'Error: ' + err;
+         });
+     }
+         // Subject decode helper (fixes ReferenceError)
+    function decodeSubject(subject) {
+        try {
+            return decodeURIComponent(escape(subject));
+        } catch (e) {
+            return subject;
+        }
+    }
+
+    // Yeni: Append Policy güncelleme handler'ı
+    async function updateAppendPolicy() {
+      const accountId = document.getElementById('test-account-select')?.value;
+      const policy = document.getElementById('append-policy-select')?.value;
+      const hintEl = document.getElementById('sent-folder-hint');
+      const hint = hintEl && hintEl.value ? hintEl.value : null;
+      const out = document.getElementById('append-policy-result');
+      if (!accountId) { out.textContent = 'Önce bir test hesabı seçin.'; return; }
+      if (!policy) { out.textContent = 'Append policy seçin.'; return; }
+      out.textContent = 'Güncelleniyor...';
+      try {
+        const res = await fetch(`/test/update-append-policy/${encodeURIComponent(accountId)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ append_policy: policy, sent_folder_hint: hint })
+        });
+        let json;
+        try {
+          json = await res.json();
+        } catch (_) {
+          json = { success: res.ok };
+        }
+        out.textContent = JSON.stringify(json, null, 2);
+      } catch (e) {
+        out.textContent = 'Hata: ' + e.message;
+      }
     }
     </script>
 </body>

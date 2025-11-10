@@ -199,6 +199,8 @@ async fn add_oauth_account(
         last_sync_ts: None,
         created_at: chrono::Utc::now().timestamp(),
         updated_at: chrono::Utc::now().timestamp(),
+        append_policy: None,
+        sent_folder_hint: None,
         password: String::new(),
     })
 }

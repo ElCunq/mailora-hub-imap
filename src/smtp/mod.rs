@@ -230,12 +230,19 @@ pub struct AppendResult {
 }
 
 /// Append raw RFC822 to a Sent-like folder and resolve UID via Message-Id search
-pub async fn append_to_sent(account: &crate::models::account::Account, raw: &[u8], message_id: &str) -> Result<AppendResult> {
+pub async fn append_to_sent(
+    account: &crate::models::account::Account,
+    raw: &[u8],
+    message_id: &str,
+    from_addr: &str,
+    subject: &str,
+) -> Result<AppendResult> {
     use crate::imap::conn;
 
     let mut imap = conn::connect(&account.imap_host, account.imap_port, &account.email, &account.password).await?;
     let session = &mut imap.session;
 
+    // Collect Sent candidates
     let mut candidates: Vec<String> = Vec::new();
     if let Ok(list_stream) = session.list(None, Some("*" )).await {
         use futures::StreamExt;
@@ -246,48 +253,119 @@ pub async fn append_to_sent(account: &crate::models::account::Account, raw: &[u8
     }
     if candidates.is_empty() {
         candidates = vec![
+            "[Gmail]/Sent Mail".into(),
             "Sent".into(),
             "Sent Items".into(),
-            "[Gmail]/Sent Mail".into(),
             "Sent Messages".into(),
             "INBOX.Sent".into(),
         ];
     }
 
-    let mut chosen: Option<String> = None;
-    for cand in candidates.iter() {
-        let _ = session.select(cand).await; // best-effort
-        match session.append(cand, raw).await {
-            Ok(()) => {
-                chosen = Some(cand.to_string());
-                break;
-            }
-            Err(e) => {
-                tracing::debug!(folder = %cand, error = %e, "APPEND failed, trying next candidate");
-            }
+    // Prefer Gmail special-use when provider is gmail
+    if account.provider.as_str() == "gmail" {
+        if let Some(pos) = candidates.iter().position(|f| f == "[Gmail]/Sent Mail") {
+            if pos != 0 { let f = candidates.remove(pos); candidates.insert(0, f); }
         }
     }
 
-    let folder = chosen.ok_or_else(|| anyhow::anyhow!("No Sent-like folder accepted APPEND"))?;
+    // Providers that auto-save Sent: do not APPEND unless policy overrides
+    let policy = account.append_policy_enum();
+    let append_allowed = match policy {
+        crate::models::account::AppendPolicy::Never => false,
+        crate::models::account::AppendPolicy::Force => true,
+        crate::models::account::AppendPolicy::Auto => account.provider.as_str() != "gmail",
+    };
+    // If user provided sent_folder_hint, force it to front
+    if let Some(hint) = account.sent_folder_hint.as_ref() {
+        if let Some(pos) = candidates.iter().position(|f| f == hint) { let f = candidates.remove(pos); candidates.insert(0,f); }
+        else { candidates.insert(0, hint.clone()); }
+    }
 
-    // Try UIDSEARCH by Message-ID header (without angle brackets)
-    let _ = session.select(&folder).await;
-    let mid = message_id.trim_matches(['<','>']);
-    let query = format!("HEADER Message-ID {}", mid);
+    // Adaptive retry/backoff
+    let (max_attempts, base_ms) = if account.provider.as_str() == "gmail" { (5u32, 250u64) } else { (10u32, 300u64) };
+
+    // Helper: search for the message across candidates
+    let mid_raw = message_id.trim_matches(['<','>']);
+    let header_variants = vec![
+        format!("HEADER Message-ID \"{}\"", mid_raw),
+        format!("HEADER Message-ID \"<{}>\"", mid_raw),
+        format!("HEADER Message-Id \"{}\"", mid_raw),
+        format!("HEADER Message-Id \"<{}>\"", mid_raw),
+    ];
+    let gmail_variants = vec![
+        format!("X-GM-RAW \"rfc822msgid:{}\"", mid_raw),
+        format!("X-GM-RAW \"rfc822msgid:\\<{}\\>\"", mid_raw),
+    ];
+    let fallback_variants = vec![
+        format!("SUBJECT \"{}\" FROM \"{}\"", subject, from_addr),
+    ];
+
+    let mut found_folder: Option<String> = None;
     let mut uid_opt: Option<u32> = None;
-    if let Ok(uids) = session.uid_search(&query).await {
-        if !uids.is_empty() {
-            uid_opt = uids.iter().copied().max();
+
+    'outer: for attempt in 0..max_attempts {
+        for cand in candidates.iter() {
+            let _ = session.select(cand).await;
+            // 1) Standard header variants
+            for q in &header_variants {
+                if let Ok(uids) = session.uid_search(q).await {
+                    if !uids.is_empty() { found_folder = Some(cand.clone()); uid_opt = uids.iter().copied().max(); break 'outer; }
+                }
+            }
+            // 2) Gmail-specific search by rfc822msgid
+            for q in &gmail_variants {
+                if let Ok(uids) = session.uid_search(q).await {
+                    if !uids.is_empty() { found_folder = Some(cand.clone()); uid_opt = uids.iter().copied().max(); break 'outer; }
+                }
+            }
+            // 3) Fallback: subject + from (prefer non-Gmail)
+            if account.provider.as_str() != "gmail" {
+                for q in &fallback_variants {
+                    if let Ok(uids) = session.uid_search(q).await {
+                        if !uids.is_empty() { found_folder = Some(cand.clone()); uid_opt = uids.iter().copied().max(); break 'outer; }
+                    }
+                }
+            }
         }
+        // Backoff to allow server to place auto-saved Sent copy (if any)
+        tokio::time::sleep(std::time::Duration::from_millis(base_ms + (attempt as u64) * base_ms)).await;
     }
 
-    if let Some(uid) = uid_opt {
+    // If found without APPEND, set Seen and return
+    if let (Some(folder), Some(uid)) = (found_folder.clone(), uid_opt) {
         let _ = session.uid_store(&uid.to_string(), "+FLAGS (\\Seen)").await;
+        let _ = session.logout().await;
+        return Ok(AppendResult { folder, uid: Some(uid) });
     }
 
-    let _ = session.logout().await;
+    // Not found: perform APPEND to first accepting candidate
+    if append_allowed {
+        let mut appended_folder: Option<String> = None;
+        for cand in candidates.iter() {
+            let _ = session.select(cand).await; // best-effort
+            match session.append(cand, raw).await {
+                Ok(()) => { appended_folder = Some(cand.clone()); break; }
+                Err(e) => { tracing::debug!(folder = %cand, error = %e, "APPEND failed, trying next candidate"); }
+            }
+        }
+        let folder = appended_folder.ok_or_else(|| anyhow::anyhow!("No Sent-like folder accepted APPEND"))?;
 
-    Ok(AppendResult { folder, uid: uid_opt })
+        // Try to parse APPENDUID via subsequent SEARCH (async-imap does not return it today)
+        // Fast path: immediately search Message-Id in the appended folder
+        let _ = session.select(&folder).await;
+        for q in &header_variants { if let Ok(uids) = session.uid_search(q).await { if let Some(uid) = uids.iter().copied().max() { uid_opt = Some(uid); break; } } }
+        if uid_opt.is_none() { for q in &gmail_variants { if let Ok(uids) = session.uid_search(q).await { if let Some(uid) = uids.iter().copied().max() { uid_opt = Some(uid); break; } } } }
+        if uid_opt.is_none() && account.provider.as_str() != "gmail" { for q in &fallback_variants { if let Ok(uids) = session.uid_search(q).await { if let Some(uid) = uids.iter().copied().max() { uid_opt = Some(uid); break; } } } }
+        // If still none, fallback to existing retry loop below
+        if uid_opt.is_some() { let _ = session.uid_store(&uid_opt.unwrap().to_string(), "+FLAGS (\\Seen)").await; }
+        let _ = session.logout().await;
+        return Ok(AppendResult { folder, uid: uid_opt });
+    } else {
+        // Skip APPEND for auto-sent providers; return expected Sent folder and uid if any
+        let folder = candidates.first().cloned().unwrap_or_else(|| "Sent".to_string());
+        let _ = session.logout().await;
+        return Ok(AppendResult { folder, uid: uid_opt });
+    }
 }
 
 /// Send email and log to events table (legacy). Prefer building and appending via append_to_sent.

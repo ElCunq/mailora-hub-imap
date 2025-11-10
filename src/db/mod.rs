@@ -29,14 +29,11 @@ pub async fn run_migrations(pool: &SqlitePool) -> Result<()> {
 }
 
 pub async fn seed_account(pool: &SqlitePool) -> Result<()> {
-    let email = std::env::var("IMAP_EMAIL")?;
-    let host = std::env::var("IMAP_HOST")?;
-    let port: i64 = std::env::var("IMAP_PORT")?.parse()?;
+    let email = match std::env::var("IMAP_EMAIL") { Ok(v) => v, Err(_) => return Ok(()) };
+    let host = match std::env::var("IMAP_HOST") { Ok(v) => v, Err(_) => return Ok(()) };
+    let port: i64 = std::env::var("IMAP_PORT").ok().and_then(|v| v.parse().ok()).unwrap_or(993);
     let smtp_host = std::env::var("SMTP_HOST").unwrap_or(host.clone());
-    let smtp_port: i64 = std::env::var("SMTP_PORT")
-        .ok()
-        .and_then(|v| v.parse().ok())
-        .unwrap_or(587);
+    let smtp_port: i64 = std::env::var("SMTP_PORT").ok().and_then(|v| v.parse().ok()).unwrap_or(587);
     let now = now_epoch();
     sqlx::query(r#"INSERT OR IGNORE INTO accounts(
         id, org_id, email, imap_host, imap_port, smtp_host, smtp_port, auth_type, use_ssl, created_at, updated_at

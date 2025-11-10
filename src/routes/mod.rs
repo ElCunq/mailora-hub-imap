@@ -9,6 +9,7 @@ use axum::{
     Router,
 };
 use serde::Deserialize; // correct import from crate root
+use tower_http::services::ServeDir;
 
 pub mod accounts;
 pub mod debug;
@@ -103,6 +104,10 @@ async fn root_page() -> impl IntoResponse {
     Html(include_str!("../../static/index.html"))
 }
 
+async fn app_page() -> impl IntoResponse {
+    Html(include_str!("../../static/app.html"))
+}
+
 use axum::extract::Json as AxumJson;
 use serde::Serialize;
 
@@ -163,6 +168,7 @@ where
         .route("/folders", get(diff::folders_handler))
         .route("/attachments", get(diff::attachments_handler))
         .route("/unified/inbox", get(unified::unified_inbox))
+        .route("/unified/unread", get(unified::unified_unread))
         .route("/unified/events", get(unified::unified_events))
         .route("/accounts", post(accounts::add_account))
         .route("/accounts", get(accounts::list_accounts))
@@ -176,8 +182,11 @@ where
         .route("/test/messages/:account_id", get(test::fetch_messages))
         .route("/test/smtp/:account_id", post(test::smtp_test))
         .route("/test/smtp-append/:account_id", post(test::smtp_send_and_append))
+        .route("/test/sent-finalize/:account_id", get(test::sent_finalize))
         .route("/test/body/:account_id/:uid", get(test::fetch_message_body))
         .route("/test/accounts", get(test::list_test_accounts))
+        .route("/test/update-append-policy/:account_id", post(test::update_append_policy))
+        .route("/debug/metrics", get(test::metrics_snapshot))
         .route("/send", post(send_action))
         .route("/debug/state", get(debug::state))
         .route("/debug/probe", get(debug::probe_diff))

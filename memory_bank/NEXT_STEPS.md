@@ -43,3 +43,9 @@ Sprint Planı (öneri)
 Notlar
 - Tam mail UI (liste/görünüm/compose) Faz 2’de; şu an test UI yeterli.
 - lettre ClientId deprecation uyarısı, fonksiyonelliği etkilemiyor; ileride ClientId::Domain ile sadeleştirilecek.
+
+## 2025-11-06 Güncellemesi
+- Gmail: Sent UID hemen çözümleme henüz güvenilir değil (bekleyen IMAP indekslemesi). Arka planda tamamlama (60s) ve sonraki senkronizasyon yedekleme önlemleri alındı.
+- Sonraki adımlar:
+  - Faz 2 görevlerine geçiş yapın (örn. mesaj gövdesi önbelleğe alma, ek listeleme ve birleşik gelen kutusu düzenleme).
+  - İsteğe bağlı: pending_uid öğelerini yeniden kontrol etmek için periyodik bir iş ekleyin.
