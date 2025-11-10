@@ -25,7 +25,7 @@ pub struct UnifiedInboxResponse {
 }
 
 #[derive(Debug, Deserialize)]
-pub struct UnifiedQuery { pub limit: Option<u32>, pub offset: Option<u32>, pub unread_only: Option<bool> }
+pub struct UnifiedQuery { pub limit: Option<u32>, pub offset: Option<u32>, pub unread_only: Option<bool>, pub folder: Option<String> }
 
 /// GET /unified/inbox - Returns all INBOX messages from all accounts, sorted by date
 pub async fn unified_inbox(
@@ -34,13 +34,15 @@ pub async fn unified_inbox(
 ) -> Result<Json<UnifiedInboxResponse>, StatusCode> {
     let limit = q.limit.unwrap_or(100).min(500) as i64;
     let offset = q.offset.unwrap_or(0) as i64;
+    let folder = q.folder.unwrap_or_else(|| "INBOX".to_string());
     let unread_filter = if q.unread_only.unwrap_or(false) { "AND (flags NOT LIKE '%\\Seen%')" } else { "" };
     let sql = format!(
         "SELECT account_id, folder, uid, message_id, subject, from_addr, to_addr, date, flags, size \
-         FROM messages WHERE folder='INBOX' {} ORDER BY date DESC LIMIT ? OFFSET ?",
+         FROM messages WHERE folder = ? {} ORDER BY date DESC LIMIT ? OFFSET ?",
         unread_filter
     );
     let messages = sqlx::query_as::<_, UnifiedMessage>(&sql)
+        .bind(folder)
         .bind(limit)
         .bind(offset)
         .fetch_all(&pool)

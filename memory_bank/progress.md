@@ -68,3 +68,21 @@ Kısa vadeli odak (Faz 1)
 
 ## 2025-11-06
 - Implemented background finalize with retry (10s x 6) and Gmail-specific raw search. Gmail UID may still be pending within first minute; documented in KNOWN_ISSUES.md. Proceeding to next milestone.
+
+## 2025-11-10 – v0.2.1 unified inbox & minimal istemci
+- Unified folder-based inbox endpoint `/unified/inbox` (folder param + unread filter).
+- Background scheduler + initial startup sync (non-Gmail) eklendi.
+- Body cache TTL + kapasite GC tamamlandı (tablo: `message_bodies`).
+- Append policy (auto/never/force) UI testleri ve API güncelleme endpoint’i.
+- Basit 3-panelli web istemci (`static/app.html`): hesap ekle, klasör seç, unified toggle, mesaj listesi, önizleme, compose & gönder.
+- Flags update route ek insert fallback ile tutarlılık sağlıyor.
+- Gmail senaryoları ve kalıcı finalize kuyrukları ertelendi.
+
+### Kalanlar (özet)
+- Attachments işleme & indirme
+- Unified arama (subject/from/to/date, unread)
+- Kalıcı sent finalize & outbox kuyruğu
+- Hata zarfı standardizasyonu
+- Metrics sayaç doğruluğu
+- Index optimizasyonları
+- Scheduler backoff/jitter ve IDLE yeniden bağlanma

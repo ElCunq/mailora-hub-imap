@@ -89,6 +89,38 @@ async fn main() -> Result<()> {
         // Start background scheduler
         crate::services::scheduler::start(pool.clone());
 
+        // Initial full sync on startup (non-blocking)
+        {
+            let pool_clone = pool.clone();
+            tokio::spawn(async move {
+                match services::account_service::list_accounts(&pool_clone).await {
+                    Ok(accts) => {
+                        for acc in accts {
+                            if !acc.enabled { continue; }
+                            // Skip Gmail for now
+                            if matches!(acc.provider, crate::models::account::EmailProvider::Gmail) { continue; }
+                            let mut acc_dec = acc.clone();
+                            if acc_dec.password.is_empty() {
+                                if let Ok(a) = acc_dec.clone().with_password() { acc_dec = a; } else { continue; }
+                            }
+                            if acc_dec.password.is_empty() { continue; }
+                            let p = pool_clone.clone();
+                            tokio::spawn(async move {
+                                match services::message_sync_service::sync_account_messages(&p, &acc_dec).await {
+                                    Ok(stats) => {
+                                        tracing::info!(email=%acc_dec.email, folders=%stats.len(), "initial sync completed");
+                                        let _ = services::account_service::update_last_sync(&p, &acc_dec.id).await;
+                                    }
+                                    Err(e) => tracing::warn!(email=%acc_dec.email, error=%e.to_string(), "initial sync failed"),
+                                }
+                            });
+                        }
+                    }
+                    Err(e) => tracing::warn!("initial sync: list_accounts failed: {e}"),
+                }
+            });
+        }
+
         let idle_routes = Router::new()
             .route(
                 "/idle/start/:account_id",
