@@ -22,15 +22,22 @@ pub async fn fetch_message_body(account: &Account, uid: u32, folder: Option<&str
 
     // Cache lookup (skip if force_refresh)
     if !force_refresh {
-        if let Ok(row_opt) = sqlx::query("SELECT body FROM message_bodies WHERE account_id=? AND folder=? AND uid=?")
+        if let Ok(row_opt) = sqlx::query("SELECT body, html_body, subject, from_addr, date, flags FROM message_bodies WHERE account_id=? AND folder=? AND uid=?")
             .bind(&account.id)
             .bind(folder)
             .bind(uid as i64)
             .fetch_optional(pool)
             .await {
-            if let Some(row) = row_opt { if let Ok(body) = row.try_get::<String,_>("body") {
-                return Ok(MessageBody { uid, folder: folder.to_string(), subject: String::new(), from: String::new(), date: None, flags: vec![], plain_text: body.clone(), html_text: None, raw_size: body.len() });
-            }}
+            if let Some(row) = row_opt {
+                if let (Ok(body), Ok(html_body_opt)) = (row.try_get::<String,_>("body"), row.try_get::<Option<String>,_>("html_body")) {
+                    let subject: String = row.try_get::<Option<String>,_>("subject").ok().flatten().unwrap_or_default();
+                    let from: String = row.try_get::<Option<String>,_>("from_addr").ok().flatten().unwrap_or_default();
+                    let date: Option<String> = row.try_get::<Option<String>,_>("date").ok().flatten();
+                    let flags_json: String = row.try_get::<Option<String>,_>("flags").ok().flatten().unwrap_or_default();
+                    let flags: Vec<String> = serde_json::from_str(&flags_json).unwrap_or_default();
+                    return Ok(MessageBody { uid, folder: folder.to_string(), subject, from, date, flags, plain_text: body.clone(), html_text: html_body_opt, raw_size: body.len() });
+                }
+            }
         }
     }
 
@@ -39,17 +46,33 @@ pub async fn fetch_message_body(account: &Account, uid: u32, folder: Option<&str
         .await?
         .ok_or_else(|| anyhow::anyhow!("message not found"))?;
     let body_text = fetched.body.clone();
-
+    let mut html_opt = fetched.html_body.clone();
+    if let Some(html) = html_opt.as_ref() {
+        // Sanitize with whitelist (ammonia) to avoid script/style injection
+        let cleaned = ammonia::Builder::default()
+            .add_tags(["a","abbr","acronym","b","blockquote","br","code","div","em","i","img","li","ol","p","pre","span","strong","table","tbody","td","th","thead","tr","ul"]) // whitelist
+            .add_tag_attributes("a", ["href","title"]) 
+            .add_tag_attributes("img", ["src","alt","title"]) 
+            .url_schemes(["http","https","mailto"].into()) 
+            .clean(html)
+            .to_string();
+        html_opt = Some(cleaned);
+    }
     // Best-effort cache write (ignore errors e.g., when table missing)
-    let _ = sqlx::query("INSERT OR REPLACE INTO message_bodies (account_id, folder, uid, body) VALUES (?, ?, ?, ?)")
+    let _ = sqlx::query("INSERT OR REPLACE INTO message_bodies (account_id, folder, uid, body, html_body, subject, from_addr, date, flags) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
         .bind(&account.id)
         .bind(folder)
         .bind(uid as i64)
         .bind(&body_text)
+        .bind(&html_opt)
+        .bind(&fetched.subject)
+        .bind(&fetched.from)
+        .bind(&fetched.date)
+        .bind(serde_json::to_string(&fetched.flags).unwrap_or_else(|_| "[]".into()))
         .execute(pool)
         .await;
 
-    Ok(MessageBody { uid, folder: folder.to_string(), subject: fetched.subject, from: fetched.from, date: fetched.date, flags: fetched.flags, plain_text: body_text.clone(), html_text: None, raw_size: body_text.len() })
+    Ok(MessageBody { uid, folder: folder.to_string(), subject: fetched.subject, from: fetched.from, date: fetched.date, flags: fetched.flags, plain_text: body_text.clone(), html_text: html_opt, raw_size: body_text.len() })
 }
 
 /// Garbage collect old cache entries (TTL 48h) and cap total entries to max_rows.

@@ -52,6 +52,17 @@ pub async fn unified_inbox(
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
 
+    // Decode encoded-word subjects if necessary
+    let messages: Vec<UnifiedMessage> = messages
+        .into_iter()
+        .map(|mut m| {
+            if let Some(ref s) = m.subject {
+                if s.contains("=?") { m.subject = Some(crate::imap::sync::decode_subject(s.as_bytes())); }
+            }
+            m
+        })
+        .collect();
+
     let total = messages.len();
     Ok(Json(UnifiedInboxResponse { messages, total }))
 }

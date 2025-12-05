@@ -6,10 +6,12 @@ use tokio::net::TcpStream;
 use tokio_native_tls::TlsStream;
 use tokio_util::compat::Compat;
 
+#[allow(dead_code)]
 type ImapSession = Session<Compat<TlsStream<TcpStream>>>;
 
 /// Configuration for an IDLE watcher task
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct IdleConfig {
     pub account_id: String,
     pub host: String,

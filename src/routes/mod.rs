@@ -20,8 +20,10 @@ pub mod sync;
 pub mod test;
 pub mod unified;
 pub mod flags;
+pub mod settings;
 
 #[derive(Deserialize)]
+#[allow(non_snake_case)]
 struct LoginReq {
     email: String,
     password: String,
@@ -46,9 +48,6 @@ async fn login(Json(payload): Json<LoginReq>) -> impl IntoResponse {
     match res {
         Ok(snap) => {
             // store creds with accountId = 1 for now
-            {
-                use tokio::runtime::Handle; // ensure within async context
-            }
             let store = ACCOUNTS.clone();
             {
                 // insert with key "1"
@@ -101,7 +100,7 @@ async fn login(Json(payload): Json<LoginReq>) -> impl IntoResponse {
 }
 
 async fn root_page() -> impl IntoResponse {
-    Html(include_str!("../../static/index.html"))
+    Html(include_str!("../../static/app.html"))
 }
 
 async fn app_page() -> impl IntoResponse {
@@ -112,6 +111,7 @@ use axum::extract::Json as AxumJson;
 use serde::Serialize;
 
 #[derive(Deserialize)]
+#[allow(non_snake_case)]
 struct SendReq {
     accountId: String,
     to: String,
@@ -162,11 +162,14 @@ where
 {
     Router::new()
         .route("/", get(root_page))
+        .route("/app", get(app_page))
+        .nest_service("/static", ServeDir::new("static"))
         .route("/login", post(login))
         .route("/diff", get(diff::diff_handler))
         .route("/body", get(diff::body_handler))
         .route("/folders", get(diff::folders_handler))
         .route("/attachments", get(diff::attachments_handler))
+        .route("/attachments/download", get(diff::download_attachment))
         .route("/unified/inbox", get(unified::unified_inbox))
         .route("/unified/unread", get(unified::unified_unread))
         .route("/unified/events", get(unified::unified_events))
@@ -176,6 +179,10 @@ where
         .route(
             "/accounts/:id",
             axum::routing::delete(accounts::delete_account),
+        )
+        .route(
+            "/accounts/:id",
+            axum::routing::patch(accounts::patch_account),
         )
         .route("/providers", get(accounts::list_providers))
         .route("/test/connection/:account_id", get(test::test_connection))
@@ -198,4 +205,8 @@ where
             get(sync::get_folder_messages),
         )
         .route("/messages/:account_id/:folder/:uid/flags", post(flags::update_flags))
+        .route("/test/folders/:account_id", get(test::list_folders))
+        .route("/settings", get(settings::get_settings))
+        .route("/search", get(sync::search_messages))
+        .route("/sync/:account_id/backfill-attachments", post(sync::backfill_attachments_endpoint))
 }

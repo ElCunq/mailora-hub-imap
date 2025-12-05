@@ -121,12 +121,12 @@ pub fn send_simple(
     let client_id = std::env::var("SMTP_HELLO_NAME")
         .ok()
         .and_then(|val| match val.parse::<IpAddr>() {
-            Ok(ip) => Some(ClientId::new(ip.to_string())),
+            Ok(ip) => Some(ClientId::Domain(ip.to_string())), // replaced new
             Err(_) => Some(ClientId::Domain(val)),
         })
         .unwrap_or_else(|| {
             host.parse::<IpAddr>()
-                .map(|ip| ClientId::new(ip.to_string()))
+                .map(|ip| ClientId::Domain(ip.to_string())) // replaced new
                 .unwrap_or_else(|_| ClientId::Domain(host.to_string()))
         });
 

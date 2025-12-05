@@ -117,6 +117,28 @@ pub struct AddAccountRequest {
     pub smtp_port: Option<u16>,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct UpdateAccountRequest {
+    pub email: Option<String>,
+    pub password: Option<String>,
+    pub provider: Option<String>,
+    pub display_name: Option<Option<String>>, // Some(Some(v)) set, Some(None) clear
+    pub imap_host: Option<String>,
+    pub imap_port: Option<u16>,
+    pub smtp_host: Option<String>,
+    pub smtp_port: Option<u16>,
+    pub enabled: Option<bool>,
+    pub append_policy: Option<Option<String>>, // Some(Some(v)) or Some(None)
+    pub sent_folder_hint: Option<Option<String>>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct UpdateAccountResponse {
+    pub success: bool,
+    pub account: Option<AccountResponse>,
+    pub error: Option<String>,
+}
+
 /// Helper: Add OAuth2 account
 async fn add_oauth_account(
     pool: &SqlitePool,
@@ -295,4 +317,98 @@ pub async fn list_providers() -> Json<Vec<ProviderInfo>> {
         .collect();
 
     Json(info)
+}
+#[derive(Debug, Deserialize)]
+pub struct PatchAccountRequest {
+    pub display_name: Option<String>,
+    pub enabled: Option<bool>,
+    pub imap_host: Option<String>,
+    pub imap_port: Option<u16>,
+    pub smtp_host: Option<String>,
+    pub smtp_port: Option<u16>,
+    pub password: Option<String>,
+    pub append_policy: Option<String>, // auto|never|force
+    pub sent_folder_hint: Option<String>,
+}
+
+/// PATCH /accounts/:id - Update mutable account settings
+pub async fn patch_account(
+    State(pool): State<SqlitePool>,
+    Path(account_id): Path<String>,
+    Json(req): Json<PatchAccountRequest>,
+) -> Result<Json<AccountResponse>, StatusCode> {
+    // Load existing
+    let existing = match account_service::get_account(&pool, &account_id).await {
+        Ok(Some(acc)) => acc,
+        Ok(None) => return Err(StatusCode::NOT_FOUND),
+        Err(_) => return Err(StatusCode::INTERNAL_SERVER_ERROR),
+    };
+    // Validate append_policy if provided
+    if let Some(ref ap) = req.append_policy {
+        let v = ap.to_lowercase();
+        if !["auto","never","force"].contains(&v.as_str()) {
+            return Err(StatusCode::BAD_REQUEST);
+        }
+    }
+    // Determine new values (fallback to existing)
+    let new_display_name = req.display_name.or(existing.display_name.clone());
+    let new_enabled = req.enabled.unwrap_or(existing.enabled);
+    let new_imap_host = req.imap_host.unwrap_or(existing.imap_host.clone());
+    let new_imap_port = req.imap_port.unwrap_or(existing.imap_port);
+    let new_smtp_host = req.smtp_host.unwrap_or(existing.smtp_host.clone());
+    let new_smtp_port = req.smtp_port.unwrap_or(existing.smtp_port);
+    let new_append_policy = req.append_policy.as_ref().map(|s| s.to_lowercase());
+    let new_sent_folder_hint = req.sent_folder_hint.or(existing.sent_folder_hint.clone());
+
+    // Credentials: if password changed re-encode; we keep email immutable here
+    let new_creds_enc = if let Some(pass) = req.password.as_ref() {
+        crate::models::account::Account::encode_credentials(&existing.email, pass)
+    } else {
+        existing.credentials_encrypted.clone()
+    };
+
+    // Persist update (provider immutable for now)
+    let res = sqlx::query(
+        "UPDATE accounts SET display_name = ?, imap_host = ?, imap_port = ?, smtp_host = ?, smtp_port = ?, enabled = ?, append_policy = ?, sent_folder_hint = ?, credentials_encrypted = ?, updated_at = strftime('%s','now') WHERE id = ?"
+    )
+    .bind(&new_display_name)
+    .bind(&new_imap_host)
+    .bind(new_imap_port as i64)
+    .bind(&new_smtp_host)
+    .bind(new_smtp_port as i64)
+    .bind(new_enabled as i64)
+    .bind(&new_append_policy)
+    .bind(&new_sent_folder_hint)
+    .bind(&new_creds_enc)
+    .bind(&account_id)
+    .execute(&pool)
+    .await;
+    if res.is_err() { return Err(StatusCode::INTERNAL_SERVER_ERROR); }
+
+    // Reload updated account
+    let updated = match account_service::get_account(&pool, &account_id).await {
+        Ok(Some(acc)) => acc,
+        _ => return Err(StatusCode::INTERNAL_SERVER_ERROR),
+    };
+
+    // If in-memory creds exist update them (host/port/password changes)
+    {
+        use crate::services::diff_service::ACCOUNTS;
+        if let Ok((email, password)) = updated.get_credentials() {
+            let mut store = ACCOUNTS.write().await;
+            if let Some(entry) = store.get_mut(&account_id) {
+                entry.email = email;
+                entry.password = password;
+                entry.host = new_imap_host;
+                entry.port = new_imap_port;
+            } else {
+                // Optionally insert if not present and enabled
+                if new_enabled {
+                    store.insert(account_id.clone(), crate::services::diff_service::AccountCreds { email, password, host: new_imap_host, port: new_imap_port });
+                }
+            }
+        }
+    }
+
+    Ok(Json(updated.into()))
 }

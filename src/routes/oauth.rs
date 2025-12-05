@@ -6,7 +6,6 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
-use crate::models::account::EmailProvider;
 use crate::oauth::OAuthManager;
 
 #[derive(Deserialize)]

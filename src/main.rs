@@ -144,7 +144,6 @@ async fn main() -> Result<()> {
             .merge(routes::routes())
             .merge(idle_routes)
             .merge(oauth_routes)
-            .nest_service("/static", ServeDir::new("static"))
             // App state
             .with_state(state.clone());
 

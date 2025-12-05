@@ -34,3 +34,8 @@ uuid = { version = "1.6", features = ["v4"] }
 # OAuth2 dependencies
 oauth2 = "4.4"
 reqwest = { version = "0.11", features = ["json"] }
+mailparse = "0.14"
+# New: sanitize & crypto
+ammonia = "4"
+aes-gcm = { version = "0.10", features = ["aes"] }
+rand = "0.8"

@@ -2,11 +2,13 @@ use axum::http::StatusCode as AxumStatus;
 use axum::{extract::State, http::HeaderMap, response::IntoResponse};
 
 #[derive(Clone)]
+#[allow(dead_code)]
 pub struct JmapProxyState {
     pub http: reqwest::Client,
     pub jmap_base: String,
 }
 
+#[allow(dead_code)]
 pub async fn proxy_jmap(
     State(st): State<JmapProxyState>,
     headers: HeaderMap,
@@ -39,6 +41,7 @@ pub async fn proxy_jmap(
     }
 }
 
+#[allow(dead_code)]
 pub async fn proxy_well_known(State(st): State<JmapProxyState>) -> impl IntoResponse {
     let url = format!("{}/.well-known/jmap", st.jmap_base.trim_end_matches('/'));
     match st.http.get(url).send().await {
@@ -57,6 +60,7 @@ pub async fn proxy_well_known(State(st): State<JmapProxyState>) -> impl IntoResp
     }
 }
 
+#[allow(dead_code)]
 pub async fn proxy_session(State(st): State<JmapProxyState>) -> impl IntoResponse {
     let url = format!("{}/jmap/session", st.jmap_base.trim_end_matches('/'));
     match st.http.get(url).send().await {

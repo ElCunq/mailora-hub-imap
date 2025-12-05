@@ -12,6 +12,7 @@ use tokio_util::compat::{Compat, TokioAsyncReadCompatExt};
 
 use crate::models::account::Account;
 
+#[allow(dead_code)]
 type ImapSession = Session<Compat<TlsStream<TcpStream>>>;
 
 /// Global IDLE watcher manager
@@ -20,8 +21,9 @@ pub struct IdleWatcherManager {
     event_tx: broadcast::Sender<IdleEvent>,
 }
 
+#[allow(dead_code)]
 pub struct IdleWatcherHandle {
-    account_id: String,
+    pub account_id: String,
     cancel_tx: tokio::sync::oneshot::Sender<()>,
 }
 

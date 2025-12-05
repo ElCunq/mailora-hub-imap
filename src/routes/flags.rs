@@ -40,7 +40,8 @@ pub async fn update_flags(
         let session = &mut imap.session;
         session.select(&folder).await?;
         for cmd in flags_cmds.iter() {
-            session.uid_store(&uid.to_string(), cmd).await?;
+            use futures::StreamExt;
+            if let Ok(mut stream) = session.uid_store(&uid.to_string(), cmd).await { while stream.next().await.is_some() {} }
         }
         session.expunge().await.ok();
         let _ = session.logout().await;

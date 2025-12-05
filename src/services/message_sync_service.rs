@@ -1,11 +1,32 @@
 use anyhow::{Context, Result};
 use async_imap::types::{Fetch, Flag};
-use sqlx::SqlitePool;
+use sqlx::{Row, SqlitePool};
 use std::collections::HashSet;
 use tracing::{info, warn};
+use tokio::time::{timeout, Duration};
 
 use crate::imap::conn;
 use crate::models::account::Account;
+
+fn imap_timeout() -> Duration {
+    let secs = std::env::var("MAILORA_IMAP_TIMEOUT_SECS")
+        .ok()
+        .and_then(|v| v.parse::<u64>().ok())
+        .unwrap_or(15);
+    Duration::from_secs(secs)
+}
+
+async fn with_timeout<F, T, E>(fut: F, ctx: &str) -> Result<T>
+where
+    F: std::future::Future<Output = std::result::Result<T, E>>,
+    E: std::fmt::Display + Send + Sync + 'static,
+{
+    match timeout(imap_timeout(), fut).await {
+        Ok(Ok(val)) => Ok(val),
+        Ok(Err(e)) => Err(anyhow::anyhow!("{}: {}", ctx, e)),
+        Err(_) => Err(anyhow::anyhow!("{}: timeout after {:?}", ctx, imap_timeout())),
+    }
+}
 
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct SyncStats {
@@ -16,6 +37,19 @@ pub struct SyncStats {
     pub updated_messages: u32,
     pub deleted_messages: u32,
     pub duration_ms: u64,
+}
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct BackfillFolderStats {
+    pub folder: String,
+    pub scanned: usize,
+    pub updated: usize,
+}
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct BackfillStats {
+    pub account_id: String,
+    pub total_scanned: usize,
+    pub total_updated: usize,
+    pub folders: Vec<BackfillFolderStats>,
 }
 
 /// Sync all messages from an account's folder to SQLite
@@ -32,22 +66,21 @@ pub async fn sync_folder_messages(
     );
 
     // Connect to IMAP
-    let mut imap_session = conn::connect(
-        &account.imap_host,
-        account.imap_port,
-        &account.email,
-        &account.password,
+    let mut imap_session = with_timeout(
+        conn::connect(
+            &account.imap_host,
+            account.imap_port,
+            &account.email,
+            &account.password,
+        ),
+        "IMAP connect",
     )
-    .await
-    .context("Failed to connect to IMAP")?;
+    .await?;
 
     let session = &mut imap_session.session;
 
     // Select folder
-    let mailbox = session
-        .select(folder)
-        .await
-        .context(format!("Failed to select folder {}", folder))?;
+    let mailbox = with_timeout(session.select(folder), "IMAP SELECT").await?;
 
     let total_messages = mailbox.exists;
     info!("Folder {} has {} messages", folder, total_messages);
@@ -78,10 +111,7 @@ pub async fn sync_folder_messages(
 
     // Fetch all UIDs from server
     let sequence = format!("1:{}", total_messages);
-    let messages = session
-        .fetch(&sequence, "UID")
-        .await
-        .context("Failed to fetch UIDs")?;
+    let messages = with_timeout(session.fetch(&sequence, "UID"), "IMAP FETCH UIDs").await?;
 
     let mut messages_vec: Vec<_> = vec![];
     {
@@ -143,13 +173,16 @@ pub async fn sync_folder_messages(
                 .collect::<Vec<_>>()
                 .join(",");
 
-            let messages = session
-                .uid_fetch(
+            // Include BODY.PEEK[] so we can parse attachments for metadata persistence
+            let messages = with_timeout(
+                session.uid_fetch(
                     &uid_set,
-                    "(UID FLAGS ENVELOPE BODY.PEEK[HEADER] INTERNALDATE RFC822.SIZE)",
-                )
-                .await
-                .context("Failed to fetch message details")?;
+                    "(UID FLAGS ENVELOPE INTERNALDATE RFC822.SIZE BODY.PEEK[])",
+                ),
+                "IMAP UID FETCH",
+            )
+            .await
+            .context("Failed to fetch message details")?;
 
             use futures::StreamExt;
             let mut stream = messages;
@@ -188,6 +221,59 @@ pub async fn sync_folder_messages(
     })
 }
 
+/// Extract attachments metadata from a raw email
+fn extract_attachments_from_raw(raw: &[u8]) -> Vec<(Option<String>, Option<String>, i64, Option<String>, bool)> {
+    let mut atts = Vec::new();
+    if raw.len() > 5_000_000 { // safety cap
+        return atts;
+    }
+    if let Ok(parsed) = mailparse::parse_mail(raw) {
+        fn walk(pm: &mailparse::ParsedMail, out: &mut Vec<(Option<String>, Option<String>, i64, Option<String>, bool)>) {
+            if pm.subparts.is_empty() {
+                let ctype = pm.ctype.mimetype.to_lowercase();
+                let mut filename: Option<String> = None;
+                let mut content_id: Option<String> = None;
+                let mut is_inline = false;
+                for h in &pm.headers {
+                    let key = h.get_key();
+                    if key.eq_ignore_ascii_case("Content-ID") {
+                        let v = h.get_value();
+                        let norm = v.trim().trim_matches(['<','>']).to_string();
+                        if !norm.is_empty() { content_id = Some(norm); }
+                    } else if key.eq_ignore_ascii_case("Content-Disposition") {
+                        let v = h.get_value();
+                        let lower = v.to_lowercase();
+                        if lower.contains("inline") { is_inline = true; }
+                        // filename param
+                        for tok in v.split(';') {
+                            let t = tok.trim();
+                            let tl = t.to_lowercase();
+                            if tl.starts_with("filename=") { let val = t.splitn(2,'=').nth(1).unwrap_or("").trim().trim_matches('"'); if !val.is_empty(){ filename = Some(val.to_string()); break; } }
+                        }
+                    } else if key.eq_ignore_ascii_case("Content-Type") {
+                        // try name=
+                        let v = h.get_value();
+                        for tok in v.split(';') {
+                            let t = tok.trim();
+                            let tl = t.to_lowercase();
+                            if tl.starts_with("name=") { let val = t.splitn(2,'=').nth(1).unwrap_or("").trim().trim_matches('"'); if !val.is_empty(){ filename = Some(val.to_string()); break; } }
+                        }
+                    }
+                }
+                let is_text = ctype == "text/plain" || ctype == "text/html";
+                if filename.is_some() || !is_text {
+                    let sz = pm.get_body_raw().map(|b| b.len() as i64).unwrap_or(0);
+                    out.push((filename, Some(ctype), sz, content_id, is_inline));
+                }
+                return;
+            }
+            for sp in &pm.subparts { walk(sp, out); }
+        }
+        walk(&parsed, &mut atts);
+    }
+    atts
+}
+
 /// Save a single message to database
 async fn save_message_to_db(
     pool: &SqlitePool,
@@ -199,10 +285,17 @@ async fn save_message_to_db(
 
     // Extract envelope data
     let envelope = fetch.envelope();
-    let subject = envelope
+    let subject_raw = envelope
         .and_then(|e| e.subject.as_ref())
-        .and_then(|s| std::str::from_utf8(s).ok())
-        .unwrap_or("");
+        .map_or(&[][..], |v| v);
+    let subject = {
+        let mut composed = b"Subject: ".to_vec();
+        composed.extend_from_slice(subject_raw);
+        match mailparse::parse_header(&composed) {
+            Ok((h, _)) => h.get_value().trim().to_string(),
+            Err(_) => String::from_utf8_lossy(subject_raw).trim().to_string(),
+        }
+    };
 
     let from = envelope
         .and_then(|e| e.from.as_ref())
@@ -254,8 +347,15 @@ async fn save_message_to_db(
 
     let flags_json = serde_json::to_string(&flags)?;
 
-    // Try to get message size from fetch data (size field returns Option<u32>)
+    // Message size
     let size = fetch.size.unwrap_or(0) as i64;
+
+    // Parse raw for attachments metadata (if available)
+    let mut attachments: Vec<(Option<String>, Option<String>, i64, Option<String>, bool)> = Vec::new();
+    if let Some(body_bytes) = fetch.body() {
+        attachments = extract_attachments_from_raw(body_bytes);
+    }
+    let has_atts = !attachments.is_empty();
 
     // Check if message already exists
     let exists: bool = sqlx::query_scalar(
@@ -281,7 +381,7 @@ async fn save_message_to_db(
 
         Ok(false) // Updated
     } else {
-        // Insert new message (without body for now - will be fetched on demand)
+        // Insert new message
         sqlx::query(
             r#"
             INSERT INTO messages (
@@ -289,21 +389,54 @@ async fn save_message_to_db(
                 subject, from_addr, to_addr, date,
                 flags, size, has_attachments,
                 synced_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, datetime('now'))
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
             "#,
         )
         .bind(&account.id)
         .bind(folder)
         .bind(uid)
         .bind(message_id)
-        .bind(subject)
+        .bind(&subject)
         .bind(&from)
         .bind(&to)
         .bind(date)
         .bind(&flags_json)
         .bind(size as i64)
+        .bind(has_atts)
         .execute(pool)
         .await?;
+
+        // If we have attachments, persist them
+        if has_atts {
+            let msg_id: i64 = sqlx::query_scalar(
+                "SELECT id FROM messages WHERE account_id = ? AND folder = ? AND uid = ?",
+            )
+            .bind(&account.id)
+            .bind(folder)
+            .bind(uid)
+            .fetch_one(pool)
+            .await?;
+
+            // Clean any existing (shouldn't be any for new row)
+            sqlx::query("DELETE FROM attachments WHERE message_id = ?")
+                .bind(msg_id)
+                .execute(pool)
+                .await?;
+
+            for (filename, content_type, sz, content_id, is_inline) in attachments {
+                sqlx::query(
+                    "INSERT INTO attachments (message_id, filename, content_type, size, content_id, is_inline) VALUES (?, ?, ?, ?, ?, ?)",
+                )
+                .bind(msg_id)
+                .bind(filename)
+                .bind(content_type)
+                .bind(sz)
+                .bind(content_id)
+                .bind(is_inline)
+                .execute(pool)
+                .await?;
+            }
+        }
 
         Ok(true) // New
     }
@@ -311,18 +444,21 @@ async fn save_message_to_db(
 
 /// Sync all folders for an account
 pub async fn sync_account_messages(pool: &SqlitePool, account: &Account) -> Result<Vec<SyncStats>> {
-    let mut imap_session = conn::connect(
-        &account.imap_host,
-        account.imap_port,
-        &account.email,
-        &account.password,
+    let mut imap_session = with_timeout(
+        conn::connect(
+            &account.imap_host,
+            account.imap_port,
+            &account.email,
+            &account.password,
+        ),
+        "IMAP connect",
     )
     .await?;
 
     let session = &mut imap_session.session;
 
     // List all folders
-    let folders = session.list(None, Some("*")).await?;
+    let folders = with_timeout(session.list(None, Some("*")), "IMAP LIST").await?;
 
     let mut folder_names: Vec<String> = Vec::new();
     {
@@ -367,7 +503,7 @@ pub async fn upsert_sent_message(
 
     // Try update, else insert
     let updated = sqlx::query(
-        "UPDATE messages SET subject = COALESCE(?, subject), to_addrs = COALESCE(?, to_addrs), flags = ?, synced_at = datetime('now') WHERE account_id = ? AND folder = ? AND uid = ?",
+        "UPDATE messages SET subject = COALESCE(?, subject), to_addr = COALESCE(?, to_addr), flags = ?, synced_at = datetime('now') WHERE account_id = ? AND folder = ? AND uid = ?",
     )
     .bind(subject)
     .bind(to)
@@ -381,8 +517,8 @@ pub async fn upsert_sent_message(
 
     if updated == 0 {
         sqlx::query(
-            r#"INSERT OR IGNORE INTO messages (account_id, folder, uid, subject, to_addrs, flags, internaldate, size)
-               VALUES (?, ?, ?, ?, ?, ?, STRFTIME('%s','now'), 0)"#,
+            r#"INSERT OR IGNORE INTO messages (account_id, folder, uid, subject, to_addr, flags, size, synced_at, internal_date)
+               VALUES (?, ?, ?, ?, ?, ?, 0, datetime('now'), datetime('now'))"#,
         )
         .bind(&account.id)
         .bind(folder)
@@ -409,11 +545,14 @@ pub async fn quick_sync_sent_and_upsert(
 ) -> Result<Option<(String, u32)>> {
     use futures::StreamExt;
 
-    let mut imap = conn::connect(
-        &account.imap_host,
-        account.imap_port,
-        &account.email,
-        &account.password,
+    let mut imap = with_timeout(
+        conn::connect(
+            &account.imap_host,
+            account.imap_port,
+            &account.email,
+            &account.password,
+        ),
+        "IMAP connect",
     )
     .await
     .context("Failed to connect to IMAP")?;
@@ -422,7 +561,7 @@ pub async fn quick_sync_sent_and_upsert(
 
     // Build Sent candidates
     let mut candidates: Vec<String> = Vec::new();
-    if let Ok(list_stream) = session.list(None, Some("*")).await {
+    if let Ok(list_stream) = with_timeout(session.list(None, Some("*")), "IMAP LIST").await {
         let mut names = Vec::new();
         let mut s = list_stream;
         while let Some(item) = s.next().await {
@@ -469,7 +608,7 @@ pub async fn quick_sync_sent_and_upsert(
     ];
 
     for folder in candidates {
-        if session.select(&folder).await.is_err() {
+        if with_timeout(session.select(&folder), "IMAP SELECT").await.is_err() {
             continue;
         }
 
@@ -477,9 +616,9 @@ pub async fn quick_sync_sent_and_upsert(
         // Gmail raw search first for gmail accounts
         if account.provider.as_str() == "gmail" {
             for q in &gmail_variants {
-                if let Ok(uids) = session.uid_search(q).await {
+                if let Ok(uids) = with_timeout(session.uid_search(q), "IMAP UID SEARCH").await {
                     if let Some(uid) = uids.iter().copied().max() {
-                        let _ = session.uid_store(&uid.to_string(), "+FLAGS (\\Seen)").await;
+                        let _ = with_timeout(session.uid_store(&uid.to_string(), "+FLAGS (\\Seen)"), "IMAP UID STORE").await;
                         upsert_sent_message(pool, account, &folder, uid, subject, to).await?;
                         let _ = session.logout().await;
                         return Ok(Some((folder, uid)));
@@ -489,9 +628,9 @@ pub async fn quick_sync_sent_and_upsert(
         }
         // Standard header variants
         for q in &header_variants {
-            if let Ok(uids) = session.uid_search(q).await {
+            if let Ok(uids) = with_timeout(session.uid_search(q), "IMAP UID SEARCH").await {
                 if let Some(uid) = uids.iter().copied().max() {
-                    let _ = session.uid_store(&uid.to_string(), "+FLAGS (\\Seen)").await;
+                    let _ = with_timeout(session.uid_store(&uid.to_string(), "+FLAGS (\\Seen)"), "IMAP UID STORE").await;
                     upsert_sent_message(pool, account, &folder, uid, subject, to).await?;
                     let _ = session.logout().await;
                     return Ok(Some((folder, uid)));
@@ -500,7 +639,7 @@ pub async fn quick_sync_sent_and_upsert(
         }
 
         // 2) Fallback: quick scan of recent messages in folder
-        let uids_res = match session.uid_search("ALL").await {
+        let uids_res = match with_timeout(session.uid_search("ALL"), "IMAP UID SEARCH").await {
             Ok(v) => v,
             Err(_) => continue,
         };
@@ -522,9 +661,11 @@ pub async fn quick_sync_sent_and_upsert(
                 .collect::<Vec<_>>()
                 .join(",");
 
-            let fetches = match session
-                .uid_fetch(&uid_set, "(UID ENVELOPE BODY.PEEK[HEADER.FIELDS (MESSAGE-ID)])")
-                .await
+            let fetches = match with_timeout(
+                session.uid_fetch(&uid_set, "(UID ENVELOPE BODY.PEEK[HEADER.FIELDS (MESSAGE-ID)])"),
+                "IMAP UID FETCH",
+            )
+            .await
             {
                 Ok(s) => s,
                 Err(_) => continue,
@@ -554,9 +695,7 @@ pub async fn quick_sync_sent_and_upsert(
             }
 
             if let Some(uid) = found {
-                let _ = session
-                    .uid_store(&uid.to_string(), "+FLAGS (\\Seen)")
-                    .await;
+                let _ = with_timeout(session.uid_store(&uid.to_string(), "+FLAGS (\\Seen)"), "IMAP UID STORE").await;
                 upsert_sent_message(pool, account, &folder, uid, subject, to).await?;
                 let _ = session.logout().await;
                 return Ok(Some((folder, uid)));
@@ -567,3 +706,162 @@ pub async fn quick_sync_sent_and_upsert(
     let _ = session.logout().await;
     Ok(None)
 }
+
+/// Backfill attachment metadata for existing messages imported before attachments persistence was added.
+pub async fn backfill_attachments(
+    pool: &SqlitePool,
+    account: &Account,
+    folder_opt: Option<&str>,
+    limit_per_folder: usize,
+) -> Result<BackfillStats> {
+    use futures::StreamExt;
+    // Connect once
+    let mut imap_session = with_timeout(
+        conn::connect(
+            &account.imap_host,
+            account.imap_port,
+            &account.email,
+            &account.password,
+        ),
+        "IMAP connect",
+    )
+    .await?;
+    let session = &mut imap_session.session;
+
+    // Determine folders
+    let folder_list: Vec<String> = if let Some(f) = folder_opt {
+        vec![f.to_string()]
+    } else {
+        let mut names = Vec::new();
+        if let Ok(list_stream) = with_timeout(session.list(None, Some("*")), "IMAP LIST").await {
+            let mut s = list_stream;
+            while let Some(item) = s.next().await {
+                if let Ok(m) = item {
+                    names.push(m.name().to_string());
+                }
+            }
+        }
+        names
+    };
+
+    let mut total_scanned = 0usize;
+    let mut total_updated = 0usize;
+    let mut folder_stats = Vec::new();
+
+    for folder in folder_list.iter() {
+        // Collect candidate messages needing backfill (has_attachments=0)
+        let rows = sqlx::query(
+            "SELECT id, uid FROM messages WHERE account_id = ? AND folder = ? AND has_attachments = 0 ORDER BY uid DESC LIMIT ?",
+        )
+        .bind(&account.id)
+        .bind(folder)
+        .bind(limit_per_folder as i64)
+        .fetch_all(pool)
+        .await?;
+        if rows.is_empty() {
+            continue;
+        }
+        let mut id_uid_pairs: Vec<(i64, u32)> = Vec::new();
+        for r in &rows {
+            let id: i64 = r.try_get(0)?;
+            let uid: i64 = r.try_get(1)?;
+            id_uid_pairs.push((id, uid as u32));
+        }
+
+        let mut scanned = 0usize;
+        let mut updated = 0usize;
+
+        // Select folder once
+        if with_timeout(session.select(folder), "IMAP SELECT").await.is_err() {
+            continue;
+        }
+
+        // Chunk UIDs
+        const CHUNK: usize = 40;
+        for chunk in id_uid_pairs.chunks(CHUNK) {
+            let uid_set = chunk
+                .iter()
+                .map(|(_, u)| u.to_string())
+                .collect::<Vec<_>>()
+                .join(",");
+
+            let fetches = match with_timeout(
+                session.uid_fetch(&uid_set, "(UID BODY.PEEK[])"),
+                "UID FETCH",
+            )
+            .await
+            {
+                Ok(s) => s,
+                Err(_) => continue,
+            };
+
+            let mut stream = fetches;
+            while let Some(item) = stream.next().await {
+                if let Ok(f) = item {
+                    if let Some(uid) = f.uid {
+                        scanned += 1;
+                        total_scanned += 1;
+                        if let Some(body) = f.body() {
+                            let atts = extract_attachments_from_raw(body);
+                            if !atts.is_empty() {
+                                // persist
+                                if let Some((msg_id, _)) =
+                                    id_uid_pairs.iter().find(|(_, u)| *u == uid)
+                                {
+                                    // delete any existing attachments (rare)
+                                    let _ = sqlx::query(
+                                        "DELETE FROM attachments WHERE message_id = ?",
+                                    )
+                                    .bind(msg_id)
+                                    .execute(pool)
+                                    .await;
+
+                                    for (filename, content_type, sz, content_id, is_inline) in
+                                        atts.into_iter()
+                                    {
+                                        let _ = sqlx::query("INSERT INTO attachments (message_id, filename, content_type, size, content_id, is_inline) VALUES (?, ?, ?, ?, ?, ?)")
+                                            .bind(msg_id)
+                                            .bind(filename)
+                                            .bind(content_type)
+                                            .bind(sz)
+                                            .bind(content_id)
+                                            .bind(is_inline)
+                                            .execute(pool)
+                                            .await;
+                                    }
+
+                                    let _ = sqlx::query(
+                                        "UPDATE messages SET has_attachments = 1 WHERE id = ?",
+                                    )
+                                    .bind(msg_id)
+                                    .execute(pool)
+                                    .await;
+
+                                    updated += 1;
+                                    total_updated += 1;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        folder_stats.push(BackfillFolderStats {
+            folder: folder.clone(),
+            scanned,
+            updated,
+        });
+    }
+    // Logout
+    let _ = session.logout().await;
+
+    Ok(BackfillStats {
+        account_id: account.id.clone(),
+        total_scanned,
+        total_updated,
+        folders: folder_stats,
+    })
+}
+
+#[allow(dead_code)]
+pub async fn update_last_sync_placeholder() {}

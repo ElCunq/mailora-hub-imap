@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Basit Mail İstemcisi</title>
 <style>
-body { margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; background:#0f1217; color:#e5e7eb; height:100vh; display:flex; }
+body { margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; background:#0f1217; color:#e5e7eb; height:100vh; display:flex; font-size:13px; }
 #app { flex:1; display:grid; grid-template-columns:260px 1fr 1fr; grid-template-rows:100%; }
 .sidebar { border-right:1px solid #1f2937; padding:12px; background:#111827; overflow-y:auto; }
 .sidebar h2 { font-size:14px; margin:12px 0 6px; color:#94a3b8; }
@@ -16,29 +16,87 @@ body { margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
 .panel { border-right:1px solid #1f2937; display:flex; flex-direction:column; }
 .messages-panel { background:#0f141c; }
 .toolbar { padding:8px 10px; border-bottom:1px solid #1f2937; display:flex; gap:8px; align-items:center; }
-.toolbar input { flex:1; background:#1f2937; border:1px solid #334155; color:#e5e7eb; padding:6px 8px; border-radius:6px; font-size:13px; }
+.toolbar input { flex:1; background:#1f2937; border:1px solid #334155; color:#e5e7eb; padding:6px 8px; border-radius:6px; font-size:12px; }
 button { background:#1f2937; border:1px solid #334155; color:#e5e7eb; padding:6px 10px; font-size:12px; border-radius:6px; cursor:pointer; }
 button:hover { background:#243043; }
-#message-list { flex:1; overflow-y:auto; }
-.message-row { padding:8px 10px; border-bottom:1px solid #1f2937; cursor:pointer; display:grid; grid-template-columns:160px 1fr 90px; gap:12px; font-size:12px; }
+#message-list { flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:0; }
+/* Regression guard: force rows to be full-width flex, never inline-* */
+.message-list > .message-row { display:flex !important; width:100% !important; float:none !important; }
+.message-list > .message-row[class*="w-fit"],
+.message-list > .message-row[class*="inline-"] { width:100% !important; }
+.message-row { position:relative; overflow:hidden; isolation:isolate; flex-shrink:0; display:flex; align-items:center; gap:10px; min-height:40px; padding:0 10px; border-bottom:1px solid #1f2937; background:none; box-sizing:border-box; }
 .message-row.unread { background:#182335; font-weight:600; }
 .message-row:hover { background:#1f2937; }
+.message-row .from { flex:0 0 12rem; max-width:12rem; min-width:8rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.message-row .subject { flex:1 1 auto; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.message-row .attachments-cell { flex:0 0 10rem; min-width:8rem; display:flex; align-items:center; gap:4px; overflow:hidden; }
+.attachment-chip { background:#1f2937; padding:2px 6px; border-radius:12px; font-size:9px; display:inline-flex; align-items:center; gap:4px; flex-shrink:0; }
+.attachment-chip.more { background:#243043; }
+.uid { flex:0 0 4rem; text-align:right; font-size:11px; color:#e5e7eb; }
 .preview-panel { display:flex; flex-direction:column; }
 #preview { flex:1; padding:12px; overflow-y:auto; }
+/* New: HTML preview container & iframe */
+.preview-html-container { height: calc(100% - 120px); }
+#html-frame { width: 100%; height: 100%; border: 0; background:#0f141c; }
+/* Optional: style buttons area */
+.preview-actions { display:flex; gap:6px; margin-top:8px; }
 #compose { border-top:1px solid #1f2937; padding:10px; background:#111827; }
-#compose input, #compose textarea { width:100%; background:#1f2937; border:1px solid #334155; color:#e5e7eb; padding:6px 8px; font-size:13px; border-radius:6px; margin-bottom:6px; }
-.badge { background:#374151; padding:2px 6px; border-radius:4px; font-size:10px; margin-left:4px; }
-.small { font-size:11px; color:#94a3b8; }
-.empty { text-align:center; padding:30px; color:#6b7280; font-size:13px; }
+#compose input, #compose textarea { width:100%; background:#1f2937; border:1px solid #334155; color:#e5e7eb; padding:6px 8px; font-size:12px; border-radius:6px; margin-bottom:6px; }
+.badge { background:#374151; padding:2px 6px; border-radius:4px; font-size:9px; margin-left:4px; }
+.small { font-size:10px; }
+.empty { text-align:center; padding:30px; color:#6b7280; font-size:12px; }
 .unified-toggle { margin-top:10px; display:flex; align-items:center; gap:6px; font-size:12px; }
 /* New: compact inline row for ports */
 .inline-row { display:flex; gap:8px; align-items:center; margin-top:6px; }
 .port-input { max-width: 120px; }
+/* === Mail Listesi Karantina Bloğu === */
+.ml-sandbox {
+  all: revert;
+  display: flex !important;
+  flex-direction: column !important;
+  flex-wrap: nowrap !important;
+  align-items: stretch !important;
+  white-space: normal !important;
+  overflow-x: hidden;
+}
+.ml-sandbox > * {
+  display: flex !important;
+  flex-direction: row !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  flex: 0 0 auto !important;
+  float: none !important;
+  clear: both !important;
+  white-space: normal !important;
+}
+.ml-sandbox > *[class*="inline-"],
+.ml-sandbox > *[class*="w-fit"],
+.ml-sandbox > *[class*="grid-cols"],
+.ml-sandbox > *[class*="col-span"] {
+  width: 100% !important;
+  display: flex !important;
+}
+.ml-sandbox * { float:none !important; white-space: normal !important; }
+.mini-nav { display:flex; align-items:center; gap:10px; font-size:12px; background:#101520; border:1px solid #1f2937; padding:6px 8px; border-radius:6px; margin-bottom:8px; }
+.mini-nav a { color:#93c5fd; text-decoration:none; }
+.mini-nav strong { color:#e5e7eb; font-size:12px; }
+/* Responsive: stack panels on small screens */
+@media (max-width: 900px) {
+  #app { grid-template-columns: 100%; grid-template-rows: auto auto auto; }
+  .panel { border-right: none; border-top: 1px solid #1f2937; }
+}
 </style>
 </head>
 <body>
 <div id="app">
   <div class="sidebar" id="accounts-sidebar">
+    <h2>Ayarlar</h2>
+    <div id="top-nav" class="mini-nav">
+      <strong>Mailora Hub</strong>
+      <a href="/static/settings.html">Ayarlar</a>
+      <button onclick="refreshMessages()">Yenile</button>
+    </div>
+    <div id="settings" class="small" style="background:#1b2230;padding:8px;border-radius:6px;margin-bottom:10px;line-height:1.4"></div>
     <h2>Hesaplar</h2>
     <div id="accounts"></div>
     <h2 style="margin-top:16px;">Hesap Ekle</h2>
@@ -63,11 +121,16 @@ button:hover { background:#243043; }
   <div class="panel messages-panel">
     <div class="toolbar">
       <input id="search" placeholder="Ara (konu / from)" oninput="filterMessages()" />
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px"><input type="checkbox" id="fast-check" checked onchange="refreshMessages()"/> Hızlı (DB)</label>
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px"><input type="checkbox" id="unread-check" onchange="refreshMessages()"/> Yalnızca okunmamış</label>
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px"><input type="checkbox" id="att-check" onchange="refreshMessages()"/> Ekli</label>
+      <button onclick="syncNow()">Sync</button>
       <button onclick="refreshMessages()">Yenile</button>
       <button onclick="markSelectedSeen()">Okundu</button>
       <button onclick="deleteSelected()">Sil</button>
     </div>
-    <div id="message-list"></div>
+    <div id="message-list" class="message-list flex flex-col items-stretch divide-y divide-white/5 overflow-y-auto"></div>
+    <div id="pager" style="padding:6px 10px;border-top:1px solid #1f2937;display:none"><button id="more-btn" onclick="loadMore()">Daha Fazla</button></div>
   </div>
   <div class="panel preview-panel">
     <div id="preview"><div class="empty">Mesaj seçin...</div></div>
@@ -85,25 +148,203 @@ button:hover { background:#243043; }
 <script>
 let accounts=[]; let currentAccount=null; let messages=[]; let filtered=[]; let currentFolder='INBOX'; let selectedUids=new Set();
 function el(id){return document.getElementById(id);} // helper
+function escapeHtml(s){return (s??'').toString().replace(/[&<>"]|'/g, m=>({"&":"&amp;","<":"&lt;",
+">":"&gt;","\"":"&quot;","'":"&#39;"}[m]));}
+
+// Robust RFC 2047 decoder and UTF-8 mojibake fixer
+function decodeBytes(bytes, cs) {
+  try { return new TextDecoder((cs||'utf-8').toLowerCase()).decode(bytes); } catch { try { return new TextDecoder('utf-8').decode(bytes);} catch { return String.fromCharCode(...bytes); } }
+}
+function fromBase64ToBytes(b64){ try { const bin=atob(b64.replace(/\s/g,'')); const arr=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++) arr[i]=bin.charCodeAt(i)&255; return arr; } catch { return new Uint8Array(); } }
+function fromQPToBytes(txt){ const clean = txt.replace(/_/g,' '); const bytes=[]; for(let i=0;i<clean.length;i++){ const c=clean[i]; if(c==='=' && /[0-9A-Fa-f]{2}/.test(clean.slice(i+1,i+3))){ bytes.push(parseInt(clean.slice(i+1,i+3),16)); i+=2; } else { bytes.push(clean.charCodeAt(i)&255); } } return new Uint8Array(bytes); }
+function decodeRfc2047(str){ if(!str) return ''; return str.replace(/=\?([^?]+)\?([BQbq])\?([^?]+)\?=/g, (_, cs, mode, payload)=>{ if(/[bB]/.test(mode)) return decodeBytes(fromBase64ToBytes(payload), cs); else return decodeBytes(fromQPToBytes(payload), cs); }); }
+function tryFixUtf8Mojibake(s){ if(!s) return s; if(/[ÃÄÅÂØÐÞ]/.test(s)) { try { const bytes=new Uint8Array(Array.from(s, ch=>ch.charCodeAt(0)&255)); const dec = new TextDecoder('utf-8').decode(bytes); return dec; } catch { return s; } } return s; }
 async function loadAccounts(){ try{ const r=await fetch('/accounts'); accounts=await r.json(); renderAccounts(); if(!currentAccount && accounts.length){selectAccount(accounts[0].id);} }catch(e){ console.error(e);} }
-function renderAccounts(){ el('accounts').innerHTML=(accounts.length? accounts.map(a=>`<div class="account-item ${a.id===currentAccount?'active':''}" onclick="selectAccount('${a.id}')">${a.email}<span class="badge">${(a.provider||'custom').toString().toUpperCase()}</span></div>`).join(''):'<div class="empty">Hesap yok</div>'); }
+function renderAccounts(){ el('accounts').innerHTML=(accounts.length? accounts.map(a=>`<div class="account-item ${a.id===currentAccount?'active':''}" onclick="selectAccount('${a.id}')">${escapeHtml(a.email)}<span class="badge">${escapeHtml((a.provider||'custom').toString().toUpperCase())}</span></div>`).join(''):'<div class="empty">Hesap yok</div>'); }
 function selectAccount(id){ currentAccount=id; renderAccounts(); loadFolders(); refreshMessages(); }
 async function loadFolders(){ const base=['INBOX','Sent','Drafts','Spam','Trash']; el('folders').innerHTML=base.map(f=>`<div class="folder-item ${f===currentFolder?'active':''}" onclick="selectFolder('${f}')">${f}</div>`).join(''); }
-function selectFolder(f){ currentFolder=f; refreshMessages(); }
-async function refreshMessages(){ try { const unified = el('unified-check').checked; if (unified) { // unified across accounts for folder
-    const r = await fetch(`/unified/inbox?folder=${encodeURIComponent(currentFolder)}&limit=500`); const data = await r.json(); messages = data.messages.map(m=>({ uid:m.uid, from:m.from_addr||'', subject:m.subject||'', flags:m.flags||'', account_id:m.account_id })); filtered=messages; renderMessages(); return; }
-    if(!currentAccount) return; const limit=200; const r=await fetch(`/test/messages/${currentAccount}?limit=${limit}&folder=${encodeURIComponent(currentFolder)}`); const data=await r.json(); messages=data.messages||[]; filtered=messages; selectedUids.clear(); renderMessages(); }catch(e){ console.error(e);} }
-function filterMessages(){ const q=el('search').value.toLowerCase(); filtered=messages.filter(m=> (m.subject||'').toLowerCase().includes(q) || (m.from||'').toLowerCase().includes(q)); renderMessages(); }
-function renderMessages(){ el('message-list').innerHTML = (filtered.length? filtered.map(m=>{ const seen=(m.flags||'').includes('\\Seen'); const acc=(m.account_id?`<span class='badge'>${m.account_id.split('_')[1]||''}</span>`:''); return `<div class="message-row ${seen?'':'unread'}" onclick="openMessage(${m.uid}, '${m.account_id||currentAccount}')"> <div>${(m.from||'').slice(0,22)} ${acc}</div><div>${(decodeSubject(m.subject||'(No subject)')).slice(0,60)}</div><div style='text-align:right;'>${m.uid}</div></div>`; }).join(''):'<div class="empty">Mesaj yok</div>'); }
-async function openMessage(uid, accId){ const useAcc = accId || currentAccount; if(!useAcc) return; try{ const r=await fetch(`/test/body/${useAcc}/${uid}`); const body= await r.json(); el('preview').innerHTML = `<h3>${decodeSubject(body.subject||'(No subject)')}</h3><div class='small'>From: ${body.from} | UID: ${uid} | ${useAcc}</div><hr><div style='white-space:pre-wrap;font-size:13px;'>${body.plain_text || '(içerik yok)'}</div>`; selectedUids.clear(); selectedUids.add(uid); }catch(e){ el('preview').innerHTML='<div class="empty">Body alınamadı</div>'; }}
-function decodeSubject(s){ try { return decodeURIComponent(escape(s)); } catch { return s; } }
-async function markSelectedSeen(){ for(const uid of selectedUids){ await updateFlags(uid,{seen:true}); } refreshMessages(); }
-async function deleteSelected(){ if(!confirm('Silinsin mi?')) return; for(const uid of selectedUids){ await updateFlags(uid,{deleted:true}); } refreshMessages(); }
-async function updateFlags(uid,{seen=false,flagged=false,deleted=false}){ if(!currentAccount) return; try{ await fetch(`/messages/${encodeURIComponent(currentAccount)}/${encodeURIComponent(currentFolder)}/${encodeURIComponent(uid)}/flags`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({seen,flagged,deleted})}); }catch(e){ console.error('flags',e);} }
-async function sendMail(){ if(!currentAccount){ el('send-result').textContent='Hesap yok'; return; } const to=el('compose-to').value.trim(); const subject=el('compose-subject').value.trim(); const body=el('compose-body').value; if(!to||!subject||!body){ el('send-result').textContent='Alanlar gerekli'; return; } el('send-result').textContent='Gönderiliyor...'; try{ const r=await fetch(`/test/smtp-append/${currentAccount}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({to,subject,body})}); const j=await r.json(); el('send-result').textContent=j.ok? 'Gönderildi':'Hata: '+(j.error||''); if(j.ok){ el('compose-body').value=''; refreshMessages(); }}catch(e){ el('send-result').textContent='Gönderim hatası'; }}
-async function addAccountSimple(){ const email=el('new-email').value.trim(); const pass=el('new-pass').value.trim(); const imap=el('new-imap').value.trim(); const smtp=el('new-smtp').value.trim(); const imapPort=parseInt(el('new-imap-port').value.trim()||'993'); const smtpPort=parseInt(el('new-smtp-port').value.trim()||'587'); if(!email||!pass||!imap||!smtp){ el('add-result').textContent='Eksik alan'; return; } el('add-result').textContent='Ekleniyor...'; try{ const r=await fetch('/accounts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,password:pass,provider:'custom',imap_host:imap,imap_port:imapPort,smtp_host:smtp,smtp_port:smtpPort})}); const j=await r.json(); el('add-result').textContent=j.success?'Eklendi':'Hata'; loadAccounts(); }catch(e){ el('add-result').textContent='Hata'; }}
-window.addEventListener('keydown',e=>{ if(e.key==='r' && e.ctrlKey){ e.preventDefault(); refreshMessages(); }});
-loadAccounts();
+function selectFolder(f){ currentFolder=f;  const nodes = Array.from(document.querySelectorAll('#folders .folder-item')); nodes.forEach(n=>{ n.classList.toggle('active', n.textContent===f); }); refreshMessages(); }
+async function refreshMessages(){ try { const unified = el('unified-check').checked; const fast = el('fast-check') && el('fast-check').checked; if (unified) { const r = await fetch(`/unified/inbox?folder=${encodeURIComponent(currentFolder)}&limit=200`); const data = await r.json(); messages = (data.messages||[]).map(m=>({ uid: Number(m.uid), from: m.from_addr||'', subject: m.subject||'', flags: m.flags||'', account_id: m.account_id, has_attachments: !!m.has_attachments })); filtered=messages; renderMessages(); return; }
+    if(!currentAccount) return; const folderToUse = await resolveFolderName(currentAccount, currentFolder); const limit=50; if (fast) { let qs = ''; const unread=el('unread-check')?.checked; const att=el('att-check')?.checked; const params = new URLSearchParams(); if(unread) params.set('unread','true'); if(att) params.set('attachments','true'); if(params.toString()) qs = `?${params.toString()}`; const r=await fetch(`/messages/${currentAccount}/${encodeURIComponent(folderToUse)}${qs}`); const data=await r.json(); messages=(data.messages||[]).map(m=>({ uid: Number(m.uid), from: m.from_addr||'', subject: m.subject||'', flags: m.flags||'', account_id: currentAccount, has_attachments: !!m.has_attachments })); } else { const r=await fetch(`/test/messages/${currentAccount}?limit=${limit}&folder=${encodeURIComponent(folderToUse)}`); const data=await r.json(); messages=(data.messages||[]).map(m=>({ uid: Number(m.uid), from: m.from||'', subject: m.subject||'', flags:(m.flags||[]).join(' '), account_id: currentAccount, has_attachments: false })); }
+    filtered=messages; selectedUids.clear(); renderMessages(); }catch(e){ console.error(e);} }
+function filterMessages(){ const q=el('search').value.toLowerCase(); if(el('fast-check')?.checked){ performSearch(); return; } filtered=messages.filter(m=> (m.subject||'').toLowerCase().includes(q) || (m.from||'').toLowerCase().includes(q)); renderMessages(); }
+async function performSearch(before){ const term = el('search').value.trim(); const unread=el('unread-check')?.checked; const att=el('att-check')?.checked; const params=new URLSearchParams(); if(term) params.set('q', term); if(unread) params.set('unread','true'); if(att) params.set('attachments','true'); if(currentAccount) params.set('account_id', currentAccount); params.set('folder', currentFolder); params.set('limit','100'); if(before) params.set('before_uid', before); const r = await fetch(`/search?${params.toString()}`); const data = await r.json(); messages=(data.messages||[]).map(m=>({ uid:Number(m.uid), from:m.from_addr||'', subject:m.subject||'', flags:m.flags||'', account_id:m.account_id, has_attachments: !!m.has_attachments })); filtered=messages; renderMessages(); }
+function loadMore(){ if(!filtered.length) return; const last = filtered[filtered.length-1].uid; performSearch(last); }
+function renderMessages(){
+  el('message-list').className = 'message-list flex flex-col items-stretch divide-y divide-white/5 overflow-y-auto';
+  el('message-list').innerHTML = filtered.length
+    ? filtered.map(m => {
+        const seen = (m.flags||'').includes('\\Seen');
+        const acc = (m.account_id?`<span class=\"badge\">${escapeHtml((m.account_id.split('_')[1]||''))}</span>`:'');
+        const fromRaw = m.from||'';
+        const subjRaw = m.subject||'(No subject)';
+        const fromText = escapeHtml(tryFixUtf8Mojibake(decodeRfc2047(fromRaw)).slice(0,60));
+        const subjectText = escapeHtml(tryFixUtf8Mojibake(decodeRfc2047(subjRaw)));
+        const att = m.has_attachments? `<span class='attachment-chip'>📎</span>` : '';
+        return `<div class=\"message-row ${seen?'':'unread'}\" onclick=\"openMessage(${m.uid},'${m.account_id||currentAccount}')\"><div class='from'>${fromText} ${acc}</div><div class='subject'>${att} ${subjectText}</div><div class='attachments-cell' id='atts-${m.uid}'></div><div class='uid'>${m.uid}</div></div>`;
+      }).join('')
+    : '<div class="empty">Mesaj yok</div>';
+  const pager = el('pager');
+  if (pager) { pager.style.display = filtered.length ? 'block' : 'none'; }
+}
+async function openMessage(uid, accId){ const useAcc = accId || currentAccount; if(!useAcc) return; try{ const folderToUse = await resolveFolderName(useAcc, currentFolder); const r=await fetch(`/test/body/${useAcc}/${uid}?folder=${encodeURIComponent(folderToUse)}`); if(!r.ok){ throw new Error('body fetch failed'); } const body= await r.json();
+  const titleText = tryFixUtf8Mojibake(decodeRfc2047(body.subject||'(No subject)'));
+  const fromMeta = tryFixUtf8Mojibake(decodeRfc2047(body.from||''));
+  const title = `<h3>${escapeHtml(titleText)}</h3>`;
+  const meta = `<div class='small'>From: ${escapeHtml(fromMeta)} | UID: ${uid} | ${escapeHtml(useAcc)}</div><hr>`;
+  if (body.html_body && body.html_body.trim().length > 0) {
+    el('preview').innerHTML = `${title}${meta}
+      <div class='preview-html-container'><iframe id='html-frame' sandbox='allow-scripts allow-popups allow-forms'></iframe></div>
+      <div id='plain-fallback' style='display:none; white-space:pre-wrap; font-size:13px;'>${(body.plain_text||'').replace(/[&<>]/g, s=>({"&":"&amp;","<":"&lt;",
+">":"&gt;"}[s]))}</div>
+      <div class='preview-actions'>
+        <button onclick='showHtml()'>HTML</button>
+        <button onclick='showPlain()'>Düz metin</button>
+      </div>
+      <div id='attachment-list' class='small' style='margin-top:8px'></div>`;
+    const iframe = document.getElementById('html-frame');
+    const shell = `<!doctype html><html><head><base target="_blank"><style>html,body{margin:0;padding:12px;font:14px system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#e5e7eb;background:#0f141c}img,video,iframe{max-width:100%;height:auto}table{max-width:100%;overflow:auto;display:block}a{color:#60a5fa} pre{white-space:pre-wrap}</style></head><body>__CONTENT__</body></html>`;
+    function decodeEntities(s){ const ta=document.createElement('textarea'); ta.innerHTML=s; return ta.value; }
+    let raw = body.html_body || '';
+    if (/&lt;<\/?[a-zA-Z]/.test(raw) && !/<\/?[a-zA-Z]/.test(raw)) { raw = decodeEntities(raw); }
+    let safeHtml = raw
+      .replace(/<(script|style)[^>]*>[\s\S]*?<\/\1>/gi, '')
+      .replace(/<(form|iframe|embed|object)[^>]*>[\s\S]*?<\/\1>/gi, '')
+      .replace(/ on[a-zA-Z]+=\(\"[^\"]*\"|'[^']*'\)/g,'')
+      .replace(/\b(href|src)\s*=\s*"(?:javascript:|data:)[^"]*"/gi, '$1="#"');
+    safeHtml = safeHtml.replace(/src\s*=\s*"cid:([^"]+)"/gi, (m,cid)=>{
+      return `data-cid="${cid}" src="/attachments/download?accountId=${encodeURIComponent(useAcc)}&uid=${uid}&part=${encodeURIComponent(cid)}&folder=${encodeURIComponent(folderToUse)}"`;
+    });
+    iframe.srcdoc = shell.replace('__CONTENT__', safeHtml);
+    window._lastPreviewMode = 'html';
+  } else {
+    el('preview').innerHTML = `${title}${meta}<div style='white-space:pre-wrap;font-size:13px;'>${body.plain_text || '(içerik yok)'}</div><div id='attachment-list' class='small' style='margin-top:8px'></div>`;
+    window._lastPreviewMode = 'plain';
+  }
+  // New: load attachments list
+  loadAttachments(uid, useAcc, folderToUse);
+  // Track opened message for actions
+  window._openMsg = { uid, accId: useAcc, folder: folderToUse };
+  // Auto mark as read when opened
+  await markSeenOnOpen(useAcc, folderToUse, uid);
+  selectedUids.clear(); selectedUids.add(uid);
+} catch(e){ el('preview').innerHTML='<div class="empty">Body alınamadı</div>'; }}
+
+// === Attachments loader ===
+async function loadAttachments(uid, accId, folder){
+  const listEl = document.getElementById('attachment-list');
+  const cellEl = document.getElementById(`atts-${uid}`);
+  if (listEl) listEl.textContent = 'Ekler yükleniyor...';
+  try{
+    const r = await fetch(`/attachments?accountId=${encodeURIComponent(accId)}&uid=${encodeURIComponent(uid)}&folder=${encodeURIComponent(folder)}`);
+    const atts = await r.json();
+    if (!Array.isArray(atts) || atts.length===0){
+      if (listEl) listEl.innerHTML = '<div class="small">Ek yok</div>';
+      if (cellEl) cellEl.innerHTML = '';
+      return;
+    }
+    const chips = atts.map(a=>{
+      const fname = a.filename || (a.content_type || 'dosya');
+      const part = a.part_id || a.part || (a.filename ? a.filename : '1');
+      const href = `/attachments/download?accountId=${encodeURIComponent(accId)}&uid=${encodeURIComponent(uid)}&part=${encodeURIComponent(part)}&folder=${encodeURIComponent(folder)}`;
+      const size = a.size ? ` (${Number(a.size) >= 1024 ? Math.round(Number(a.size)/1024) + ' KB' : a.size+' B'})` : '';
+      return `<a class="attachment-chip" href="${href}" target="_blank" rel="noopener">📎 ${escapeHtml(fname)}${size}</a>`;
+    }).join(' ');
+    if (listEl) listEl.innerHTML = chips;
+    if (cellEl) cellEl.innerHTML = `<span class='attachment-chip'>📎 ${atts.length}</span>`;
+  }catch(_e){
+    if (listEl) listEl.innerHTML = '<div class="small">Ekler alınamadı</div>';
+  }
+}
+
+// === Flags & Delete helpers ===
+async function updateFlags(accId, folder, uid, payload){
+  const res = await fetch(`/messages/${encodeURIComponent(accId)}/${encodeURIComponent(folder)}/${uid}/flags`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+  });
+  return res.ok;
+}
+function updateLocalFlags(accId, uid, opts){
+  // Update in-memory lists
+  for (let arr of [messages, filtered]){
+    if (!Array.isArray(arr)) continue;
+    const m = arr.find(x => Number(x.uid)===Number(uid) && (x.account_id||currentAccount)===accId);
+    if (m){
+      let f = (m.flags||'');
+      if (opts?.seen===true && !f.includes('\\Seen')) f = (f? f+' ' : '') + '\\Seen';
+      if (opts?.deleted===true && !f.includes('\\Deleted')) f = (f? f+' ' : '') + '\\Deleted';
+      m.flags = f;
+      m.has_attachments = m.has_attachments || false;
+    }
+  }
+}
+function markRowSeen(uid){ const row = document.getElementById(`atts-${uid}`)?.closest('.message-row'); if(row) row.classList.remove('unread'); }
+async function markSeenOnOpen(accId, folder, uid){
+  // Skip if already seen in data
+  const m = (filtered||[]).find(x=> Number(x.uid)===Number(uid) && (x.account_id||currentAccount)===accId);
+  if (m && (m.flags||'').includes('\\Seen')) { markRowSeen(uid); return; }
+  const ok = await updateFlags(accId, folder, uid, { seen: true });
+  if (ok){ updateLocalFlags(accId, uid, {seen:true}); markRowSeen(uid); }
+}
+async function markSelectedSeen(){
+  const open = window._openMsg; if(!open){ alert('Önce bir mesaj açın'); return; }
+  const { accId, folder, uid } = open;
+  const ok = await updateFlags(accId, folder, uid, { seen: true });
+  if (ok){ updateLocalFlags(accId, uid, {seen:true}); markRowSeen(uid); }
+}
+async function deleteSelected(){
+  const open = window._openMsg; if(!open){ alert('Önce bir mesaj açın'); return; }
+  const { accId, folder, uid } = open;
+  if (!confirm('Bu mail silinsin mi?')) return;
+  const ok = await updateFlags(accId, folder, uid, { deleted: true, seen: true });
+  if (ok){
+    // Remove from UI lists and rerender
+    messages = (messages||[]).filter(m => !(Number(m.uid)===Number(uid) && (m.account_id||currentAccount)===accId));
+    filtered = (filtered||[]).filter(m => !(Number(m.uid)===Number(uid) && (m.account_id||currentAccount)===accId));
+    renderMessages();
+    el('preview').innerHTML = '<div class="empty">Mesaj silindi</div>';
+    window._openMsg = null;
+  }
+}
+
+// === View helpers for preview ===
+function showHtml(){ const f=document.getElementById('html-frame'); const p=document.getElementById('plain-fallback'); if(f){ f.parentElement.style.display='block'; } if(p){ p.style.display='none'; } }
+function showPlain(){ const f=document.getElementById('html-frame'); const p=document.getElementById('plain-fallback'); if(f){ f.parentElement.style.display='none'; } if(p){ p.style.display='block'; } }
+
+// === Actions ===
+async function syncNow(){ try { if(!currentAccount){ await refreshMessages(); return; } await fetch(`/sync/${encodeURIComponent(currentAccount)}`, { method:'POST' }); await refreshMessages(); } catch(e){ console.error(e); } }
+
+async function addAccountSimple(){
+  const email = el('new-email').value.trim();
+  const password = el('new-pass').value.trim();
+  const imap = el('new-imap').value.trim();
+  const smtp = el('new-smtp').value.trim();
+  const imapPort = Number(el('new-imap-port').value||'993');
+  const smtpPort = Number(el('new-smtp-port').value||'587');
+  if(!email || !password){ el('add-result').textContent = 'email ve şifre gerekli'; return; }
+  const body = { email, password, provider: 'custom', imap_host: imap||undefined, imap_port: imapPort||993, smtp_host: smtp||undefined, smtp_port: smtpPort||587 };
+  try{
+    const r = await fetch('/accounts', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+    const j = await r.json().catch(()=>({}));
+    el('add-result').textContent = j?.message || (r.ok? 'eklendi' : 'eklenemedi');
+    await loadAccounts();
+  }catch(e){ el('add-result').textContent = 'hata'; }
+}
+
+// === Folder resolver ===
+// Maps UI folder name to provider-specific mailbox name if needed.
+// For now pass-through; can be extended using /test/folders response.
+async function resolveFolderName(accountId, folder){
+  return folder;
+}
+
+// Missing: settings summary helper (placeholder)
+function loadSettingsSummary(){ /* no-op placeholder; implement if needed */ }
+
+// === Bootstrap on load ===
+window.addEventListener('DOMContentLoaded', ()=>{
+  try { loadAccounts(); loadFolders(); refreshMessages(); loadSettingsSummary(); } catch(e){ console.error(e); }
+});
 </script>
 </body>
 </html>

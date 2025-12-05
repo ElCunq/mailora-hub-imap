@@ -231,3 +231,57 @@ pub async fn update_last_sync(pool: &SqlitePool, account_id: &str) -> Result<()>
 
     Ok(())
 }
+
+/// Update an existing account (partial). Returns updated Account.
+pub async fn update_account(
+    pool: &SqlitePool,
+    account_id: &str,
+    email: Option<String>,
+    password: Option<String>,
+    provider: Option<EmailProvider>,
+    display_name: Option<Option<String>>,
+    imap_host: Option<String>,
+    imap_port: Option<u16>,
+    smtp_host: Option<String>,
+    smtp_port: Option<u16>,
+    enabled: Option<bool>,
+    append_policy: Option<Option<String>>,
+    sent_folder_hint: Option<Option<String>>,
+) -> Result<Option<Account>> {
+    // Fetch current
+    let current_opt = get_account(pool, account_id).await?;
+    let mut current = match current_opt { Some(c) => c, None => return Ok(None) };
+    // Apply changes in memory
+    if let Some(e) = email { current.email = e; }
+    if let Some(pv) = provider { current.provider = pv; }
+    if let Some(dn_opt) = display_name { current.display_name = dn_opt; }
+    if let Some(ih) = imap_host { current.imap_host = ih; }
+    if let Some(ip) = imap_port { current.imap_port = ip; }
+    if let Some(sh) = smtp_host { current.smtp_host = sh; }
+    if let Some(sp) = smtp_port { current.smtp_port = sp; }
+    if let Some(en) = enabled { current.enabled = en; }
+    if let Some(ap_opt) = append_policy { current.append_policy = ap_opt; }
+    if let Some(sf_opt) = sent_folder_hint { current.sent_folder_hint = sf_opt; }
+    if let Some(pass) = password { current.credentials_encrypted = Account::encode_credentials(&current.email, &pass); current.password = pass; }
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)?.as_secs() as i64;
+    // Persist (use dynamic query to avoid compile-time DB schema checks)
+    sqlx::query(
+        r#"UPDATE accounts SET email = ?, provider = ?, display_name = ?, imap_host = ?, imap_port = ?, smtp_host = ?, smtp_port = ?, credentials_encrypted = ?, enabled = ?, append_policy = ?, sent_folder_hint = ?, updated_at = ? WHERE id = ?"#
+    )
+    .bind(&current.email)
+    .bind(current.provider.as_str())
+    .bind(current.display_name.as_deref())
+    .bind(&current.imap_host)
+    .bind(current.imap_port as i64)
+    .bind(&current.smtp_host)
+    .bind(current.smtp_port as i64)
+    .bind(&current.credentials_encrypted)
+    .bind(if current.enabled {1} else {0})
+    .bind(current.append_policy.as_deref())
+    .bind(current.sent_folder_hint.as_deref())
+    .bind(now)
+    .bind(account_id)
+    .execute(pool)
+    .await?;
+    Ok(Some(current))
+}

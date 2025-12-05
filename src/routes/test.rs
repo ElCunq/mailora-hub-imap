@@ -9,8 +9,6 @@ pub struct SmtpTestRequest {
     pub body: String,
 }
 
-use sqlx::Row; // for try_get when needed
-
 async fn bump_metrics(pool: &SqlitePool, emails: i64, success: i64, pending: i64) {
     let ts = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -186,14 +184,16 @@ pub async fn fetch_messages(
         })?;
 
     let limit = query.limit.unwrap_or(10).min(50); // Max 50 messages
+    let folder = query.folder.as_deref().unwrap_or("INBOX");
 
     tracing::info!(
-        "Fetching {} recent messages for account: {}",
+        "Fetching {} recent messages for account: {} folder: {}",
         limit,
-        account.email
+        account.email,
+        folder
     );
 
-    let messages = imap_test_service::fetch_recent_messages(&account, limit)
+    let messages = imap_test_service::fetch_recent_messages(&account, limit, folder)
         .await
         .map_err(|e| {
             tracing::error!("Failed to fetch messages: {}", e);
@@ -274,7 +274,7 @@ pub async fn fetch_message_body(
     State(pool): State<SqlitePool>,
     Path((account_id, uid)): Path<(String, u32)>,
     Query(query): Query<TestQuery>,
-) -> Result<Json<message_body_service::MessageBody>, (StatusCode, String)> {
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
     let account = account_service::get_account(&pool, &account_id)
         .await
         .map_err(|e| {
@@ -299,14 +299,19 @@ pub async fn fetch_message_body(
     let folder = query.folder.as_deref();
     let body = message_body_service::fetch_message_body(&account, uid, folder, &pool, query.force_refresh.unwrap_or(false))
         .await
-        .map_err(|e| {
-            tracing::error!("Failed to fetch message body: {}", e);
-            (StatusCode::BAD_REQUEST, format!("Fetch failed: {}", e))
-        })?;
-
-    tracing::info!("Fetched message body: {} bytes", body.raw_size);
-
-    Ok(Json(body))
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let resp = serde_json::json!({
+        "uid": body.uid,
+        "folder": body.folder,
+        "subject": body.subject,
+        "from": body.from,
+        "date": body.date,
+        "flags": body.flags,
+        "plain_text": body.plain_text,
+        "html_body": body.html_text,
+        "raw_size": body.raw_size,
+    });
+    Ok(Json(resp))
 }
 
 #[derive(Debug, Serialize)]
@@ -327,6 +332,7 @@ pub struct TestAccountInfo {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(non_snake_case)]
 pub struct SmtpSendAndAppendRequest {
     pub to: String,
     pub subject: String,
@@ -600,3 +606,35 @@ pub async fn metrics_snapshot(State(pool): State<SqlitePool>) -> Json<serde_json
         "finalize_pending": finalize_pending
     }))
 }
+use crate::imap::folders as imap_folders;
+use crate::imap::folders::FolderInfo;
+
+/// GET /test/folders/:account_id - List folders for the account
+pub async fn list_folders(
+    State(pool): State<SqlitePool>,
+    Path(account_id): Path<String>,
+) -> Result<Json<Vec<FolderInfo>>, (StatusCode, String)> {
+    let account = account_service::get_account(&pool, &account_id)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+        .ok_or((StatusCode::NOT_FOUND, "Account not found".to_string()))?;
+
+    // Use stored credentials directly; if encoded, models::account should provide get_credentials
+    let (email, password) = match account.get_credentials() {
+        Ok(v) => v,
+        Err(e) => return Err((StatusCode::INTERNAL_SERVER_ERROR, e.to_string())),
+    };
+
+    let folders = imap_folders::list_mailboxes(
+        &account.imap_host,
+        account.imap_port,
+        &email,
+        &password,
+    )
+    .await
+    .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
+
+    Ok(Json(folders))
+}
+
+fn json_error(code: u16, msg: &str) -> Json<serde_json::Value> { Json(serde_json::json!({"success": false, "code": code, "error": msg})) }
