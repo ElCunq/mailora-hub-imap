@@ -11,11 +11,13 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Create a dummy project to cache dependencies
-RUN cargo new --bin mailora-hub-imap
-WORKDIR /app/mailora-hub-imap
+WORKDIR /app
 COPY Cargo.toml Cargo.lock ./
+RUN mkdir src && \
+    echo "fn main() {println!(\"if you see this, the build broke\")}" > src/main.rs && \
+    echo "" > src/lib.rs
 RUN cargo build --release
-RUN rm src/*.rs
+RUN rm -rf src
 
 # Copy source code
 COPY . .
@@ -36,7 +38,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy binary
-COPY --from=builder /app/mailora-hub-imap/target/release/mailora-hub-imap /usr/local/bin/mailora-hub-imap
+COPY --from=builder /app/target/release/mailora-hub-imap /usr/local/bin/mailora-hub-imap
 
 # Copy static assets and migrations
 COPY static /app/static
