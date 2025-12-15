@@ -14,7 +14,9 @@ RUN apt-get update --allow-releaseinfo-change && apt-get install -y \
 COPY . .
 
 # Build the application
-ENV SQLX_OFFLINE=true
+# ENV SQLX_OFFLINE=true
+RUN cargo install sqlx-cli --no-default-features --features native-tls,sqlite
+RUN cargo sqlx prepare
 RUN cargo build --release
 
 # Runtime stage
