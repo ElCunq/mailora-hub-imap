@@ -4,7 +4,7 @@ FROM rust:1.81-slim-bookworm as builder
 WORKDIR /app
 
 # Install build dependencies
-RUN apt-get update && apt-get install -y \
+RUN apt-get update --allow-releaseinfo-change && apt-get install -y \
     pkg-config \
     libssl-dev \
     libsqlite3-dev \
