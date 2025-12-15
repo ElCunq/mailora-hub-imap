@@ -10,19 +10,11 @@ RUN apt-get update --allow-releaseinfo-change && apt-get install -y \
     libsqlite3-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Create a dummy project to cache dependencies
-WORKDIR /app
-COPY Cargo.toml Cargo.lock ./
-RUN mkdir src && \
-    echo "fn main() {println!(\"if you see this, the build broke\")}" > src/main.rs && \
-    echo "" > src/lib.rs
-RUN cargo build --release
-RUN rm -rf src
-
 # Copy source code
 COPY . .
-# Touch main.rs to force rebuild
-RUN touch src/main.rs
+
+# Build the application
+ENV SQLX_OFFLINE=true
 RUN cargo build --release
 
 # Runtime stage
