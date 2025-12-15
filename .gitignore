@@ -27,4 +27,4 @@ accounts_state.json
 Thumbs.db
 
 # Build artifacts
-Cargo.lock
+
