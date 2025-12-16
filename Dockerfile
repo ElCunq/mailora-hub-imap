@@ -1,5 +1,5 @@
 # Build stage
-FROM rust:1.81-slim-bookworm as builder
+FROM rust:slim-bookworm as builder
 
 WORKDIR /app
 
@@ -17,7 +17,7 @@ COPY . .
 ENV SQLX_OFFLINE=true
 # RUN cargo install sqlx-cli --no-default-features --features native-tls,sqlite
 # RUN cargo sqlx prepare
-RUN cargo build --release
+RUN cargo build --release --jobs 1
 
 # Runtime stage
 FROM debian:bookworm-slim

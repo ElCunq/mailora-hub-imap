@@ -17,7 +17,7 @@ native-tls = "0.2"
 tokio-native-tls = "0.3"
 lettre = { version = "0.11", default-features = false, features = ["builder", "smtp-transport", "rustls-tls"] }
 # Database
-sqlx = { version = "0.7", features=["sqlite","runtime-tokio","macros"] }
+sqlx = { version = "0.8", features=["sqlite","runtime-tokio","macros"] }
 # Misc utilities
 base64 = "0.21"
 tracing = "0.1"
