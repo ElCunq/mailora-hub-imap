@@ -3,22 +3,25 @@
 ## Stack
 - **Backend**: Rust with Axum web framework
 - **IMAP Client**: async-imap crate for direct connections
-- **SMTP Client**: lettre crate (TODO)
-- **Database**: SQLite (accounts, messages, cache)
+- **SMTP Client**: lettre crate
+- **Database**: SQLite (accounts, messages, cache, attachments)
 - **Async Runtime**: Tokio for concurrent connections
 - **Frontend**: Vanilla HTML/CSS/JavaScript (no framework)
 - **API**: REST (no JMAP/Stalwart dependency)
+- **Containerization**: Docker, Docker Compose
 
 ## Key Dependencies
 ```toml
 async-imap = "0.10"           # IMAP client
-lettre = "0.11"               # SMTP client (TODO)
+lettre = "0.11"               # SMTP client
 sqlx = "0.8"                  # SQLite async driver
 tokio = "1"                   # Async runtime
 axum = "0.7"                  # Web framework
 tower-http = "0.5"            # Static file serving
 serde = "1.0"                 # JSON serialization
 base64 = "0.22"               # Credential encoding
+mailparse = "0.14"            # MIME parsing
+ammonia = "4"                 # HTML sanitization
 ```
 
 ## Database Schema

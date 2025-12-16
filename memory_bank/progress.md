@@ -69,20 +69,29 @@ Kısa vadeli odak (Faz 1)
 ## 2025-11-06
 - Implemented background finalize with retry (10s x 6) and Gmail-specific raw search. Gmail UID may still be pending within first minute; documented in KNOWN_ISSUES.md. Proceeding to next milestone.
 
-## 2025-11-10 – v0.2.1 unified inbox & minimal istemci
-- Unified folder-based inbox endpoint `/unified/inbox` (folder param + unread filter).
-- Background scheduler + initial startup sync (non-Gmail) eklendi.
-- Body cache TTL + kapasite GC tamamlandı (tablo: `message_bodies`).
-- Append policy (auto/never/force) UI testleri ve API güncelleme endpoint’i.
-- Basit 3-panelli web istemci (`static/app.html`): hesap ekle, klasör seç, unified toggle, mesaj listesi, önizleme, compose & gönder.
-- Flags update route ek insert fallback ile tutarlılık sağlıyor.
-- Gmail senaryoları ve kalıcı finalize kuyrukları ertelendi.
+## 2025-12-05 – v0.3.0 branch, Ekler ve UI İyileştirmeleri
+- **Ek Yönetimi:**
+  - `attachments` tablosu genişletildi (`content_id`, `is_inline`, `data`).
+  - `backfill` mekanizması ile eski mesajların ekleri tarandı.
+  - RFC 2231/2047 dosya adı desteği ve inline görsel (CID) desteği eklendi.
+- **UI:**
+  - Sandbox uyarıları giderildi.
+  - Eksik fonksiyonlar eklendi, okundu/silindi işaretleme düzeltildi.
+- **Derleme:** Tüm Rust uyarıları temizlendi.
+
+## 2025-12-16 – v1.0.0 branch, Docker ve Dokümantasyon
+- **Docker:**
+  - `Dockerfile` (Multi-stage build, sqlx-cli entegrasyonu).
+  - `docker-compose.yml` (SQLite volume, port 3030).
+  - `.dockerignore` eklendi.
+- **Dokümantasyon:**
+  - `PROJECT_MASTER_REPORT.md` (Proje özeti ve durumu).
+  - `MAILORA_HUB_IMAP_DOCUMENTATION.md` (Teknik detaylar).
+- **Deployment:** Coolify üzerinde çalışacak şekilde yapılandırıldı.
 
 ### Kalanlar (özet)
-- Attachments işleme & indirme
-- Unified arama (subject/from/to/date, unread)
+- Unified arama (FTS)
 - Kalıcı sent finalize & outbox kuyruğu
 - Hata zarfı standardizasyonu
 - Metrics sayaç doğruluğu
 - Index optimizasyonları
-- Scheduler backoff/jitter ve IDLE yeniden bağlanma
