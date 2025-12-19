@@ -12,7 +12,7 @@ fn imap_timeout() -> Duration {
     let secs = std::env::var("MAILORA_IMAP_TIMEOUT_SECS")
         .ok()
         .and_then(|v| v.parse::<u64>().ok())
-        .unwrap_or(15);
+        .unwrap_or(60);
     Duration::from_secs(secs)
 }
 

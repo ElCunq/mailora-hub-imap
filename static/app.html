@@ -312,7 +312,56 @@ function showHtml(){ const f=document.getElementById('html-frame'); const p=docu
 function showPlain(){ const f=document.getElementById('html-frame'); const p=document.getElementById('plain-fallback'); if(f){ f.parentElement.style.display='none'; } if(p){ p.style.display='block'; } }
 
 // === Actions ===
-async function syncNow(){ try { if(!currentAccount){ await refreshMessages(); return; } await fetch(`/sync/${encodeURIComponent(currentAccount)}`, { method:'POST' }); await refreshMessages(); } catch(e){ console.error(e); } }
+async function syncNow(){
+  const btn = document.querySelector('button[onclick="syncNow()"]');
+  if(btn) { btn.textContent = 'Sync...'; btn.disabled = true; }
+  try {
+    if(!currentAccount){ await refreshMessages(); return; }
+    const r = await fetch(`/sync/${encodeURIComponent(currentAccount)}`, { method:'POST' });
+    if(!r.ok){
+      const txt = await r.text();
+      console.error('Sync failed:', txt);
+      alert('Sync failed: ' + txt);
+    }
+    await refreshMessages();
+  } catch(e){
+    console.error(e);
+    alert('Sync error: ' + e);
+  } finally {
+    if(btn) { btn.textContent = 'Sync'; btn.disabled = false; }
+  }
+}
+
+async function sendMail(){
+  const to = el('compose-to').value.trim();
+  const subject = el('compose-subject').value.trim();
+  const body = el('compose-body').value;
+  const resEl = el('send-result');
+  
+  if(!to || !subject){ resEl.textContent = 'Kime ve Konu gerekli'; return; }
+  if(!currentAccount){ resEl.textContent = 'Hesap seçili değil'; return; }
+  
+  resEl.textContent = 'Gönderiliyor...';
+  try {
+    const r = await fetch('/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accountId: currentAccount, to, subject, body })
+    });
+    const j = await r.json();
+    if(j.ok){
+      resEl.textContent = 'Gönderildi!';
+      el('compose-to').value = '';
+      el('compose-subject').value = '';
+      el('compose-body').value = '';
+    } else {
+      resEl.textContent = 'Hata: ' + (j.error || 'Bilinmeyen hata');
+    }
+  } catch(e){
+    resEl.textContent = 'Ağ hatası';
+    console.error(e);
+  }
+}
 
 async function addAccountSimple(){
   const email = el('new-email').value.trim();

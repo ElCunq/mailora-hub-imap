@@ -17,6 +17,35 @@ impl Database {
     }
 }
 
+pub async fn check_and_fix_schema(pool: &SqlitePool) -> Result<()> {
+    // Check if `accounts` exists and has `provider` column
+    // logic: try to select provider from accounts limit 1
+    // if error contains "no such column", then we have the legacy schema.
+    let check = sqlx::query("SELECT provider FROM accounts LIMIT 1").fetch_optional(pool).await;
+    match check {
+        Err(e) => {
+            let msg = e.to_string();
+            if msg.contains("no such column") {
+                tracing::warn!("Detected legacy schema (missing provider column). Backing up and cleaning for migration.");
+                let ts = now_epoch();
+                let backup_name = format!("accounts_backup_legacy_{}", ts);
+                let sql = format!("ALTER TABLE accounts RENAME TO {}", backup_name);
+                sqlx::query(&sql).execute(pool).await?;
+                tracing::info!("Renamed broken accounts table to {}", backup_name);
+            } else if msg.contains("no such table") {
+                // Table doesn't exist, fresh install, ignore
+            } else {
+                // Other error, let it propagate? Or ignore?
+                tracing::warn!("Schema check warning: {}", msg);
+            }
+        }
+        Ok(_) => {
+            // Success means column exists, or table empty but column exists
+        }
+    }
+    Ok(())
+}
+
 fn tokenize_sql_statements(sql: &str) -> Vec<String> {
     // Tokenize SQL into statements, preserving CREATE TRIGGER ... END; blocks
     let mut stmts: Vec<String> = Vec::new();

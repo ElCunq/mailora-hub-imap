@@ -2,6 +2,7 @@ pub mod jmap_proxy;
 use crate::persist;
 use crate::services::diff_service::AccountCreds;
 use crate::services::diff_service::ACCOUNTS; // add account store
+use axum::extract::State;
 use axum::response::{Html, IntoResponse};
 use axum::{http::StatusCode, Json};
 use axum::{
@@ -123,29 +124,56 @@ struct SendResp {
     ok: bool,
 }
 
-async fn send_action(AxumJson(req): AxumJson<SendReq>) -> impl IntoResponse {
-    let creds_opt = {
-        let store = ACCOUNTS.read().await;
-        store.get(&req.accountId).cloned()
+async fn send_action(
+    State(pool): State<sqlx::SqlitePool>,
+    AxumJson(req): AxumJson<SendReq>
+) -> impl IntoResponse {
+    // Try to find account in DB
+    let account_res = sqlx::query_as::<_, crate::models::account::Account>("SELECT * FROM accounts WHERE id = ?")
+        .bind(&req.accountId)
+        .fetch_optional(&pool)
+        .await;
+
+    let account = match account_res {
+        Ok(Some(acc)) => match acc.with_password() {
+            Ok(a) => a,
+            Err(e) => return AxumJson(serde_json::json!({"ok": false, "error": format!("Decrypt error: {}", e)})).into_response(),
+        },
+        Ok(None) => {
+            // Fallback to legacy ACCOUNTS store for backward compatibility (if any)
+            let creds_opt = {
+                let store = ACCOUNTS.read().await;
+                store.get(&req.accountId).cloned()
+            };
+            if let Some(creds) = creds_opt {
+                // Construct a temporary Account object or just use creds directly
+                // Since send_simple takes host/port/user/pass, we can just use those.
+                let smtp_host = std::env::var("SMTP_HOST").unwrap_or_else(|_| "smtp.gmail.com".into());
+                let smtp_port = std::env::var("SMTP_PORT").ok().and_then(|p| p.parse::<u16>().ok()).unwrap_or(587);
+                match crate::smtp::send_simple(
+                    &smtp_host,
+                    smtp_port,
+                    &creds.email,
+                    &creds.password,
+                    &req.to,
+                    &req.subject,
+                    &req.body,
+                ) {
+                    Ok(_) => return AxumJson(serde_json::json!({"ok": true})).into_response(),
+                    Err(e) => return AxumJson(serde_json::json!({"ok": false, "error": e.to_string()})).into_response(),
+                }
+            }
+            return AxumJson(serde_json::json!({"ok": false, "error": "account not found"})).into_response();
+        }
+        Err(e) => return AxumJson(serde_json::json!({"ok": false, "error": e.to_string()})).into_response(),
     };
-    if creds_opt.is_none() {
-        return AxumJson(serde_json::json!({"ok": false, "error": "account not found"})).into_response();
-    }
-    // Simple SMTP send using lettre; fallback to env SMTP if not available
-    let smtp_host = std::env::var("SMTP_HOST").unwrap_or_else(|_| "smtp.gmail.com".into());
-    let smtp_user = std::env::var("SMTP_USERNAME")
-        .unwrap_or_else(|_| creds_opt.as_ref().unwrap().email.clone());
-    let smtp_pass = std::env::var("SMTP_PASSWORD")
-        .unwrap_or_else(|_| creds_opt.as_ref().unwrap().password.clone());
-    let smtp_port = std::env::var("SMTP_PORT")
-        .ok()
-        .and_then(|p| p.parse::<u16>().ok())
-        .unwrap_or(587);
+
+    // Use account settings
     match crate::smtp::send_simple(
-        &smtp_host,
-        smtp_port,
-        &smtp_user,
-        &smtp_pass,
+        &account.smtp_host,
+        account.smtp_port,
+        &account.email,
+        &account.password,
         &req.to,
         &req.subject,
         &req.body,

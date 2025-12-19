@@ -65,6 +65,12 @@ async fn main() -> Result<()> {
             if !path.exists() { std::fs::File::create(&path).ok(); }
         }
         let pool = sqlx::SqlitePool::connect(&db_url).await?;
+        
+        // Check for broken schema (legacy) and fix if needed
+        if let Err(e) = db::check_and_fix_schema(&pool).await {
+            tracing::warn!("schema fix failed: {e}");
+        }
+
         if let Err(e) = db::run_migrations(&pool).await {
             // Ignore common "already exists" failures, log as info
             let msg = e.to_string();
