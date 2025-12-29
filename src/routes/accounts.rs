@@ -5,7 +5,9 @@ pub struct AddAccountResponse {
     pub message: String,
 }
 /// POST /accounts - Add a new email account
+#[debug_handler]
 pub async fn add_account(
+    auth: AuthUser,
     State(pool): State<SqlitePool>,
     Json(req): Json<AddAccountRequest>,
 ) -> Json<AddAccountResponse> {
@@ -48,6 +50,14 @@ pub async fn add_account(
     {
         Ok(account) => {
             tracing::info!("Account added: {}", account.email);
+            // If it's a Member adding an account, automatically assign it to them
+            if auth.role != "Admin" {
+                let _ = sqlx::query("INSERT INTO user_accounts (user_id, account_id) VALUES (?, ?)")
+                    .bind(auth.id)
+                    .bind(&account.id)
+                    .execute(&pool)
+                    .await;
+            }
             Json(AddAccountResponse {
                 success: true,
                 account_id: account.id,
@@ -101,7 +111,9 @@ use axum::{
     extract::{Path, State},
     http::StatusCode,
     Json,
+    debug_handler,
 };
+use crate::rbac::AuthUser;
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
 
@@ -227,13 +239,31 @@ async fn add_oauth_account(
     })
 }
 
-/// GET /accounts - List all accounts
+/// GET /accounts - List accounts visible to the user
+#[debug_handler]
 pub async fn list_accounts(
+    auth: AuthUser,
     State(pool): State<SqlitePool>,
 ) -> Result<Json<Vec<AccountResponse>>, StatusCode> {
-    match account_service::list_accounts(&pool).await {
-        Ok(accounts) => {
-            let response: Vec<AccountResponse> = accounts.into_iter().map(Into::into).collect();
+    let accounts = if auth.role == "Admin" {
+        account_service::list_accounts(&pool).await
+    } else {
+        // Filter for assigned accounts
+        sqlx::query_as::<_, Account>(
+            "SELECT a.* FROM accounts a JOIN user_accounts ua ON a.id = ua.account_id WHERE ua.user_id = ?"
+        )
+        .bind(auth.id)
+        .fetch_all(&pool)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to list user accounts: {}", e);
+            anyhow::anyhow!(e)
+        })
+    };
+
+    match accounts {
+        Ok(accs) => {
+            let response: Vec<AccountResponse> = accs.into_iter().map(Into::into).collect();
             Ok(Json(response))
         }
         Err(e) => {
@@ -243,11 +273,34 @@ pub async fn list_accounts(
     }
 }
 
+async fn check_account_access(
+    pool: &SqlitePool,
+    auth: &AuthUser,
+    account_id: &str,
+) -> Result<bool, sqlx::Error> {
+    if auth.role == "Admin" {
+        return Ok(true);
+    }
+    let exists: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM user_accounts WHERE user_id = ? AND account_id = ?)"
+    )
+    .bind(auth.id)
+    .bind(account_id)
+    .fetch_one(pool)
+    .await?;
+    Ok(exists)
+}
+
 /// GET /accounts/:id - Get account by ID
 pub async fn get_account(
+    auth: AuthUser,
     State(pool): State<SqlitePool>,
     Path(account_id): Path<String>,
 ) -> Result<Json<AccountResponse>, StatusCode> {
+    if !check_account_access(&pool, &auth, &account_id).await.unwrap_or(false) {
+        return Err(StatusCode::FORBIDDEN);
+    }
+
     match account_service::get_account(&pool, &account_id).await {
         Ok(Some(account)) => Ok(Json(account.into())),
         Ok(None) => Err(StatusCode::NOT_FOUND),
@@ -260,12 +313,20 @@ pub async fn get_account(
 
 /// DELETE /accounts/:id - Delete account
 pub async fn delete_account(
+    auth: AuthUser,
     State(pool): State<SqlitePool>,
     Path(account_id): Path<String>,
 ) -> Result<StatusCode, StatusCode> {
+    if auth.role != "Admin" {
+        // Standard users probably shouldn't delete accounts, or only their assigned ones?
+        // Let's say only Admin can delete global account entities for now to keep it safe.
+        return Err(StatusCode::FORBIDDEN);
+    }
+
     match account_service::delete_account(&pool, &account_id).await {
         Ok(true) => {
             tracing::info!("Account deleted: {}", account_id);
+            crate::rbac::log_event(&pool, Some(auth.id), Some(&account_id), "DELETE_ACCOUNT", "Account deleted by admin").await;
             Ok(StatusCode::NO_CONTENT)
         }
         Ok(false) => Err(StatusCode::NOT_FOUND),
@@ -333,21 +394,25 @@ pub struct PatchAccountRequest {
 
 /// PATCH /accounts/:id - Update mutable account settings
 pub async fn patch_account(
+    auth: AuthUser,
     State(pool): State<SqlitePool>,
     Path(account_id): Path<String>,
     Json(req): Json<PatchAccountRequest>,
-) -> Result<Json<AccountResponse>, StatusCode> {
+) -> Json<UpdateAccountResponse> {
+    if !check_account_access(&pool, &auth, &account_id).await.unwrap_or(false) {
+        return Json(UpdateAccountResponse { success: false, account: None, error: Some("Forbidden".into()) });
+    }
     // Load existing
     let existing = match account_service::get_account(&pool, &account_id).await {
         Ok(Some(acc)) => acc,
-        Ok(None) => return Err(StatusCode::NOT_FOUND),
-        Err(_) => return Err(StatusCode::INTERNAL_SERVER_ERROR),
+        Ok(None) => return Json(UpdateAccountResponse { success: false, account: None, error: Some("Account not found".to_string()) }),
+        Err(e) => return Json(UpdateAccountResponse { success: false, account: None, error: Some(e.to_string()) }),
     };
     // Validate append_policy if provided
     if let Some(ref ap) = req.append_policy {
         let v = ap.to_lowercase();
         if !["auto","never","force"].contains(&v.as_str()) {
-            return Err(StatusCode::BAD_REQUEST);
+             return Json(UpdateAccountResponse { success: false, account: None, error: Some("Invalid append_policy".to_string()) });
         }
     }
     // Determine new values (fallback to existing)
@@ -383,12 +448,15 @@ pub async fn patch_account(
     .bind(&account_id)
     .execute(&pool)
     .await;
-    if res.is_err() { return Err(StatusCode::INTERNAL_SERVER_ERROR); }
+    
+    if let Err(e) = res {
+         return Json(UpdateAccountResponse { success: false, account: None, error: Some(e.to_string()) });
+    }
 
     // Reload updated account
     let updated = match account_service::get_account(&pool, &account_id).await {
         Ok(Some(acc)) => acc,
-        _ => return Err(StatusCode::INTERNAL_SERVER_ERROR),
+        _ => return Json(UpdateAccountResponse { success: false, account: None, error: Some("Failed to reload account".to_string()) }),
     };
 
     // If in-memory creds exist update them (host/port/password changes)
@@ -410,5 +478,5 @@ pub async fn patch_account(
         }
     }
 
-    Ok(Json(updated.into()))
+    Json(UpdateAccountResponse { success: true, account: Some(updated.into()), error: None })
 }

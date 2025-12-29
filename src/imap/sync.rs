@@ -6,6 +6,7 @@ use serde::Serialize;
 use tokio::net::TcpStream;
 use tokio_native_tls::native_tls::TlsConnector;
 use tokio_util::compat::TokioAsyncReadCompatExt;
+use mail_parser::MimeHeaders;
 
 #[derive(Debug, Serialize)]
 pub struct NewMessageMeta {
@@ -372,27 +373,7 @@ pub async fn fetch_message_body_in(
         // If ENVELOPE missing, try header fields from raw
         if subject.is_empty() || from.is_empty() || date.is_none() {
             if let Some(full) = raw_full.as_ref() {
-                if let Ok(parsed) = mailparse::parse_mail(full) {
-                    // Subject
-                    if subject.is_empty() {
-                        if let Some(h) = parsed.headers.iter().find(|h| h.get_key_ref().eq_ignore_ascii_case("Subject")) {
-                            subject = h.get_value().trim().to_string();
-                        }
-                    }
-                    // From
-                    if from.is_empty() {
-                        if let Some(h) = parsed.headers.iter().find(|h| h.get_key_ref().eq_ignore_ascii_case("From")) {
-                            from = h.get_value().trim().to_string();
-                        }
-                    }
-                    // Date
-                    if date.is_none() {
-                        if let Some(h) = parsed.headers.iter().find(|h| h.get_key_ref().eq_ignore_ascii_case("Date")) {
-                            let v = h.get_value().trim().to_string();
-                            if !v.is_empty() { date = Some(v); }
-                        }
-                    }
-                }
+
             }
         }
         let mut body_text = String::new();
@@ -404,29 +385,42 @@ pub async fn fetch_message_body_in(
             tracing::debug!(%folder, uid, section=%chosen, len=s.len(), "body_in: got body");
             body_text = s;
         }
-        // MIME parse for HTML (prefer full raw message if available)
+        // MIME parse for Header Fallback + HTML/Text Body
         if let Some(full) = raw_full {
-            if full.len() <= 512_000 { // safety cap
-                if let Ok(parsed) = mailparse::parse_mail(&full) {
-                    fn walk(parts: &mailparse::ParsedMail, plain: &mut Option<String>, html: &mut Option<String>) {
-                        let ctype = parts.ctype.mimetype.to_lowercase();
-                        if (ctype == "text/plain" || ctype == "text/html") && (parts.subparts.is_empty()) {
-                            if let Ok(b) = parts.get_body() {
-                                if ctype == "text/plain" && plain.is_none() { *plain = Some(b); }
-                                else if ctype == "text/html" && html.is_none() { *html = Some(b); }
-                            }
-                        }
-                        for sp in &parts.subparts { walk(sp, plain, html); }
-                    }
-                    let mut plain: Option<String> = None; let mut html: Option<String> = None;
-                    walk(&parsed, &mut plain, &mut html);
-                    if let Some(p) = plain { if body_text.is_empty() { body_text = p; } }
-                    if let Some(h) = html {
-                        let mut h2 = h;
-                        if h2.len() > 16000 { h2.truncate(16000); h2.push_str("\n...[html truncated]..."); }
-                        html_opt = Some(h2);
-                    }
-                }
+            if full.len() <= 50_000_000 { // safety cap 50MB
+                 if let Some(message) = mail_parser::Message::parse(&full) {
+                     // 1. Header Fallback
+                     if subject.is_empty() { subject = message.subject().unwrap_or("").to_string(); }
+                     if from.is_empty() { 
+                         match message.from() {
+                             mail_parser::HeaderValue::Address(addr) => {
+                                 from = addr.address.as_deref().unwrap_or("").to_string();
+                             }
+                             mail_parser::HeaderValue::AddressList(list) => {
+                                 if let Some(first) = list.first() {
+                                     from = first.address.as_deref().unwrap_or("").to_string();
+                                 }
+                             }
+                             _ => {}
+                         }
+                     }
+                     if date.is_none() { 
+                         if let Some(dt) = message.date() {
+                             date = Some(dt.to_rfc3339());
+                         }
+                     }
+
+                     // 2. Body Extraction
+                     if let Some(text) = message.body_text(0) {
+                         body_text = text.into_owned();
+                     }
+                     if let Some(html) = message.body_html(0) {
+                         let mut h2 = html.into_owned();
+                         // Safety truncate logic
+                         if h2.len() > 5_000_000 { h2.truncate(5_000_000); h2.push_str("\n...[html truncated]..."); }
+                         html_opt = Some(h2);
+                     }
+                 }
             }
         }
         let _ = session.logout().await;
@@ -524,27 +518,7 @@ pub async fn fetch_message_body_in(
         // If ENVELOPE missing, try header fields from raw
         if subject.is_empty() || from.is_empty() || date.is_none() {
             if let Some(full) = raw_full.as_ref() {
-                if let Ok(parsed) = mailparse::parse_mail(full) {
-                    // Subject
-                    if subject.is_empty() {
-                        if let Some(h) = parsed.headers.iter().find(|h| h.get_key_ref().eq_ignore_ascii_case("Subject")) {
-                            subject = h.get_value().trim().to_string();
-                        }
-                    }
-                    // From
-                    if from.is_empty() {
-                        if let Some(h) = parsed.headers.iter().find(|h| h.get_key_ref().eq_ignore_ascii_case("From")) {
-                            from = h.get_value().trim().to_string();
-                        }
-                    }
-                    // Date
-                    if date.is_none() {
-                        if let Some(h) = parsed.headers.iter().find(|h| h.get_key_ref().eq_ignore_ascii_case("Date")) {
-                            let v = h.get_value().trim().to_string();
-                            if !v.is_empty() { date = Some(v); }
-                        }
-                    }
-                }
+
             }
         }
         let mut body_text = String::new();
@@ -556,29 +530,42 @@ pub async fn fetch_message_body_in(
             tracing::debug!(%folder, uid, section=%chosen, len=s.len(), "body_in: got body");
             body_text = s;
         }
-        // MIME parse for HTML (prefer full raw message if available)
+        // MIME parse for Header Fallback + HTML/Text Body
         if let Some(full) = raw_full {
-            if full.len() <= 512_000 { // safety cap
-                if let Ok(parsed) = mailparse::parse_mail(&full) {
-                    fn walk(parts: &mailparse::ParsedMail, plain: &mut Option<String>, html: &mut Option<String>) {
-                        let ctype = parts.ctype.mimetype.to_lowercase();
-                        if (ctype == "text/plain" || ctype == "text/html") && (parts.subparts.is_empty()) {
-                            if let Ok(b) = parts.get_body() {
-                                if ctype == "text/plain" && plain.is_none() { *plain = Some(b); }
-                                else if ctype == "text/html" && html.is_none() { *html = Some(b); }
-                            }
-                        }
-                        for sp in &parts.subparts { walk(sp, plain, html); }
-                    }
-                    let mut plain: Option<String> = None; let mut html: Option<String> = None;
-                    walk(&parsed, &mut plain, &mut html);
-                    if let Some(p) = plain { if body_text.is_empty() { body_text = p; } }
-                    if let Some(h) = html {
-                        let mut h2 = h;
-                        if h2.len() > 16000 { h2.truncate(16000); h2.push_str("\n...[html truncated]..."); }
-                        html_opt = Some(h2);
-                    }
-                }
+            if full.len() <= 50_000_000 { // safety cap 50MB
+                 if let Some(message) = mail_parser::Message::parse(&full) {
+                     // 1. Header Fallback
+                     if subject.is_empty() { subject = message.subject().unwrap_or("").to_string(); }
+                     if from.is_empty() { 
+                         match message.from() {
+                             mail_parser::HeaderValue::Address(addr) => {
+                                 from = addr.address.as_deref().unwrap_or("").to_string();
+                             }
+                             mail_parser::HeaderValue::AddressList(list) => {
+                                 if let Some(first) = list.first() {
+                                     from = first.address.as_deref().unwrap_or("").to_string();
+                                 }
+                             }
+                             _ => {}
+                         }
+                     }
+                     if date.is_none() { 
+                         if let Some(dt) = message.date() {
+                             date = Some(dt.to_rfc3339());
+                         }
+                     }
+
+                     // 2. Body Extraction
+                     if let Some(text) = message.body_text(0) {
+                         body_text = text.into_owned();
+                     }
+                     if let Some(html) = message.body_html(0) {
+                         let mut h2 = html.into_owned();
+                         // Safety truncate logic
+                         if h2.len() > 5_000_000 { h2.truncate(5_000_000); h2.push_str("\n...[html truncated]..."); }
+                         html_opt = Some(h2);
+                     }
+                 }
             }
         }
         let _ = session.logout().await;
@@ -606,8 +593,12 @@ fn format_address(a: &async_imap::imap_proto::Address<'_>) -> String {
 }
 
 pub(crate) fn decode_subject(raw: &[u8]) -> String {
-    let mut composed = b"Subject: ".to_vec(); composed.extend_from_slice(raw);
-    match mailparse::parse_header(&composed) { Ok((h,_)) => h.get_value().trim().to_string(), Err(_) => String::from_utf8_lossy(raw).trim().to_string() }
+    let mut composed = b"Subject: ".to_vec(); composed.extend_from_slice(raw); composed.extend_from_slice(b"\r\n\r\n");
+    if let Some(msg) = mail_parser::Message::parse(&composed) {
+        msg.subject().unwrap_or("").to_string()
+    } else {
+        String::from_utf8_lossy(raw).trim().to_string()
+    }
 }
 
 pub async fn list_attachments(
@@ -641,62 +632,72 @@ pub async fn list_attachments(
     let _ = session.logout().await;
     let mut out = Vec::new();
     let raw = match raw { Some(r) => r, None => return Ok(out) };
-    // Increase cap to handle larger emails with attachments
-    if raw.len() > 15_000_000 {
+    // Increase cap to handle larger emails with attachments (50MB)
+    if raw.len() > 50_000_000 {
         tracing::debug!(uid, folder=%folder, size=raw.len(), "list_attachments: raw too large, skipping parse");
         return Ok(out);
     }
-    if let Ok(parsed) = mailparse::parse_mail(&raw) {
-        fn walk(pm: &mailparse::ParsedMail, prefix: &str, out: &mut Vec<AttachmentMeta>, uid: u32) {
-            if pm.subparts.is_empty() {
-                let ctype = pm.ctype.mimetype.to_lowercase();
-                let (fname, disp, _cid) = extract_filename_from_headers(&pm.headers);
-                let is_multipart = ctype.starts_with("multipart/");
-                let is_textual = ctype == "text/plain" || ctype == "text/html";
-                let has_name = fname.as_deref().map(|s| !s.is_empty()).unwrap_or(false);
-                let disp_is_attachment = disp.as_deref().map(|d| d.eq_ignore_ascii_case("attachment")).unwrap_or(false);
-                let disp_is_inline = disp.as_deref().map(|d| d.eq_ignore_ascii_case("inline")).unwrap_or(false);
-                let treat_as_attachment =
-                    (disp_is_attachment) ||
-                    (disp_is_inline && has_name) ||
-                    (!is_multipart && (has_name || !is_textual));
-                if treat_as_attachment {
-                    out.push(AttachmentMeta {
-                        uid,
-                        part_id: prefix.to_string(),
-                        filename: fname,
-                        content_type: Some(ctype),
-                        size: Some(pm.get_body_raw().map(|b| b.len() as u64).unwrap_or(0)),
-                    });
-                }
-                return;
+
+    // Refactored to use mail-parser for robust MIME handling
+    if let Some(message) = mail_parser::Message::parse(&raw) {
+        tracing::info!(uid, folder=%folder, "list_attachments: parsed successfully");
+        let mut idx = 1;
+        // Use parts iteration
+        // Use parts iteration
+        for (part_idx, part) in message.parts.iter().enumerate() {
+            let ctype = part.content_type();
+            let c_type = ctype.map(|c| c.c_type.as_ref()).unwrap_or("application");
+            let subtype = ctype.and_then(|c| c.subtype()).unwrap_or("");
+            
+            // Skip structural parts
+            if c_type == "multipart" { 
+                tracing::debug!(uid, part_idx, "list_attachments: skipping multipart container");
+                continue; 
             }
-            for (idx, sp) in pm.subparts.iter().enumerate() {
-                let part_id = if prefix.is_empty() { format!("{}", idx+1) } else { format!("{}.{}", prefix, idx+1) };
-                walk(sp, &part_id, out, uid);
+
+            let is_body = c_type == "text" && (subtype == "plain" || subtype == "html");
+            let has_filename = part.attachment_name().is_some();
+            let has_cid = part.content_id().is_some();
+            let is_inline = part.content_disposition().map(|cd| cd.c_type.eq_ignore_ascii_case("inline")).unwrap_or(false);
+            
+            let ctype_full = format!("{}/{}", c_type, subtype);
+            let is_media = c_type == "image" || c_type == "video" || c_type == "audio" || c_type == "application";
+
+            tracing::info!(
+                uid, part_idx, 
+                is_body, has_filename, has_cid, is_inline, ?ctype_full, 
+                "list_attachments: inspecting part"
+            );
+
+            // Logic:
+            // 1. If it has a filename, it's an attachment (likely).
+            // 2. If it's media (image/pdf/etc) and NOT explicitly marked as a purely structure body (unlikely for application/pdf), include it.
+            // 3. Explicitly exclude text/plain and text/html bodies unless they have a filename.
+            if has_filename || (is_media && !is_body) {
+                 let fname = part.attachment_name().map(|s| s.to_string()).unwrap_or_else(|| {
+                     let ext = match subtype {
+                         "jpeg" => "jpg",
+                         "png" => "png",
+                         "gif" => "gif",
+                         "pdf" => "pdf",
+                         _ => "bin"
+                     };
+                     format!("unnamed_{}.{}", idx, ext)
+                 });
+
+                 out.push(AttachmentMeta {
+                    uid,
+                    part_id: format!("{}", idx), 
+                    filename: Some(fname),
+                    content_type: Some(ctype_full),
+                    size: Some(part.contents().len() as u64),
+                 });
+                 idx += 1;
             }
+
         }
-        if parsed.subparts.is_empty() {
-            let ctype = parsed.ctype.mimetype.to_lowercase();
-            let (fname, disp, _cid) = extract_filename_from_headers(&parsed.headers);
-            let is_multipart = ctype.starts_with("multipart/");
-            let is_textual = ctype == "text/plain" || ctype == "text/html";
-            let has_name = fname.as_deref().map(|s| !s.is_empty()).unwrap_or(false);
-            let disp_is_attachment = disp.as_deref().map(|d| d.eq_ignore_ascii_case("attachment")).unwrap_or(false);
-            let disp_is_inline = disp.as_deref().map(|d| d.eq_ignore_ascii_case("inline")).unwrap_or(false);
-            let treat_as_attachment =
-                (disp_is_attachment) ||
-                (disp_is_inline && has_name) ||
-                (!is_multipart && (has_name || !is_textual));
-            if treat_as_attachment {
-                out.push(AttachmentMeta { uid, part_id: "1".into(), filename: fname, content_type: Some(ctype), size: Some(parsed.get_body_raw().map(|b| b.len() as u64).unwrap_or(0)) });
-            }
-        } else {
-            for (idx, sp) in parsed.subparts.iter().enumerate() {
-                let part_id = format!("{}", idx+1);
-                walk(sp, &part_id, &mut out, uid);
-            }
-        }
+    } else {
+        tracing::warn!(uid, folder=%folder, "list_attachments: parse failed");
     }
     Ok(out)
 }
@@ -725,65 +726,38 @@ pub async fn fetch_attachment_part(
     drop(fetches);
     let _ = session.logout().await;
     let raw = match raw { Some(r) => r, None => return Ok(None) };
-    // Increase cap here as well for larger attachments embedded in emails
-    if raw.len() > 25_000_000 { return Ok(None); }
-    if let Ok(parsed) = mailparse::parse_mail(&raw) {
-        // Helper: locate by numeric part id
-        fn locate<'a>(pm: &'a mailparse::ParsedMail<'a>, prefix: &str, target: &str) -> Option<&'a mailparse::ParsedMail<'a>> {
-            if prefix == target { return Some(pm); }
-            if pm.subparts.is_empty() { return None; }
-            for (idx, sp) in pm.subparts.iter().enumerate() {
-                let part_id = if prefix.is_empty() { format!("{}", idx+1) } else { format!("{}.{}", prefix, idx+1) };
-                if let Some(found) = locate(sp, &part_id, target) { return Some(found); }
-            }
-            None
-        }
-        // Helper: locate by Content-ID
-        fn locate_by_cid<'a>(pm: &'a mailparse::ParsedMail<'a>, prefix: &str, cid: &str) -> Option<&'a mailparse::ParsedMail<'a>> {
-            let wanted = cid.trim().trim_matches(['<','>']).to_lowercase();
-            // Check current
-            if let Some(h) = pm.headers.iter().find(|h| h.get_key_ref().eq_ignore_ascii_case("Content-ID")) {
-                let val = h.get_value();
-                let norm = val.trim().trim_matches(['<','>']).to_lowercase();
-                if norm == wanted { return Some(pm); }
-            }
-            // Recurse
-            for (idx, sp) in pm.subparts.iter().enumerate() {
-                let part_id = if prefix.is_empty() { format!("{}", idx+1) } else { format!("{}.{}", prefix, idx+1) };
-                if let Some(found) = locate_by_cid(sp, &part_id, cid) { return Some(found); }
-            }
-            None
-        }
-        // Decide which search to use
-        let looks_numeric = target_part.chars().all(|c| c.is_ascii_digit() || c == '.');
-        let candidate = if looks_numeric {
-            if parsed.subparts.is_empty() {
-                if target_part == "1" { Some(&parsed) } else { None }
-            } else {
-                let mut found: Option<&mailparse::ParsedMail> = None;
-                for (idx, sp) in parsed.subparts.iter().enumerate() {
-                    let part_id = format!("{}", idx+1);
-                    if let Some(x) = locate(sp, &part_id, target_part) { found = Some(x); break; }
+    // Increase cap here as well
+    if raw.len() > 50_000_000 { return Ok(None); }
+    
+    if let Some(message) = mail_parser::Message::parse(&raw) {
+        // Mode 1: Numeric index (from list_attachments)
+        if let Ok(idx) = target_part.parse::<usize>() {
+            let mut current = 0;
+            for attachment in message.attachments() {
+                current += 1;
+                if current == idx {
+                    let ctype = attachment.content_type().map(|c| format!("{}/{}", c.c_type, c.subtype().unwrap_or(""))).unwrap_or("application/octet-stream".into());
+                    return Ok(Some((attachment.contents().to_vec(), Some(ctype), attachment.attachment_name().map(|s| s.to_string()))));
                 }
-                found
             }
-        } else {
-            // CID
-            if let Some(x) = locate_by_cid(&parsed, "", target_part) { Some(x) } else { None }
-        };
-        if let Some(found) = candidate {
-            let ctype = found.ctype.mimetype.to_lowercase();
-            let (fname, _disp, _cid) = extract_filename_from_headers(&found.headers);
-            let mut bytes = found.get_body_raw().unwrap_or_default();
-            let enc = found.headers.iter().find(|h| h.get_key_ref().eq_ignore_ascii_case("Content-Transfer-Encoding")).map(|h| h.get_value().to_lowercase());
-            if let Some(encv) = enc { if encv.contains("base64") { if let Ok(decoded) = base64::engine::general_purpose::STANDARD.decode(&bytes) { bytes = decoded; } } }
-            return Ok(Some((bytes, Some(ctype), fname)));
+        }
+
+        // Mode 2: Content-ID (for inline images)
+        let wanted = target_part.trim().trim_matches(['<','>']).to_lowercase();
+        for attachment in message.attachments() {
+             if let Some(cid) = attachment.content_id() {
+                 if cid.trim().trim_matches(['<','>']).to_lowercase() == wanted {
+                    let ctype = attachment.content_type().map(|c| format!("{}/{}", c.c_type, c.subtype().unwrap_or(""))).unwrap_or("application/octet-stream".into());
+                    return Ok(Some((attachment.contents().to_vec(), Some(ctype), attachment.attachment_name().map(|s| s.to_string()))));
+                 }
+             }
         }
     }
     Ok(None)
 }
 
 fn percent_decode_simple(s: &str) -> String {
+    // Helpers removed (extract_filename_from_headers, decode_rfc2231, etc.) as we now use mail-parser.
     let bytes = s.as_bytes();
     let mut out: Vec<u8> = Vec::with_capacity(bytes.len());
     let mut i = 0usize;
@@ -801,105 +775,4 @@ fn percent_decode_simple(s: &str) -> String {
         }
     }
     String::from_utf8_lossy(&out).to_string()
-}
-
-fn decode_rfc2231(value: &str) -> String {
-    // format: charset'lang'value (value percent-encoded)
-    let parts: Vec<&str> = value.splitn(3, '\'').collect();
-    if parts.len() == 3 {
-        let charset = parts[0].trim();
-        let val_raw = parts[2];
-        let decoded = percent_decode_simple(val_raw);
-        // basic charset handling: utf-8 or fallback
-        if charset.eq_ignore_ascii_case("utf-8") || charset.is_empty() {
-            return decoded;
-        }
-        // best effort: return decoded bytes interpreted as utf-8
-        return decoded;
-    }
-    percent_decode_simple(value)
-}
-
-fn extract_filename_from_headers(headers: &[mailparse::MailHeader]) -> (Option<String>, Option<String>, Option<String>) {
-    // returns (filename, disposition, content_id)
-    let mut filename: Option<String> = None;
-    let mut disposition: Option<String> = None;
-    let mut content_id: Option<String> = None;
-
-    for h in headers {
-        let key = h.get_key();
-        if key.eq_ignore_ascii_case("Content-ID") {
-            let v = h.get_value();
-            let norm = v.trim().trim_matches(['<','>']).to_string();
-            if !norm.is_empty() { content_id = Some(norm); }
-            continue;
-        }
-        if key.eq_ignore_ascii_case("Content-Disposition") || key.eq_ignore_ascii_case("Content-Type") {
-            let raw = h.get_value();
-            // split into type + params
-            let mut iter = raw.split(';');
-            if key.eq_ignore_ascii_case("Content-Disposition") {
-                if let Some(first) = iter.next() { disposition = Some(first.trim().to_lowercase()); }
-            } else {
-                // keep previous disposition
-                let _ = iter.next();
-            }
-            // collect extended/segmented params
-            use std::collections::BTreeMap;
-            let mut segments: BTreeMap<(String, bool), BTreeMap<usize, String>> = BTreeMap::new();
-            let mut simple_params: Vec<(String,String,bool)> = Vec::new(); // (name, value, extended)
-            for token in iter {
-                let t = token.trim();
-                if t.is_empty() { continue; }
-                let mut kv = t.splitn(2, '=');
-                let k = kv.next().unwrap_or("").trim().trim_matches('"');
-                let vraw = kv.next().unwrap_or("").trim().trim_matches('"');
-                if k.is_empty() { continue; }
-                // detect filename*0*, filename*1*, filename*
-                let kl = k.to_lowercase();
-                if let Some(base) = kl.strip_suffix('*') {
-                    // extended single
-                    simple_params.push((base.to_string(), decode_rfc2231(vraw), true));
-                } else if let Some(idxpos) = kl.rfind('*') {
-                    let (base, rest) = kl.split_at(idxpos);
-                    if rest.starts_with('*') {
-                        // possibly *0* or *1*
-                        let num_str = &rest[1..rest.len()-1].trim_end_matches('*');
-                        if let Ok(num) = num_str.parse::<usize>() {
-                            segments.entry((base.to_string(), true)).or_default().insert(num, percent_decode_simple(vraw));
-                        }
-                    } else {
-                        simple_params.push((kl.clone(), vraw.to_string(), false));
-                    }
-                } else {
-                    simple_params.push((kl.clone(), vraw.to_string(), false));
-                }
-            }
-            // reconstruct segmented extended params
-            for ((base, _), parts) in segments.into_iter() {
-                let mut s = String::new();
-                for (_i, val) in parts.into_iter() { s.push_str(&val); }
-                simple_params.push((base, s, true));
-            }
-            // choose filename priority: filename*, name*, filename, name
-            let mut cand: Option<String> = None;
-            for (n, v, ext) in simple_params.iter() {
-                if (n == "filename" || n == "name") && *ext {
-                    cand = Some(v.clone()); break;
-                }
-            }
-            if cand.is_none() {
-                for (n, v, _ext) in simple_params.iter() {
-                    if n == "filename" || n == "name" { cand = Some(v.clone()); break; }
-                }
-            }
-            if filename.is_none() {
-                if let Some(v) = cand {
-                    if !v.is_empty() { filename = Some(v); }
-                }
-            }
-        }
-    }
-
-    (filename, disposition.map(|d| d.split_whitespace().next().unwrap_or("").to_string()), content_id)
 }

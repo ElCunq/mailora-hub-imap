@@ -47,17 +47,10 @@ pub async fn fetch_message_body(account: &Account, uid: u32, folder: Option<&str
         .ok_or_else(|| anyhow::anyhow!("message not found"))?;
     let body_text = fetched.body.clone();
     let mut html_opt = fetched.html_body.clone();
-    if let Some(html) = html_opt.as_ref() {
-        // Sanitize with whitelist (ammonia) to avoid script/style injection
-        let cleaned = ammonia::Builder::default()
-            .add_tags(["a","abbr","acronym","b","blockquote","br","code","div","em","i","img","li","ol","p","pre","span","strong","table","tbody","td","th","thead","tr","ul"]) // whitelist
-            .add_tag_attributes("a", ["href","title"]) 
-            .add_tag_attributes("img", ["src","alt","title"]) 
-            .url_schemes(["http","https","mailto"].into()) 
-            .clean(html)
-            .to_string();
-        html_opt = Some(cleaned);
-    }
+    let mut html_opt = fetched.html_body.clone();
+    // Optimization: Do NOT sanitize here. The frontend uses a sandboxed iframe.
+    // Backend sanitization was stripping essential email struct/styles causing blank screens.
+    // if let Some(html) = html_opt.as_ref() { ... }
     // Best-effort cache write (ignore errors e.g., when table missing)
     let _ = sqlx::query("INSERT OR REPLACE INTO message_bodies (account_id, folder, uid, body, html_body, subject, from_addr, date, flags) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
         .bind(&account.id)

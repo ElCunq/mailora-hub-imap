@@ -5,6 +5,7 @@ pub mod imap;
 pub mod models;
 pub mod oauth;
 pub mod persist;
+pub mod rbac;
 pub mod routes;
 pub mod services;
 pub mod smtp;

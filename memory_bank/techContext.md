@@ -22,6 +22,9 @@ serde = "1.0"                 # JSON serialization
 base64 = "0.22"               # Credential encoding
 mailparse = "0.14"            # MIME parsing
 ammonia = "4"                 # HTML sanitization
+trust-dns-resolver = "0.23"   # DNS SRV lookups (discovery)
+quick-xml = "0.36"            # ISPDB XML parsing
+reqwest = "0.12"              # HTTP client (ISPDB)
 ```
 
 ## Database Schema

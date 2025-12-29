@@ -95,3 +95,28 @@ Kısa vadeli odak (Faz 1)
 - Hata zarfı standardizasyonu
 - Metrics sayaç doğruluğu
 - Index optimizasyonları
+
+## 2025-12-25 – v1.1.0-dev, Auto-Discovery & UI Polishing ve Bug Fixes
+- **Auto-Discovery:**
+  - Kullanıcı sadece email/şifre girerek (Mozilla ISPDB ve DNS SRV üzerinden) sunucu ayarlarını otomatik bulabiliyor.
+  - Manuel kurulum modu eklendi.
+- **UI & UX:**
+  - `add_account.html` Dark Theme'e geçirildi.
+  - Sidebar'daki inline form kaldırıldı, yeni sayfaya yönlendirme butonu eklendi.
+  - Dublike içerikler temizlendi.
+- **Bug Fixes:**
+  - `message_sync_service` sonsuz log döngüsü (5 hata limiti ile) çözüldü.
+  - "Ayarlar > Kaydet" butonu frontend JSON payload hatası giderildi.
+  - Port 3030 "Address in use" hatası için başlangıçta temizlik eklendi.
+
+## 2025-12-25 – v1.2.0-dev, RBAC & Kurumsal Mod (Enterprise)
+- **RBAC (Authorization):**
+  - `users` tablosu eklendi (username, password_hash, role).
+  - `bcrypt` ile şifreleme entegre edildi.
+  - İlk kayıt olan kullanıcı 'Admin', sonrakiler 'Member' olarak atanır.
+- **Auth Servisi:**
+  - `/auth/register` ve `/auth/login` endpoint'leri eklendi.
+  - Basit bir token mekanizması (şimdilik) ile oturum yönetimi sağlandı.
+- **UI:**
+  - Giriş (`login.html`) ve Kayıt (`register.html`) sayfaları oluşturuldu.
+  - Uygulama ana ekranına (`app.html`) oturum kontrolü eklendi; oturum yoksa yönlendiriliyor.

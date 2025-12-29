@@ -9,6 +9,7 @@ mod imap;
 mod models;
 mod oauth;
 mod persist;
+mod rbac;
 mod routes;
 mod services;
 mod smtp;
@@ -127,7 +128,7 @@ async fn main() -> Result<()> {
             });
         }
 
-        let idle_routes = Router::new()
+        let idle_routes: Router<AppState> = Router::new()
             .route(
                 "/idle/start/:account_id",
                 axum::routing::post(routes::idle::start_idle_watcher),
@@ -148,6 +149,9 @@ async fn main() -> Result<()> {
         let app = Router::new()
             .route("/healthz", get(|| async { "ok" }))
             .merge(routes::routes())
+            .merge(routes::auth::router().with_state(state.pool.clone()))
+            .merge(routes::admin::router().with_state(state.pool.clone()))
+            .merge(routes::discovery::router())
             .merge(idle_routes)
             .merge(oauth_routes)
             // App state

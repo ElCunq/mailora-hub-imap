@@ -40,5 +40,6 @@ Kilit Kullanım Senaryoları
 
 UX Hedefleri
 - “Tek sorguda” unified liste; gecikmesiz IDLE güncellemeleri.
+- **Sürtünmesiz Kurulum:** "Magic Login" ile sunucu teknik detaylarını bilmeden sadece email/şifre ile giriş.
 - İçerik görüntüleme: text/plain öncelikli, yoksa güvenli HTML fallback.
 - Hatalarda net ve eyleme dönük mesajlar (ör. IMAP_EMPTY_FETCH).

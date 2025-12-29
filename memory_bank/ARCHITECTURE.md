@@ -52,13 +52,14 @@ Mailora Hub IMAP is a unified email client that aggregates multiple external ema
   - SMTP send service (TODO)
   - Full-text search (SQLite FTS5) (TODO)
 
-### 2. IMAP/SMTP Services (Rust)
+### 2. Services (Rust)
 - **Role**: Direct protocol implementation for email providers
 - **Functions**:
+  - **Auto-Discovery:** ISPDB + DNS SRV lookups (`discovery_service.rs`)
   - Multi-account IMAP client (`async-imap` crate)
   - IMAP IDLE for real-time notifications
   - Message body fetch with MIME parsing
-  - SMTP sending (`lettre` crate) (TODO)
+  - SMTP sending (`lettre` crate)
   - Connection pooling and retry logic
 
 ### 3. SQLite Database

@@ -3,3 +3,4 @@ pub mod account;
 pub mod attachment;
 pub mod message;
 pub mod thread;
+pub mod user;

@@ -1,33 +1,155 @@
 <!doctype html>
 <html lang="tr">
+
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Ayarlar</title>
   <style>
-    body{margin:0;background:#0f1217;color:#e5e7eb;font:14px system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
-    header{position:sticky;top:0;z-index:10;background:#111827;border-bottom:1px solid #1f2937;padding:10px 16px;display:flex;gap:12px;align-items:center}
-    a{color:#93c5fd;text-decoration:none}
-    main{display:grid;grid-template-columns:280px 1fr;min-height:100vh}
-    nav{border-right:1px solid #1f2937;background:#111827;padding:12px}
-    nav h3{font-size:13px;color:#94a3b8;margin:10px 0}
-    .nav-item{padding:8px;border-radius:6px;cursor:pointer}
-    .nav-item.active{background:#1b2230}
-    section{padding:16px}
-    .card{background:#111827;border:1px solid #1f2937;border-radius:8px;margin-bottom:14px}
-    .card h4{margin:0;padding:10px 12px;border-bottom:1px solid #1f2937;color:#93c5fd;font-size:13px}
-    .card .content{padding:12px}
-    .row{display:flex;gap:10px;margin-bottom:10px;align-items:center}
-    label{width:200px;color:#9ca3af;font-size:12px}
-    input,select,textarea{flex:1;background:#0f141c;border:1px solid #334155;color:#e5e7eb;border-radius:6px;padding:6px 8px;font-size:13px}
-    button{background:#1f2937;border:1px solid #334155;color:#e5e7eb;padding:6px 10px;border-radius:6px;cursor:pointer}
-    button.primary{background:#2563eb;border-color:#2563eb}
-    .muted{color:#9ca3af;font-size:12px}
-    .pill{display:inline-block;background:#1b2230;border:1px solid #243043;border-radius:999px;padding:2px 8px;font-size:11px;margin-right:6px}
-    table{width:100%;border-collapse:collapse}
-    th,td{padding:8px;border-bottom:1px solid #1f2937;text-align:left;font-size:13px}
+    body {
+      margin: 0;
+      background: #0f1217;
+      color: #e5e7eb;
+      font: 14px system-ui, -apple-system, Segoe UI, Roboto, sans-serif
+    }
+
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      background: #111827;
+      border-bottom: 1px solid #1f2937;
+      padding: 10px 16px;
+      display: flex;
+      gap: 12px;
+      align-items: center
+    }
+
+    a {
+      color: #93c5fd;
+      text-decoration: none
+    }
+
+    main {
+      display: grid;
+      grid-template-columns: 280px 1fr;
+      min-height: 100vh
+    }
+
+    nav {
+      border-right: 1px solid #1f2937;
+      background: #111827;
+      padding: 12px
+    }
+
+    nav h3 {
+      font-size: 13px;
+      color: #94a3b8;
+      margin: 10px 0
+    }
+
+    .nav-item {
+      padding: 8px;
+      border-radius: 6px;
+      cursor: pointer
+    }
+
+    .nav-item.active {
+      background: #1b2230
+    }
+
+    section {
+      padding: 16px
+    }
+
+    .card {
+      background: #111827;
+      border: 1px solid #1f2937;
+      border-radius: 8px;
+      margin-bottom: 14px
+    }
+
+    .card h4 {
+      margin: 0;
+      padding: 10px 12px;
+      border-bottom: 1px solid #1f2937;
+      color: #93c5fd;
+      font-size: 13px
+    }
+
+    .card .content {
+      padding: 12px
+    }
+
+    .row {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 10px;
+      align-items: center
+    }
+
+    label {
+      width: 200px;
+      color: #9ca3af;
+      font-size: 12px
+    }
+
+    input,
+    select,
+    textarea {
+      flex: 1;
+      background: #0f141c;
+      border: 1px solid #334155;
+      color: #e5e7eb;
+      border-radius: 6px;
+      padding: 6px 8px;
+      font-size: 13px
+    }
+
+    button {
+      background: #1f2937;
+      border: 1px solid #334155;
+      color: #e5e7eb;
+      padding: 6px 10px;
+      border-radius: 6px;
+      cursor: pointer
+    }
+
+    button.primary {
+      background: #2563eb;
+      border-color: #2563eb
+    }
+
+    .muted {
+      color: #9ca3af;
+      font-size: 12px
+    }
+
+    .pill {
+      display: inline-block;
+      background: #1b2230;
+      border: 1px solid #243043;
+      border-radius: 999px;
+      padding: 2px 8px;
+      font-size: 11px;
+      margin-right: 6px
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse
+    }
+
+    th,
+    td {
+      padding: 8px;
+      border-bottom: 1px solid #1f2937;
+      text-align: left;
+      font-size: 13px
+    }
   </style>
 </head>
+
 <body>
   <header>
     <strong>Mailora Hub — Ayarlar</strong>
@@ -57,7 +179,9 @@
             <div class="row"><label>IMAP</label><input id="imap-hostport" disabled /></div>
             <div class="row"><label>SMTP</label><input id="smtp-hostport" disabled /></div>
             <div class="row"><label>OAuth Redirect</label><input id="oauth-redirect" disabled /></div>
-            <div class="row"><label>Sağlayıcılar</label><div id="providers"></div></div>
+            <div class="row"><label>Sağlayıcılar</label>
+              <div id="providers"></div>
+            </div>
           </div>
         </div>
         <div class="card">
@@ -74,7 +198,8 @@
             <div class="row"><label>Durum</label>
               <span id="sanitize-status" class="pill">—</span>
             </div>
-            <div class="muted">HTML içeriğinde script/iframe/form vb. kaldırılır. Gelişmiş temizlik için sunucu tarafında Ammonia eklenebilir.</div>
+            <div class="muted">HTML içeriğinde script/iframe/form vb. kaldırılır. Gelişmiş temizlik için sunucu
+              tarafında Ammonia eklenebilir.</div>
           </div>
         </div>
       </div>
@@ -94,33 +219,33 @@
     let settings = null;
     let accounts = [];
 
-    function openTab(name, el){
-      document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+    function openTab(name, el) {
+      document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
       if (el) el.classList.add('active');
-      document.querySelectorAll('.tab').forEach(t=>t.style.display='none');
-      if(name==='account') { document.getElementById('tab-account').style.display='block'; }
-      else { document.getElementById('tab-'+name).style.display='block'; }
+      document.querySelectorAll('.tab').forEach(t => t.style.display = 'none');
+      if (name === 'account') { document.getElementById('tab-account').style.display = 'block'; }
+      else { document.getElementById('tab-' + name).style.display = 'block'; }
     }
 
-    async function loadSettings(){
+    async function loadSettings() {
       const r = await fetch('/settings'); settings = await r.json();
       document.getElementById('db-url').value = settings.database.url;
       document.getElementById('imap-hostport').value = `${settings.imap.server}:${settings.imap.port}`;
-      document.getElementById('smtp-hostport').value = `${settings.smtp.server}:${settings.smtp.port} (${settings.smtp.username||''})`;
+      document.getElementById('smtp-hostport').value = `${settings.smtp.server}:${settings.smtp.port} (${settings.smtp.username || ''})`;
       document.getElementById('oauth-redirect').value = settings.oauth.redirect_uri;
-      document.getElementById('providers').innerHTML = settings.oauth.providers.map(p=>`<span class="pill">${p}</span>`).join('');
+      document.getElementById('providers').innerHTML = settings.oauth.providers.map(p => `<span class="pill">${p}</span>`).join('');
       document.getElementById('log-level').value = settings.telemetry.log_level;
-      document.getElementById('sanitize-status').textContent = settings.security.sanitize_html?'Aktif':'Pasif';
-      document.getElementById('feat-attachments').textContent = settings.features.attachments?'Açık':'Kapalı';
-      document.getElementById('feat-unified').textContent = settings.features.unified_view?'Açık':'Kapalı';
+      document.getElementById('sanitize-status').textContent = settings.security.sanitize_html ? 'Aktif' : 'Pasif';
+      document.getElementById('feat-attachments').textContent = settings.features.attachments ? 'Açık' : 'Kapalı';
+      document.getElementById('feat-unified').textContent = settings.features.unified_view ? 'Açık' : 'Kapalı';
     }
 
-    function accountCard(acc){
+    function accountCard(acc) {
       return `
       <div class="card">
         <h4>${acc.email}</h4>
         <div class="content">
-          <div class="row"><label>Görünen Ad</label><input id="dn-${acc.id}" value="${acc.display_name||''}"></div>
+          <div class="row"><label>Görünen Ad</label><input id="dn-${acc.id}" value="${acc.display_name || ''}"></div>
           <div class="row"><label>IMAP Host</label><input id="ih-${acc.id}" value="${acc.imap_host}"></div>
           <div class="row"><label>IMAP Port</label><input id="ip-${acc.id}" type="number" value="${acc.imap_port}"></div>
           <div class="row"><label>SMTP Host</label><input id="sh-${acc.id}" value="${acc.smtp_host}"></div>
@@ -128,14 +253,14 @@
           <div class="row"><label>Şifre (değiştir)</label><input id="pw-${acc.id}" type="password" placeholder="••••••"></div>
           <div class="row"><label>Append Policy</label>
             <select id="ap-${acc.id}">
-              <option value="auto" ${acc.append_policy==='auto'?'selected':''}>auto</option>
-              <option value="never" ${acc.append_policy==='never'?'selected':''}>never</option>
-              <option value="force" ${acc.append_policy==='force'?'selected':''}>force</option>
+              <option value="auto" ${acc.append_policy === 'auto' ? 'selected' : ''}>auto</option>
+              <option value="never" ${acc.append_policy === 'never' ? 'selected' : ''}>never</option>
+              <option value="force" ${acc.append_policy === 'force' ? 'selected' : ''}>force</option>
             </select>
           </div>
-          <div class="row"><label>Sent Folder Hint</label><input id="sf-${acc.id}" value="${acc.sent_folder_hint||''}"></div>
+          <div class="row"><label>Sent Folder Hint</label><input id="sf-${acc.id}" value="${acc.sent_folder_hint || ''}"></div>
           <div class="row"><label>Durum</label>
-            <select id="en-${acc.id}"><option value="1" ${acc.enabled?'selected':''}>Aktif</option><option value="0" ${!acc.enabled?'selected':''}>Pasif</option></select>
+            <select id="en-${acc.id}"><option value="1" ${acc.enabled ? 'selected' : ''}>Aktif</option><option value="0" ${!acc.enabled ? 'selected' : ''}>Pasif</option></select>
           </div>
           <div class="row" style="justify-content:flex-end;gap:8px">
             <button onclick="removeAccount('${acc.id}')">Kaldır</button>
@@ -145,60 +270,49 @@
       </div>`;
     }
 
-    async function loadAccounts(){
+    async function loadAccounts() {
       const r = await fetch('/accounts'); accounts = await r.json();
       const nav = document.getElementById('nav-accounts');
-      nav.innerHTML = accounts.map(a=>`<div class="nav-item" onclick="openAccount('${a.id}', this)">${a.email}</div>`).join('') || '<div class="muted">Hesap yok</div>';
+      nav.innerHTML = accounts.map(a => `<div class="nav-item" onclick="openAccount('${a.id}', this)">${a.email}</div>`).join('') || '<div class="muted">Hesap yok</div>';
     }
 
-    async function openAccount(id, el){
-      document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+    async function openAccount(id, el) {
+      document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
       if (el) el.classList.add('active');
-      const acc = accounts.find(a=>a.id===id); if(!acc) return;
+      const acc = accounts.find(a => a.id === id); if (!acc) return;
       const c = document.getElementById('tab-account');
       c.innerHTML = accountCard(acc);
       openTab('account');
     }
 
-    async function saveAccount(id){
-      const acc = accounts.find(a=>a.id===id); if(!acc) return;
-      const body = {
-        display_name: { Some: document.getElementById('dn-'+id).value.trim() || null },
-        imap_host: document.getElementById('ih-'+id).value.trim(),
-        imap_port: parseInt(document.getElementById('ip-'+id).value,10),
-        smtp_host: document.getElementById('sh-'+id).value.trim(),
-        smtp_port: parseInt(document.getElementById('sp-'+id).value,10),
-        password: (document.getElementById('pw-'+id).value.trim()||undefined),
-        enabled: document.getElementById('en-'+id).value==='1',
-        append_policy: { Some: (document.getElementById('ap-'+id).value||'auto') },
-        sent_folder_hint: { Some: (document.getElementById('sf-'+id).value.trim()||null) },
-      };
-      // Normalize Option<Option<T>> payload expected by server: map {Some: v} -> v, null -> clear
+    async function saveAccount(id) {
+      const acc = accounts.find(a => a.id === id); if (!acc) return;
       const payload = {
-        display_name: (body.display_name && 'Some' in body.display_name) ? (body.display_name.Some===null? { "Some": null } : { "Some": body.display_name.Some }) : undefined,
-        imap_host: body.imap_host,
-        imap_port: body.imap_port,
-        smtp_host: body.smtp_host,
-        smtp_port: body.smtp_port,
-        password: body.password,
-        enabled: body.enabled,
-        append_policy: (body.append_policy && 'Some' in body.append_policy) ? { "Some": body.append_policy.Some } : undefined,
-        sent_folder_hint: (body.sent_folder_hint && 'Some' in body.sent_folder_hint) ? { "Some": body.sent_folder_hint.Some } : undefined,
+        display_name: document.getElementById('dn-' + id).value.trim() || null,
+        imap_host: document.getElementById('ih-' + id).value.trim(),
+        imap_port: parseInt(document.getElementById('ip-' + id).value, 10),
+        smtp_host: document.getElementById('sh-' + id).value.trim(),
+        smtp_port: parseInt(document.getElementById('sp-' + id).value, 10),
+        password: (document.getElementById('pw-' + id).value.trim() || undefined),
+        enabled: document.getElementById('en-' + id).value === '1',
+        append_policy: document.getElementById('ap-' + id).value || 'auto',
+        sent_folder_hint: document.getElementById('sf-' + id).value.trim() || null,
       };
-      const res = await fetch(`/accounts/${id}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+      const res = await fetch(`/accounts/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
       const j = await res.json();
-      if(!j.success){ alert('Kaydetme hatası: '+(j.error||'unknown')); return; }
+      if (!j.success) { alert('Kaydetme hatası: ' + (j.error || 'unknown')); return; }
       await loadAccounts(); openAccount(id);
     }
 
-    async function removeAccount(id){
-      if(!confirm('Hesap silinsin mi?')) return;
-      const res = await fetch(`/accounts/${id}`, { method:'DELETE' });
-      if(res.status===204){ await loadAccounts(); openTab('system', document.querySelector('[data-tab="system"]')); }
+    async function removeAccount(id) {
+      if (!confirm('Hesap silinsin mi?')) return;
+      const res = await fetch(`/accounts/${id}`, { method: 'DELETE' });
+      if (res.status === 204) { await loadAccounts(); openTab('system', document.querySelector('[data-tab="system"]')); }
       else { alert('Silme başarısız'); }
     }
 
-    (async function init(){ await loadSettings(); await loadAccounts(); })();
+    (async function init() { await loadSettings(); await loadAccounts(); })();
   </script>
 </body>
+
 </html>

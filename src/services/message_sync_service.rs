@@ -7,6 +7,7 @@ use tokio::time::{timeout, Duration};
 
 use crate::imap::conn;
 use crate::models::account::Account;
+use mail_parser::MimeHeaders;
 
 fn imap_timeout() -> Duration {
     let secs = std::env::var("MAILORA_IMAP_TIMEOUT_SECS")
@@ -163,6 +164,7 @@ pub async fn sync_folder_messages(
     // Fetch and store new messages
     let mut new_count = 0;
     let mut updated_count = 0;
+    let mut error_count = 0;
 
     if !new_uids.is_empty() {
         // Fetch in batches of 50
@@ -197,7 +199,14 @@ pub async fn sync_folder_messages(
                             e
                         ),
                     },
-                    Err(e) => warn!("Failed to fetch message: {}", e),
+                    Err(e) => {
+                        warn!("Failed to parse fetched message (error suppressed to avoid log spam)");
+                        error_count += 1;
+                        if error_count > 5 {
+                            warn!("Too many fetch errors in folder {}, aborting sync for this batch", folder);
+                            break;
+                        }
+                    }
                 }
             }
         }
@@ -224,52 +233,43 @@ pub async fn sync_folder_messages(
 /// Extract attachments metadata from a raw email
 fn extract_attachments_from_raw(raw: &[u8]) -> Vec<(Option<String>, Option<String>, i64, Option<String>, bool)> {
     let mut atts = Vec::new();
-    if raw.len() > 5_000_000 { // safety cap
+    if raw.len() > 50_000_000 { // safety cap 50MB
         return atts;
     }
-    if let Ok(parsed) = mailparse::parse_mail(raw) {
-        fn walk(pm: &mailparse::ParsedMail, out: &mut Vec<(Option<String>, Option<String>, i64, Option<String>, bool)>) {
-            if pm.subparts.is_empty() {
-                let ctype = pm.ctype.mimetype.to_lowercase();
-                let mut filename: Option<String> = None;
-                let mut content_id: Option<String> = None;
-                let mut is_inline = false;
-                for h in &pm.headers {
-                    let key = h.get_key();
-                    if key.eq_ignore_ascii_case("Content-ID") {
-                        let v = h.get_value();
-                        let norm = v.trim().trim_matches(['<','>']).to_string();
-                        if !norm.is_empty() { content_id = Some(norm); }
-                    } else if key.eq_ignore_ascii_case("Content-Disposition") {
-                        let v = h.get_value();
-                        let lower = v.to_lowercase();
-                        if lower.contains("inline") { is_inline = true; }
-                        // filename param
-                        for tok in v.split(';') {
-                            let t = tok.trim();
-                            let tl = t.to_lowercase();
-                            if tl.starts_with("filename=") { let val = t.splitn(2,'=').nth(1).unwrap_or("").trim().trim_matches('"'); if !val.is_empty(){ filename = Some(val.to_string()); break; } }
-                        }
-                    } else if key.eq_ignore_ascii_case("Content-Type") {
-                        // try name=
-                        let v = h.get_value();
-                        for tok in v.split(';') {
-                            let t = tok.trim();
-                            let tl = t.to_lowercase();
-                            if tl.starts_with("name=") { let val = t.splitn(2,'=').nth(1).unwrap_or("").trim().trim_matches('"'); if !val.is_empty(){ filename = Some(val.to_string()); break; } }
-                        }
-                    }
-                }
-                let is_text = ctype == "text/plain" || ctype == "text/html";
-                if filename.is_some() || !is_text {
-                    let sz = pm.get_body_raw().map(|b| b.len() as i64).unwrap_or(0);
-                    out.push((filename, Some(ctype), sz, content_id, is_inline));
-                }
-                return;
+    
+    if let Some(message) = mail_parser::Message::parse(raw) {
+        let mut idx = 1;
+        for part in message.parts.iter() {
+            let ctype = part.content_type();
+            let c_type = ctype.map(|c| c.c_type.as_ref()).unwrap_or("application");
+            let subtype = ctype.and_then(|c| c.subtype()).unwrap_or("");
+
+            // Skip multipart containers
+            if c_type == "multipart" { continue; }
+
+            let is_body = c_type == "text" && (subtype == "plain" || subtype == "html");
+            let has_filename = part.attachment_name().is_some();
+            let ctype_full = format!("{}/{}", c_type, subtype);
+            let is_media = c_type == "image" || c_type == "video" || c_type == "audio" || c_type == "application";
+
+            if has_filename || (is_media && !is_body) {
+                 let fname = part.attachment_name().map(|s| s.to_string());
+                 let sz = part.contents().len() as i64;
+                 let cid = part.content_id().map(|s| s.to_string());
+                 
+                 // Check if it's inline
+                 let mut is_inline = false;
+                 if let Some(cd) = part.content_disposition() {
+                     if cd.c_type.eq_ignore_ascii_case("inline") {
+                         is_inline = true;
+                     }
+                 }
+                 if cid.is_some() { is_inline = true; }
+
+                 atts.push((fname, Some(ctype_full), sz, cid, is_inline));
             }
-            for sp in &pm.subparts { walk(sp, out); }
+            idx += 1;
         }
-        walk(&parsed, &mut atts);
     }
     atts
 }
@@ -291,9 +291,11 @@ async fn save_message_to_db(
     let subject = {
         let mut composed = b"Subject: ".to_vec();
         composed.extend_from_slice(subject_raw);
-        match mailparse::parse_header(&composed) {
-            Ok((h, _)) => h.get_value().trim().to_string(),
-            Err(_) => String::from_utf8_lossy(subject_raw).trim().to_string(),
+        composed.extend_from_slice(b"\r\n\r\n");
+        if let Some(msg) = mail_parser::Message::parse(&composed) {
+            msg.subject().unwrap_or("").to_string()
+        } else {
+            String::from_utf8_lossy(subject_raw).trim().to_string()
         }
     };
 

@@ -12,7 +12,6 @@ Scope delivered (v0.2.1)
 Deferrals
 - Gmail-specific logic fully tested end-to-end.
 - Persistent sent-finalize queue across restarts.
-- Attachments fetch + download.
 - Full-text search + advanced unified search filters.
 - Consistent error envelope across all endpoints.
 - Metrics correctness.
@@ -22,9 +21,10 @@ Known constraints
 - OAuth/JMAP flows are sidelined for now.
 
 Next targets
-1) Attachments pipeline: parse, persist, list, download endpoints.
-2) Unified search API: subject/from/to/date filters + pagination.
-3) Persistent finalize queues (outbox, sent-finalize) with retry/backoff.
-4) Error envelope standardization and client handling.
-5) Scheduler backoff/jitter + IDLE reconnect strategy.
-6) Indexing: messages(account_id,folder,uid), messages(folder,date DESC), attachments(message_id).
+1) [DONE] Attachments pipeline: parse, persist, list, download endpoints.
+2) [DONE] Auto-Discovery (Magic Login) for streamlined setup.
+3) Unified search API (SQLite FTS5).
+4) Persistent finalize queues (outbox, sent-finalize) with retry/backoff.
+5) Error envelope standardization and client handling.
+6) Scheduler backoff/jitter + IDLE reconnect strategy.
+7) Indexing: messages(account_id,folder,uid), messages(folder,date DESC), attachments(message_id).

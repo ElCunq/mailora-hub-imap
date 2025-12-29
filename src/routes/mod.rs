@@ -12,6 +12,9 @@ use axum::{
 use serde::Deserialize; // correct import from crate root
 use tower_http::services::ServeDir;
 
+pub mod auth;
+pub mod discovery;
+pub mod admin;
 pub mod accounts;
 pub mod debug;
 pub mod diff;
@@ -203,14 +206,11 @@ where
         .route("/unified/events", get(unified::unified_events))
         .route("/accounts", post(accounts::add_account))
         .route("/accounts", get(accounts::list_accounts))
-        .route("/accounts/:id", get(accounts::get_account))
         .route(
             "/accounts/:id",
-            axum::routing::delete(accounts::delete_account),
-        )
-        .route(
-            "/accounts/:id",
-            axum::routing::patch(accounts::patch_account),
+            get(accounts::get_account)
+                .delete(accounts::delete_account)
+                .patch(accounts::patch_account),
         )
         .route("/providers", get(accounts::list_providers))
         .route("/test/connection/:account_id", get(test::test_connection))

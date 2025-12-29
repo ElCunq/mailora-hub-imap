@@ -1,33 +1,34 @@
 # Active Context
 
-Tarih: 2025-12-16
-Branch: v1.0.0 (origin/v1.0.0)
+Tarih: 2025-12-25
+Branch: v1.1.0-dev
 
 ## Mevcut Durum
-Proje **v1.0.0** sürümüne ulaştı. Temel e-posta işlevleri (okuma, gönderme, ekler, çoklu hesap) tamamlandı ve Docker desteği eklendi.
+Proje **Auto-Discovery (Magic Login)** ve **UI Unifikasyonu (Dark Theme)** ile güçlendirildi. Stabilite sorunları çözüldü. Şimdi ise **Kurumsal (Enterprise) Mod** özelliklerine başlanmıştır; temel **RBAC** altyapısı kuruldu.
 
-### Son Tamamlananlar (v0.3.0 -> v1.0.0)
-- **Docker Desteği:** `Dockerfile` ve `docker-compose.yml` eklendi. Multi-stage build ile optimize edildi.
-- **Ek (Attachment) Yönetimi:**
-  - Meta veri kaydı ve `backfill` mekanizması.
-  - İndirme ve listeleme endpoint'leri.
-  - Inline görsel (CID) ve RFC 2231/2047 dosya adı desteği.
-- **UI İyileştirmeleri:**
-  - Sandbox uyarıları giderildi.
-  - Eksik fonksiyonlar (`loadAttachments`, `resolveFolderName`) eklendi.
-  - Okundu/Silindi işaretleme ve otomatik yenileme.
-- **Dokümantasyon:** `PROJECT_MASTER_REPORT.md` ve `MAILORA_HUB_IMAP_DOCUMENTATION.md` oluşturuldu.
+### Son Tamamlananlar (v1.1.0 -> v1.2.0-dev)
+- **Kurumsal Mod Hazırlığı:**
+  - `users` tablosu ile **RBAC** (Role-Based Access Control) temeli atıldı (Admin / Member rolleri).
+  - `auth_service` ve API uç noktaları (`/auth/register`, `/auth/login`) oluşturuldu.
+  - Basit bir `static/login.html` ve `static/register.html` arayüzü eklendi.
+  - İlk kayıt olan kullanıcı otomatik olarak **Admin** yetkisine sahip oluyor.
+  - Ana uygulama (`app.html`), token yoksa giriş sayfasına yönlendiriyor.
+- **Auto-Discovery (Magic Login):** (Tamamlandı)
+  - Mozilla ISPDB entegrasyonu.
+  - DNS SRV (`_imap._tcp`, `_submission._tcp`) sorgulama.
+- **UI Unifikasyonu:** (Tamamlandı)
+  - `add_account.html` ana uygulama ile uyumlu hale getirildi.
 
 ## Odak
-- Docker deployment süreçlerinin stabilizasyonu (Coolify entegrasyonu).
-- Performans optimizasyonları (indeksleme).
+- Kurumsal mod için "Olay Günlüğü" (Event Logging) ve Admin Paneli.
+- PIM Entegrasyonu (CalDAV/CardDAV) hazırlığı.
 
-## Sıradaki İşler (Faz 3)
+## Sıradaki İşler (Faz 3 - Enterprise & PIM)
+- **Admin Paneli:** Kullanıcıları listeleme, silme ve sistem loglarını (`event_logs`) görüntüleme.
+- **Olay Günlüğü:** `LOGIN`, `FETCH`, `SEND` gibi önemli eylemleri veritabanına kaydetme.
 - **Tam Metin Arama (FTS):** SQLite FTS5 entegrasyonu.
 - **Kalıcı Kuyruklar:** Giden e-postalar için `Outbox` mekanizması.
-- **Hata Yönetimi:** Standartlaştırılmış hata zarfları.
-- **JMAP (Opsiyonel):** Büyük posta kutuları için performans artışı.
 
 ## Kararlar
-- **Docker Build:** `sqlx` prepare adımı build sırasında `sqlx-cli` kurularak çözüldü.
-- **Veritabanı:** SQLite WAL modu ile performans artışı hedefleniyor.
+- **RBAC:** Basit bir JWT benzeri token ("id:role") yapısı şimdilik yeterli görüldü (MVP için). İleride gerçek JWT'ye geçilecek.
+- **Kayıt Politikası:** "Herkese açık" kayıt politikası benimsendi (ilk üye Admin, diğerleri Member).

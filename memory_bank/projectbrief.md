@@ -43,6 +43,7 @@ Amaçlar
 
 Kapsam (MVP)
 - Kurulum sihirbazı (mod seçimi, uç nokta ve kimlik bilgisi).
+- **Auto-Discovery:** ISPDB ve DNS SRV ile otomatik sunucu tespiti (Magic Login).
 - IMAP motoru: UID/UIDVALIDITY delta, IDLE, BODYSTRUCTURE temelli parça seçimi.
 - SMTP submission (587/465, PIPELINING destekliyse kullan).
 - SQLite şeması: messages (unified index), events (IN/OUT logları).

@@ -26,6 +26,7 @@ Bileşenler
 - JMAP (opsiyonel): Enterprise modda hızlı listeleme/sorgu
 - Unified Index: SQLite tablosu (messages)
 - Event Logger: SQLite tablosu (events); Enterprise modda sunucu event API senkronu
+- **Discovery Service:** Email domain üzerinden ISPDB, DNS SRV ve heuristiklerle IMAP/SMTP sunucu tespiti (`src/services/discovery_service.rs`)
 - RBAC Görünüm Katmanı: admin vs üye maskesi
 - Embedded Server (Personal): Stalwart binary (IMAP=1143, SMTP=1025/1587), loopback
 
