@@ -1,7 +1,9 @@
 // filepath: /mailora-hub-imap/mailora-hub-imap/src/db/mod.rs
 use anyhow::{Result, anyhow};
+use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqliteSynchronous};
 use sqlx::{Pool, Sqlite, SqlitePool};
 use std::fs;
+use std::str::FromStr;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 #[allow(dead_code)]
@@ -12,7 +14,19 @@ pub struct Database {
 #[allow(dead_code)]
 impl Database {
     pub async fn connect(database_url: &str) -> Result<Self, sqlx::Error> {
-        let pool = SqlitePool::connect(database_url).await?;
+        let options = SqliteConnectOptions::from_str(database_url)?
+            .journal_mode(SqliteJournalMode::Wal)
+            .synchronous(SqliteSynchronous::Normal)
+            .create_if_missing(true);
+            
+        let pool = SqlitePool::connect_with(options).await?;
+        
+        // Log WAL status
+        let row: (String,) = sqlx::query_as("PRAGMA journal_mode")
+            .fetch_one(&pool)
+            .await?;
+        tracing::info!("SQLite Journal Mode: {}", row.0);
+
         Ok(Self { pool })
     }
 }

@@ -15,7 +15,7 @@ anyhow = "1"
 async-imap = "0.9"
 native-tls = "0.2"
 tokio-native-tls = "0.3"
-lettre = { version = "0.11", default-features = false, features = ["builder", "smtp-transport", "rustls-tls"] }
+lettre = { version = "0.11", default-features = false, features = ["builder", "smtp-transport", "rustls-tls", "tokio1", "tokio1-rustls-tls"] }
 # Database
 sqlx = { version = "0.8", features=["sqlite","runtime-tokio","macros","chrono"] }
 # Misc utilities

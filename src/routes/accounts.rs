@@ -86,6 +86,7 @@ pub struct AccountResponse {
     pub smtp_port: u16,
     pub enabled: bool,
     pub last_sync_ts: Option<i64>,
+    pub color: Option<String>,
 }
 
 impl From<Account> for AccountResponse {
@@ -101,6 +102,7 @@ impl From<Account> for AccountResponse {
             smtp_port: acc.smtp_port,
             enabled: acc.enabled,
             last_sync_ts: acc.last_sync_ts,
+            color: acc.color,
         }
     }
 }
@@ -235,6 +237,7 @@ async fn add_oauth_account(
         updated_at: chrono::Utc::now().timestamp(),
         append_policy: None,
         sent_folder_hint: None,
+        color: Some("#3b82f6".to_string()),
         password: String::new(),
     })
 }
@@ -390,6 +393,7 @@ pub struct PatchAccountRequest {
     pub password: Option<String>,
     pub append_policy: Option<String>, // auto|never|force
     pub sent_folder_hint: Option<String>,
+    pub color: Option<String>,
 }
 
 /// PATCH /accounts/:id - Update mutable account settings
@@ -423,7 +427,9 @@ pub async fn patch_account(
     let new_smtp_host = req.smtp_host.unwrap_or(existing.smtp_host.clone());
     let new_smtp_port = req.smtp_port.unwrap_or(existing.smtp_port);
     let new_append_policy = req.append_policy.as_ref().map(|s| s.to_lowercase());
+    let new_append_policy = req.append_policy.as_ref().map(|s| s.to_lowercase());
     let new_sent_folder_hint = req.sent_folder_hint.or(existing.sent_folder_hint.clone());
+    let new_color = req.color.or(existing.color.clone());
 
     // Credentials: if password changed re-encode; we keep email immutable here
     let new_creds_enc = if let Some(pass) = req.password.as_ref() {
@@ -434,7 +440,7 @@ pub async fn patch_account(
 
     // Persist update (provider immutable for now)
     let res = sqlx::query(
-        "UPDATE accounts SET display_name = ?, imap_host = ?, imap_port = ?, smtp_host = ?, smtp_port = ?, enabled = ?, append_policy = ?, sent_folder_hint = ?, credentials_encrypted = ?, updated_at = strftime('%s','now') WHERE id = ?"
+        "UPDATE accounts SET display_name = ?, imap_host = ?, imap_port = ?, smtp_host = ?, smtp_port = ?, enabled = ?, append_policy = ?, sent_folder_hint = ?, color = ?, credentials_encrypted = ?, updated_at = strftime('%s','now') WHERE id = ?"
     )
     .bind(&new_display_name)
     .bind(&new_imap_host)
@@ -444,6 +450,7 @@ pub async fn patch_account(
     .bind(new_enabled as i64)
     .bind(&new_append_policy)
     .bind(&new_sent_folder_hint)
+    .bind(&new_color)
     .bind(&new_creds_enc)
     .bind(&account_id)
     .execute(&pool)

@@ -4,3 +4,4 @@ pub mod attachment;
 pub mod message;
 pub mod thread;
 pub mod user;
+pub mod outbox;

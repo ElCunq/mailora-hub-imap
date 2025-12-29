@@ -96,23 +96,63 @@ async fn main() -> Result<()> {
         // Start background scheduler
         crate::services::scheduler::start(pool.clone());
 
-        // Initial full sync on startup (non-blocking)
+        // Start background maintenance service
+        {
+            let p = pool.clone();
+            tokio::spawn(async move {
+                services::maintenance_service::start_maintenance_loop(p).await;
+            });
+        }
+
+        // Start background outbox service
+        {
+            let p = pool.clone();
+            tokio::spawn(async move {
+                services::outbox_service::start_outbox_loop(p).await;
+            });
+        }
+
+        // Initial full sync and IDLE start on startup (non-blocking)
         {
             let pool_clone = pool.clone();
+            let idle_mgr_clone = idle_manager.clone();
             tokio::spawn(async move {
                 match services::account_service::list_accounts(&pool_clone).await {
                     Ok(accts) => {
                         for acc in accts {
                             if !acc.enabled { continue; }
-                            // Skip Gmail for now
+                            
+                            // Start IDLE watcher immediately
+                            if acc.provider != crate::models::account::EmailProvider::Gmail { // Gmail IDLE can be tricky, but let's try or skip if unsure. Standard implementations usually support it. Let's enable for all except maybe complex oauth if not ready?
+                                // Actually let's just try to start it.
+                                let mgr = idle_mgr_clone.clone();
+                                let acc_for_idle = acc.clone();
+                                tokio::spawn(async move {
+                                    // Decrypt password if needed
+                                    let mut final_acc = acc_for_idle.clone();
+                                    if final_acc.password.is_empty() {
+                                         if let Ok(a) = final_acc.clone().with_password() { final_acc = a; }
+                                    }
+                                    if !final_acc.password.is_empty() {
+                                        if let Err(e) = mgr.start_watcher(final_acc).await {
+                                            tracing::warn!("Failed to auto-start IDLE for {}: {}", acc_for_idle.email, e);
+                                        }
+                                    }
+                                });
+                            }
+
+                            // Skip Gmail sync for now (legacy logic)
                             if matches!(acc.provider, crate::models::account::EmailProvider::Gmail) { continue; }
+                            
                             let mut acc_dec = acc.clone();
                             if acc_dec.password.is_empty() {
                                 if let Ok(a) = acc_dec.clone().with_password() { acc_dec = a; } else { continue; }
                             }
                             if acc_dec.password.is_empty() { continue; }
+                            
                             let p = pool_clone.clone();
                             tokio::spawn(async move {
+                                // Use sync_account (which now reuses session)
                                 match services::message_sync_service::sync_account_messages(&p, &acc_dec).await {
                                     Ok(stats) => {
                                         tracing::info!(email=%acc_dec.email, folders=%stats.len(), "initial sync completed");

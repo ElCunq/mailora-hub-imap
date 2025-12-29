@@ -1,54 +1,27 @@
-# System Patterns
+# System Patterns & Architecture
 
-Architecture:
-- Axum HTTP server exposing /login, /diff, /body, /folders endpoints.
-- IMAP client (async-imap) per request; simple credential store; no long-lived pooled sessions yet.
+## Core Architecture Principles
 
-Key decisions:
-- Multi-folder cursor with per-folder last_uid; folder emitted in change events.
-- Body fetch pipeline with retries and multiple section fallbacks.
+### 1. Database & Search Strategy
+- **SQLite FTS5**: Full-Text Search is mandatory. We index `subject`, `from`, and `body_text` in a virtual table for millisecond-level search queries. `LIKE %query%` is prohibited for content search.
+- **WAL Mode**: Write-Ahead Logging is enabled to allow concurrent readers and writers, preventing UI blocking during sync.
+- **Maintenance**: Automated VACUUM/ANALYZE jobs run weekly to prevent fragmentation.
 
-Component relationships:
-- routes/* -> imap/sync.rs for IMAP ops; services/diff_service.rs for cursors and wire types.
+### 2. Protocol Optimization
+- **IMAP IDLE**: We prefer "Push" over "Poll". Use RFC 2177 to keep TCP connections open and receive real-time updates.
+- **Connection Pooling**: Re-use IMAP/SMTP connections via a pool (e.g., `deadpool`) to avoid expensive TLS handshakes for every action.
 
-Critical paths:
-- /diff incremental: SEARCH ALL > last_uid → UID FETCH → minimal fallback.
-- /body: SELECT → UID FETCH meta → choose body section → UID FETCH body.
+### 3. Resilience & Job Queue
+- **Outbox Pattern**: Sending mail is async.
+    1. UI saves mail to local `outbox` table.
+    2. Background worker picks it up and attempts SMTP delivery.
+    3. On failure -> Exponential Backoff (retry later).
+    4. On success -> Move to "Sent" folder and delete from `outbox`.
+- **Async Attachment Processing**: Heavy parsing of attachments is offloaded to `tokio::spawn` tasks to keep the critical path clear.
 
----
+### 4. Zero-Copy & Memory
+- Prefer zero-copy deserialization where possible to minimize RAM footprint during large fetches.
 
-# Mimari Genel Bakış
-
-Bileşenler
-- Client (Rust, Tauri UI)
-- IMAP Motoru: IDLE, delta takip (UIDNEXT, UIDVALIDITY, HIGHESTMODSEQ), BODYSTRUCTURE → hedefli FETCH
-- SMTP Submission: 587/465, PIPELINING
-- JMAP (opsiyonel): Enterprise modda hızlı listeleme/sorgu
-- Unified Index: SQLite tablosu (messages)
-- Event Logger: SQLite tablosu (events); Enterprise modda sunucu event API senkronu
-- **Discovery Service:** Email domain üzerinden ISPDB, DNS SRV ve heuristiklerle IMAP/SMTP sunucu tespiti (`src/services/discovery_service.rs`)
-- RBAC Görünüm Katmanı: admin vs üye maskesi
-- Embedded Server (Personal): Stalwart binary (IMAP=1143, SMTP=1025/1587), loopback
-
-Kritik Akışlar
-1) İlk Kurulum Sihirbazı
-- Mod seçimi → Personal: Stalwart çıkar/konfigüre et, port keşfi, health-check → hesap ekle
-- Enterprise: Uçlar ve kimlik bilgileri, RBAC oturumu → görünüm şekillenir
-
-2) Senkronizasyon
-- INBOX için 1× IDLE + talep anında 1× FETCH kanalı
-- Önce liste/meta (ENVELOPE/BODYSTRUCTURE), içerik gerektiğinde seçici BODY.PEEK[section]
-
-3) Unified Inbox
-- Tüm hesaplardan meta → messages tablosu
-- Listeleme tek sorgu; flag/okunma IMAP STORE ile ilgili hesaba yansıtılır
-
-4) Event Log & RBAC
-- events: direction(IN/OUT), mailbox, actor, peer, subject, ts
-- Admin: actor açık; Üye: actor maskeli
-- Enterprise: sunucu event API ile çift yönlü senkron
-
-Tasarım İlkeleri
-- “Önce meta” sonra ihtiyaç duyulan içeriği indir (lazy fetch)
-- Ağ turları minimize: SEARCH + iki dalga FETCH üst sınırı
-- Hata semantiklerini türlendirme ve UI’ye taşıma
+## Security Model
+- **RBAC**: Strict separation of Admin vs Member.
+- **Unified View**: MUST respect `user_accounts` visibility. A user sees aggregate views ONLY for accounts they are assigned to.

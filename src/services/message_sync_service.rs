@@ -59,13 +59,6 @@ pub async fn sync_folder_messages(
     account: &Account,
     folder: &str,
 ) -> Result<SyncStats> {
-    let start = std::time::Instant::now();
-
-    info!(
-        "Starting sync for account {} folder {}",
-        account.email, folder
-    );
-
     // Connect to IMAP
     let mut imap_session = with_timeout(
         conn::connect(
@@ -78,7 +71,22 @@ pub async fn sync_folder_messages(
     )
     .await?;
 
-    let session = &mut imap_session.session;
+    sync_folder_messages_with_session(pool, account, folder, &mut imap_session.session).await
+}
+
+pub async fn sync_folder_messages_with_session(
+    pool: &SqlitePool,
+    account: &Account,
+    folder: &str,
+    session: &mut async_imap::Session<tokio_util::compat::Compat<tokio_native_tls::TlsStream<tokio::net::TcpStream>>>,
+) -> Result<SyncStats> {
+    let start = std::time::Instant::now();
+
+    info!(
+        "Starting sync for account {} folder {}",
+        account.email, folder
+    );
+
 
     // Select folder
     let mailbox = with_timeout(session.select(folder), "IMAP SELECT").await?;
@@ -175,11 +183,12 @@ pub async fn sync_folder_messages(
                 .collect::<Vec<_>>()
                 .join(",");
 
-            // Include BODY.PEEK[] so we can parse attachments for metadata persistence
+            // Include headers and BODY.PEEK[] so we can parse everything manually
+            // We AVOID fetching ENVELOPE because it crashes on some bad UTF-8 headers (e.g. from Gmail Sent Items)
             let messages = with_timeout(
                 session.uid_fetch(
                     &uid_set,
-                    "(UID FLAGS ENVELOPE INTERNALDATE RFC822.SIZE BODY.PEEK[])",
+                    "(UID FLAGS INTERNALDATE RFC822.SIZE BODY.PEEK[HEADER.FIELDS (FROM TO CC SUBJECT DATE MESSAGE-ID)] BODY.PEEK[])",
                 ),
                 "IMAP UID FETCH",
             )
@@ -200,6 +209,7 @@ pub async fn sync_folder_messages(
                         ),
                     },
                     Err(e) => {
+                         // ... error handling same as before
                         warn!("Failed to parse fetched message (error suppressed to avoid log spam)");
                         error_count += 1;
                         if error_count > 5 {
@@ -232,43 +242,32 @@ pub async fn sync_folder_messages(
 
 /// Extract attachments metadata from a raw email
 fn extract_attachments_from_raw(raw: &[u8]) -> Vec<(Option<String>, Option<String>, i64, Option<String>, bool)> {
+    // ... existing logic ...
     let mut atts = Vec::new();
-    if raw.len() > 50_000_000 { // safety cap 50MB
-        return atts;
-    }
-    
+    if raw.len() > 50_000_000 { return atts; }
     if let Some(message) = mail_parser::Message::parse(raw) {
         let mut idx = 1;
         for part in message.parts.iter() {
-            let ctype = part.content_type();
-            let c_type = ctype.map(|c| c.c_type.as_ref()).unwrap_or("application");
-            let subtype = ctype.and_then(|c| c.subtype()).unwrap_or("");
-
-            // Skip multipart containers
-            if c_type == "multipart" { continue; }
-
-            let is_body = c_type == "text" && (subtype == "plain" || subtype == "html");
-            let has_filename = part.attachment_name().is_some();
-            let ctype_full = format!("{}/{}", c_type, subtype);
-            let is_media = c_type == "image" || c_type == "video" || c_type == "audio" || c_type == "application";
-
-            if has_filename || (is_media && !is_body) {
-                 let fname = part.attachment_name().map(|s| s.to_string());
-                 let sz = part.contents().len() as i64;
-                 let cid = part.content_id().map(|s| s.to_string());
-                 
-                 // Check if it's inline
-                 let mut is_inline = false;
-                 if let Some(cd) = part.content_disposition() {
-                     if cd.c_type.eq_ignore_ascii_case("inline") {
-                         is_inline = true;
-                     }
-                 }
-                 if cid.is_some() { is_inline = true; }
-
-                 atts.push((fname, Some(ctype_full), sz, cid, is_inline));
-            }
-            idx += 1;
+             let ctype = part.content_type();
+             let c_type = ctype.map(|c| c.c_type.as_ref()).unwrap_or("application");
+             let subtype = ctype.and_then(|c| c.subtype()).unwrap_or("");
+             if c_type == "multipart" { continue; }
+             let is_body = c_type == "text" && (subtype == "plain" || subtype == "html");
+             let has_filename = part.attachment_name().is_some();
+             let ctype_full = format!("{}/{}", c_type, subtype);
+             let is_media = c_type == "image" || c_type == "video" || c_type == "audio" || c_type == "application";
+             if has_filename || (is_media && !is_body) {
+                  let fname = part.attachment_name().map(|s| s.to_string());
+                  let sz = part.contents().len() as i64;
+                  let cid = part.content_id().map(|s| s.to_string());
+                  let mut is_inline = false;
+                  if let Some(cd) = part.content_disposition() {
+                      if cd.c_type.eq_ignore_ascii_case("inline") { is_inline = true; }
+                  }
+                  if cid.is_some() { is_inline = true; }
+                  atts.push((fname, Some(ctype_full), sz, cid, is_inline));
+             }
+             idx += 1;
         }
     }
     atts
@@ -283,55 +282,67 @@ async fn save_message_to_db(
 ) -> Result<bool> {
     let uid = fetch.uid.context("Message has no UID")?;
 
-    // Extract envelope data
-    let envelope = fetch.envelope();
-    let subject_raw = envelope
-        .and_then(|e| e.subject.as_ref())
-        .map_or(&[][..], |v| v);
-    let subject = {
-        let mut composed = b"Subject: ".to_vec();
-        composed.extend_from_slice(subject_raw);
-        composed.extend_from_slice(b"\r\n\r\n");
-        if let Some(msg) = mail_parser::Message::parse(&composed) {
-            msg.subject().unwrap_or("").to_string()
-        } else {
-            String::from_utf8_lossy(subject_raw).trim().to_string()
+    // Manually parse headers from the requested body section
+    // async-imap stores BODY[HEADER.FIELDS...] in fetch.body(section_name)? No, it's usually under a specific body index.
+    // However, since we requested 2 BODY items, logic might be complex. 
+    // Actually, `async-imap` exposes `body()` for the *default* body section or we iterate.
+    // Let's use `fetch.header()` if it was fetched as HEADER, or just parse the FULL body if we have it.
+    // We requested `BODY.PEEK[]` (full body). So we can just parse that!
+    // The previous code requested `ENVELOPE` AND `BODY.PEEK[]`.
+    
+    let full_body = fetch.body().unwrap_or(b"");
+    
+    let mut subject = String::new();
+    let mut from = String::new();
+    let mut to = String::new();
+    let mut date = String::new();
+    let mut message_id = String::new();
+
+    if !full_body.is_empty() {
+        if let Some(parsed) = mail_parser::Message::parse(full_body) {
+             subject = parsed.subject().unwrap_or("").to_string();
+             
+             // Handle From
+             match parsed.from() {
+                 mail_parser::HeaderValue::Address(addr) => {
+                     let name = addr.name.as_ref().map(|n| n.as_ref()).unwrap_or("");
+                     let email = addr.address.as_ref().map(|a| a.as_ref()).unwrap_or("");
+                     from = if !name.is_empty() { format!("{} <{}>", name, email) } else { email.to_string() };
+                 }
+                 mail_parser::HeaderValue::AddressList(list) => {
+                     if let Some(addr) = list.first() {
+                         let name = addr.name.as_ref().map(|n| n.as_ref()).unwrap_or("");
+                         let email = addr.address.as_ref().map(|a| a.as_ref()).unwrap_or("");
+                         from = if !name.is_empty() { format!("{} <{}>", name, email) } else { email.to_string() };
+                     }
+                 }
+                 _ => {}
+             }
+
+             // Handle To
+             match parsed.to() {
+                 mail_parser::HeaderValue::Address(addr) => {
+                     to = addr.address.as_ref().map(|a| a.as_ref()).unwrap_or("").to_string();
+                 }
+                 mail_parser::HeaderValue::AddressList(list) => {
+                     if let Some(addr) = list.first() {
+                         to = addr.address.as_ref().map(|a| a.as_ref()).unwrap_or("").to_string();
+                     }
+                 }
+                 _ => {}
+             }
+
+             if let Some(d) = parsed.date() {
+                 date = d.to_rfc3339();
+             }
+             message_id = parsed.message_id().unwrap_or("").to_string();
         }
-    };
-
-    let from = envelope
-        .and_then(|e| e.from.as_ref())
-        .and_then(|addrs| addrs.first())
-        .and_then(|addr| {
-            let mailbox_bytes = addr.mailbox.as_ref()?;
-            let host_bytes = addr.host.as_ref()?;
-            let mailbox = std::str::from_utf8(mailbox_bytes).ok()?;
-            let host = std::str::from_utf8(host_bytes).ok()?;
-            Some(format!("{}@{}", mailbox, host))
-        })
-        .unwrap_or_default();
-
-    let to = envelope
-        .and_then(|e| e.to.as_ref())
-        .and_then(|addrs| addrs.first())
-        .and_then(|addr| {
-            let mailbox_bytes = addr.mailbox.as_ref()?;
-            let host_bytes = addr.host.as_ref()?;
-            let mailbox = std::str::from_utf8(mailbox_bytes).ok()?;
-            let host = std::str::from_utf8(host_bytes).ok()?;
-            Some(format!("{}@{}", mailbox, host))
-        })
-        .unwrap_or_default();
-
-    let date = envelope
-        .and_then(|e| e.date.as_ref())
-        .and_then(|d| std::str::from_utf8(d).ok())
-        .unwrap_or("");
-
-    let message_id = envelope
-        .and_then(|e| e.message_id.as_ref())
-        .and_then(|id| std::str::from_utf8(id).ok())
-        .unwrap_or("");
+    }
+    
+    // Fallback if full body parse failed but we have headers (from separate section?)
+    // Note: async-imap mapping of BODY[HEADER...] to struct fields isn't always direct.
+    // But since we fetch BODY.PEEK[], `fetch.body()` returns the full content.
+    // This is safer than `fetch.envelope()` which panics/errors on bad input inside the library.
 
     // Extract flags
     let flags: Vec<String> = fetch
@@ -351,15 +362,12 @@ async fn save_message_to_db(
 
     // Message size
     let size = fetch.size.unwrap_or(0) as i64;
-
-    // Parse raw for attachments metadata (if available)
-    let mut attachments: Vec<(Option<String>, Option<String>, i64, Option<String>, bool)> = Vec::new();
-    if let Some(body_bytes) = fetch.body() {
-        attachments = extract_attachments_from_raw(body_bytes);
-    }
+    
+    // Attachments
+    let attachments = extract_attachments_from_raw(full_body);
     let has_atts = !attachments.is_empty();
 
-    // Check if message already exists
+    // Check if exists
     let exists: bool = sqlx::query_scalar(
         "SELECT COUNT(*) > 0 FROM messages WHERE account_id = ? AND folder = ? AND uid = ?",
     )
@@ -483,7 +491,7 @@ pub async fn sync_account_messages(pool: &SqlitePool, account: &Account) -> Resu
     let mut stats = Vec::new();
 
     for folder in &folder_names {
-        match sync_folder_messages(pool, account, folder).await {
+        match sync_folder_messages_with_session(pool, account, folder, session).await {
             Ok(s) => stats.push(s),
             Err(e) => warn!("Failed to sync folder {}: {}", folder, e),
         }

@@ -49,29 +49,30 @@ pub async fn add_account(
     let sync_freq: i64 = 300;
     let initial_last_uid: u32 = 0; // Fetch all emails on first sync
 
-    sqlx::query!(
+    sqlx::query(
         r#"
         INSERT INTO accounts (
             id, email, provider, display_name, 
             imap_host, imap_port, smtp_host, smtp_port,
             credentials_encrypted, enabled, sync_frequency_secs,
-            created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            created_at, updated_at, color
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         "#,
-        id,
-        email,
-        provider_str,
-        display_name_str,
-        imap_host,
-        imap_port,
-        smtp_host,
-        smtp_port,
-        credentials_encrypted,
-        enabled,
-        sync_freq,
-        now,
-        now
     )
+    .bind(&id)
+    .bind(email)
+    .bind(provider_str)
+    .bind(display_name_str)
+    .bind(&imap_host)
+    .bind(imap_port)
+    .bind(&smtp_host)
+    .bind(smtp_port)
+    .bind(&credentials_encrypted)
+    .bind(enabled)
+    .bind(sync_freq)
+    .bind(now)
+    .bind(now)
+    .bind("#3b82f6")
     .execute(pool)
     .await?;
 
@@ -92,6 +93,7 @@ pub async fn add_account(
         updated_at: now,
         append_policy: Some("auto".to_string()),
         sent_folder_hint: None,
+        color: Some("#3b82f6".to_string()),
         password: String::new(),
     };
 
@@ -124,6 +126,7 @@ pub async fn list_accounts(pool: &SqlitePool) -> Result<Vec<Account>> {
         let updated_at: i64 = row.try_get("updated_at").unwrap_or(0);
         let append_policy: Option<String> = row.try_get("append_policy").ok();
         let sent_folder_hint: Option<String> = row.try_get("sent_folder_hint").ok();
+        let color: Option<String> = row.try_get("color").ok();
 
         accounts.push(Account {
             id,
@@ -142,6 +145,7 @@ pub async fn list_accounts(pool: &SqlitePool) -> Result<Vec<Account>> {
             updated_at,
             append_policy,
             sent_folder_hint,
+            color,
             password: String::new(),
         });
     }
@@ -174,6 +178,7 @@ pub async fn get_account(pool: &SqlitePool, account_id: &str) -> Result<Option<A
             let updated_at: i64 = row.try_get("updated_at").unwrap_or(0);
             let append_policy: Option<String> = row.try_get("append_policy").ok();
             let sent_folder_hint: Option<String> = row.try_get("sent_folder_hint").ok();
+            let color: Option<String> = row.try_get("color").ok();
 
             let mut acc = Account {
                 id,
@@ -192,6 +197,7 @@ pub async fn get_account(pool: &SqlitePool, account_id: &str) -> Result<Option<A
                 updated_at,
                 append_policy,
                 sent_folder_hint,
+                color,
                 password: String::new(),
             };
 
@@ -247,6 +253,7 @@ pub async fn update_account(
     enabled: Option<bool>,
     append_policy: Option<Option<String>>,
     sent_folder_hint: Option<Option<String>>,
+    color: Option<String>,
 ) -> Result<Option<Account>> {
     // Fetch current
     let current_opt = get_account(pool, account_id).await?;
@@ -262,11 +269,12 @@ pub async fn update_account(
     if let Some(en) = enabled { current.enabled = en; }
     if let Some(ap_opt) = append_policy { current.append_policy = ap_opt; }
     if let Some(sf_opt) = sent_folder_hint { current.sent_folder_hint = sf_opt; }
+    if let Some(c) = color { current.color = Some(c); }
     if let Some(pass) = password { current.credentials_encrypted = Account::encode_credentials(&current.email, &pass); current.password = pass; }
     let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)?.as_secs() as i64;
     // Persist (use dynamic query to avoid compile-time DB schema checks)
     sqlx::query(
-        r#"UPDATE accounts SET email = ?, provider = ?, display_name = ?, imap_host = ?, imap_port = ?, smtp_host = ?, smtp_port = ?, credentials_encrypted = ?, enabled = ?, append_policy = ?, sent_folder_hint = ?, updated_at = ? WHERE id = ?"#
+        r#"UPDATE accounts SET email = ?, provider = ?, display_name = ?, imap_host = ?, imap_port = ?, smtp_host = ?, smtp_port = ?, credentials_encrypted = ?, enabled = ?, append_policy = ?, sent_folder_hint = ?, color = COALESCE(?, color), updated_at = ? WHERE id = ?"#
     )
     .bind(&current.email)
     .bind(current.provider.as_str())
@@ -279,6 +287,7 @@ pub async fn update_account(
     .bind(if current.enabled {1} else {0})
     .bind(current.append_policy.as_deref())
     .bind(current.sent_folder_hint.as_deref())
+    .bind(current.color.as_deref())
     .bind(now)
     .bind(account_id)
     .execute(pool)

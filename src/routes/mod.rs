@@ -25,6 +25,7 @@ pub mod test;
 pub mod unified;
 pub mod flags;
 pub mod settings;
+pub mod snooze;
 
 #[derive(Deserialize)]
 #[allow(non_snake_case)]
@@ -131,58 +132,31 @@ async fn send_action(
     State(pool): State<sqlx::SqlitePool>,
     AxumJson(req): AxumJson<SendReq>
 ) -> impl IntoResponse {
-    // Try to find account in DB
-    let account_res = sqlx::query_as::<_, crate::models::account::Account>("SELECT * FROM accounts WHERE id = ?")
+    // Check if account exists (validate)
+    let account_res = sqlx::query("SELECT id FROM accounts WHERE id = ?")
         .bind(&req.accountId)
         .fetch_optional(&pool)
         .await;
 
-    let account = match account_res {
-        Ok(Some(acc)) => match acc.with_password() {
-            Ok(a) => a,
-            Err(e) => return AxumJson(serde_json::json!({"ok": false, "error": format!("Decrypt error: {}", e)})).into_response(),
-        },
-        Ok(None) => {
-            // Fallback to legacy ACCOUNTS store for backward compatibility (if any)
-            let creds_opt = {
-                let store = ACCOUNTS.read().await;
-                store.get(&req.accountId).cloned()
-            };
-            if let Some(creds) = creds_opt {
-                // Construct a temporary Account object or just use creds directly
-                // Since send_simple takes host/port/user/pass, we can just use those.
-                let smtp_host = std::env::var("SMTP_HOST").unwrap_or_else(|_| "smtp.gmail.com".into());
-                let smtp_port = std::env::var("SMTP_PORT").ok().and_then(|p| p.parse::<u16>().ok()).unwrap_or(587);
-                match crate::smtp::send_simple(
-                    &smtp_host,
-                    smtp_port,
-                    &creds.email,
-                    &creds.password,
-                    &req.to,
-                    &req.subject,
-                    &req.body,
-                ) {
-                    Ok(_) => return AxumJson(serde_json::json!({"ok": true})).into_response(),
-                    Err(e) => return AxumJson(serde_json::json!({"ok": false, "error": e.to_string()})).into_response(),
-                }
-            }
-            return AxumJson(serde_json::json!({"ok": false, "error": "account not found"})).into_response();
-        }
-        Err(e) => return AxumJson(serde_json::json!({"ok": false, "error": e.to_string()})).into_response(),
-    };
+    if matches!(account_res, Ok(None)) {
+             // Fallback for legacy "1"
+             if req.accountId == "1" {
+                 // allow legacy
+             } else {
+                 return AxumJson(serde_json::json!({"ok": false, "error": "Account not found"})).into_response();
+             }
+    }
 
-    // Use account settings
-    match crate::smtp::send_simple(
-        &account.smtp_host,
-        account.smtp_port,
-        &account.email,
-        &account.password,
+    // Queue email
+    match crate::services::outbox_service::queue_email(
+        &pool,
+        &req.accountId,
         &req.to,
         &req.subject,
-        &req.body,
-    ) {
-        Ok(_) => AxumJson(serde_json::json!({"ok": true})).into_response(),
-        Err(e) => AxumJson(serde_json::json!({"ok": false, "error": e.to_string()})).into_response(),
+        &req.body
+    ).await {
+        Ok(_) => AxumJson(serde_json::json!({"ok": true, "message": "Email queued"})).into_response(),
+        Err(e) => AxumJson(serde_json::json!({"ok": false, "error": e})).into_response(),
     }
 }
 
@@ -237,4 +211,6 @@ where
         .route("/settings", get(settings::get_settings))
         .route("/search", get(sync::search_messages))
         .route("/sync/:account_id/backfill-attachments", post(sync::backfill_attachments_endpoint))
+        .route("/snooze/:account_id/:folder/:uid", post(snooze::snooze_message))
+        .route("/unsnooze/:account_id/:folder/:uid", post(snooze::unsnooze_message))
 }

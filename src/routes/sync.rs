@@ -10,6 +10,7 @@ use axum::extract::Query;
 use crate::services::message_sync_service::{
     sync_account_messages, sync_folder_messages, SyncStats, backfill_attachments,
 };
+use crate::rbac::AuthUser;
 
 /// POST /sync/:account_id - Sync all folders for an account
 pub async fn sync_account(
@@ -171,28 +172,63 @@ pub struct SearchQs { pub q: Option<String>, pub unread: Option<bool>, pub attac
 
 pub async fn search_messages(
     State(pool): State<sqlx::SqlitePool>,
+    auth_user: AuthUser,
     Query(qs): Query<SearchQs>,
 ) -> Result<Json<Value>, (StatusCode, String)> {
     #[derive(sqlx::FromRow, serde::Serialize)]
     struct Row { account_id: String, folder: String, uid: i64, subject: Option<String>, from_addr: Option<String>, date: Option<String>, flags: Option<String>, has_attachments: bool, size: Option<i64> }
-    let mut sql = String::from("SELECT account_id, folder, uid, subject, from_addr, date, flags, has_attachments, size FROM messages WHERE 1=1");
-    let mut args: Vec<(usize, String)> = Vec::new();
 
-    if let Some(acc) = qs.account_id.as_ref() { sql.push_str(" AND account_id = ?"); args.push((args.len()+1, acc.clone())); }
-    if let Some(f) = qs.folder.as_ref() { sql.push_str(" AND folder = ?"); args.push((args.len()+1, f.clone())); }
-    if let Some(true) = qs.unread { sql.push_str(" AND (flags IS NULL OR flags NOT LIKE '%\\Seen%')"); }
-    if let Some(true) = qs.attachments { sql.push_str(" AND has_attachments = 1"); }
-    if let Some(q) = qs.q.as_ref().filter(|s| !s.trim().is_empty()) { sql.push_str(" AND (subject LIKE ? OR from_addr LIKE ?)"); let pat = format!("%{}%", q); args.push((args.len()+1, pat.clone())); args.push((args.len()+1, pat)); }
-    if let Some(sd) = qs.start_date.as_ref() { sql.push_str(" AND date >= ?"); args.push((args.len()+1, sd.clone())); }
-    if let Some(ed) = qs.end_date.as_ref() { sql.push_str(" AND date <= ?"); args.push((args.len()+1, ed.clone())); }
-    if let Some(bu) = qs.before_uid { sql.push_str(" AND uid < ?"); args.push((args.len()+1, bu.to_string())); }
+    let mut sql = String::new();
+    let mut args: Vec<String> = Vec::new(); // using String params for everything for simplicity
 
-    sql.push_str(" ORDER BY uid DESC LIMIT ?");
+    // Determine if we are doing FTS or standard scan
+    let has_query = qs.q.as_ref().map(|s| !s.trim().is_empty()).unwrap_or(false);
+
+    if has_query {
+        // FTS Path
+        sql.push_str("SELECT m.account_id, m.folder, m.uid, m.subject, m.from_addr, m.date, m.flags, m.has_attachments, m.size FROM messages m JOIN messages_fts fts ON m.id = fts.rowid ");
+        // Security Join if not Admin
+        if auth_user.role != "Admin" {
+            sql.push_str(" JOIN user_accounts ua ON m.account_id = ua.account_id ");
+        }
+        sql.push_str(" WHERE messages_fts MATCH ? ");
+        // Sanitize/Prepare FTS query. For now, wrap in quotes to treat as primitive search or use raw.
+        // FTS5 standard syntax: space is AND.
+        let raw_q = qs.q.as_ref().unwrap();
+        // Simple sanitization: remove " to prevent syntax breaking for now? 
+        // Or just let SQLite handle it? Let's wrap matches in double quotes for phrase or strict token matching logic?
+        // Let's pass raw_q string.
+        args.push(raw_q.clone());
+    } else {
+        // Standard Path
+        sql.push_str("SELECT m.account_id, m.folder, m.uid, m.subject, m.from_addr, m.date, m.flags, m.has_attachments, m.size FROM messages m ");
+        if auth_user.role != "Admin" {
+            sql.push_str(" JOIN user_accounts ua ON m.account_id = ua.account_id ");
+        }
+        sql.push_str(" WHERE 1=1 ");
+    }
+
+    // Common Filters
+    if auth_user.role != "Admin" {
+        sql.push_str(" AND ua.user_id = ? ");
+        args.push(auth_user.id.to_string());
+    }
+
+    if let Some(acc) = qs.account_id.as_ref() { sql.push_str(" AND m.account_id = ?"); args.push(acc.clone()); }
+    if let Some(f) = qs.folder.as_ref() { sql.push_str(" AND m.folder = ?"); args.push(f.clone()); }
+    if let Some(true) = qs.unread { sql.push_str(" AND (m.flags IS NULL OR m.flags NOT LIKE '%\\Seen%')"); }
+    if let Some(true) = qs.attachments { sql.push_str(" AND m.has_attachments = 1"); }
+    // Start/End date...
+    if let Some(sd) = qs.start_date.as_ref() { sql.push_str(" AND m.date >= ?"); args.push(sd.clone()); }
+    if let Some(ed) = qs.end_date.as_ref() { sql.push_str(" AND m.date <= ?"); args.push(ed.clone()); }
+    if let Some(bu) = qs.before_uid { sql.push_str(" AND m.uid < ?"); args.push(bu.to_string()); }
+
+    sql.push_str(" ORDER BY m.date DESC LIMIT ?");
     let limit = qs.limit.unwrap_or(100).min(500) as i64;
 
-    // Build dynamic query
+    // Execute
     let mut q = sqlx::query_as::<_, Row>(&sql);
-    for (_, v) in args.into_iter() { q = q.bind(v); }
+    for v in args { q = q.bind(v); }
     q = q.bind(limit);
 
     let rows = q.fetch_all(&pool).await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;

@@ -191,6 +191,90 @@
             </table>
         </div>
 
+        <div class="card">
+            <h2>Hesap Yönetimi</h2>
+            <table id="accounts-table">
+                <thead>
+                    <tr>
+                        <th>Email</th>
+                        <th>Renk</th>
+                        <th>İşlemler</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td colspan="3" style="text-align:center">Yükleniyor...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div id="edit-account-modal" class="modal">
+            <div class="modal-content">
+                <h3>Hesap Düzenle</h3>
+                <input type="hidden" id="edit-acc-id">
+                <div style="margin-bottom:12px">
+                    <label style="display:block; margin-bottom:4px; font-size:12px; color:#94a3b8;">Email</label>
+                    <input id="edit-acc-email" disabled
+                        style="width:100%; padding:8px; background:#334155; border:none; color:#ccc; border-radius:6px;">
+                </div>
+                <div style="margin-bottom:12px">
+                    <label style="display:block; margin-bottom:4px; font-size:12px; color:#94a3b8;">Renk</label>
+                    <div style="display:flex; gap:10px; align-items:center;">
+                        <input type="color" id="edit-acc-color"
+                            style="height:40px; width:60px; border:none; padding:0; background:none;">
+                        <span id="color-hex" style="font-family:monospace; color:#ccc"></span>
+                    </div>
+                </div>
+                <div style="margin-top:20px; display:flex; justify-content:flex-end; gap:10px;">
+                    <button class="secondary" onclick="closeEditModal()">İptal</button>
+                    <button onclick="saveAccountColor()">Kaydet</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Hesap Yönetimi</h2>
+            <table id="accounts-table">
+                <thead>
+                    <tr>
+                        <th>Email</th>
+                        <th>Renk</th>
+                        <th>İşlemler</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td colspan="3" style="text-align:center">Yükleniyor...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div id="edit-account-modal" class="modal">
+            <div class="modal-content">
+                <h3>Hesap Düzenle</h3>
+                <input type="hidden" id="edit-acc-id">
+                <div style="margin-bottom:12px">
+                    <label style="display:block; margin-bottom:4px; font-size:12px; color:#94a3b8;">Email</label>
+                    <input id="edit-acc-email" disabled
+                        style="width:100%; padding:8px; background:#334155; border:none; color:#ccc; border-radius:6px;">
+                </div>
+                <div style="margin-bottom:12px">
+                    <label style="display:block; margin-bottom:4px; font-size:12px; color:#94a3b8;">Renk</label>
+                    <div style="display:flex; gap:10px; align-items:center;">
+                        <input type="color" id="edit-acc-color"
+                            style="height:40px; width:60px; border:none; padding:0; background:none;">
+                        <span id="color-hex" style="font-family:monospace; color:#ccc"></span>
+                    </div>
+                </div>
+                <div style="margin-top:20px; display:flex; justify-content:flex-end; gap:10px;">
+                    <button class="secondary" onclick="closeEditModal()">İptal</button>
+                    <button onclick="saveAccountColor()">Kaydet</button>
+                </div>
+            </div>
+        </div>
+
         <div id="accounts-modal" class="modal">
             <div class="modal-content">
                 <h3 id="modal-title">Mail Kutusu Yetkileri</h3>
@@ -306,7 +390,68 @@
             document.getElementById('accounts-modal').style.display = 'none';
         }
 
+
+        function closeEditModal() {
+            document.getElementById('edit-account-modal').style.display = 'none';
+        }
+
+        async function loadAccountsTable() {
+            const res = await apiFetch('/accounts');
+            const accounts = await res.json();
+            const tbody = document.querySelector('#accounts-table tbody');
+            tbody.innerHTML = '';
+
+            accounts.forEach(a => {
+                const tr = document.createElement('tr');
+                const color = a.color || '#3b82f6';
+                tr.innerHTML = `
+                    <td>${a.email}</td>
+                    <td>
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <div style="width:20px; height:20px; border-radius:4px; background:${color}"></div>
+                            <span style="font-family:monospace; font-size:12px;">${color}</span>
+                        </div>
+                    </td>
+                    <td>
+                        <button onclick="openEditAccount('${a.id}', '${a.email}', '${color}')">Düzenle</button>
+                    </td>
+                 `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function openEditAccount(id, email, color) {
+            document.getElementById('edit-acc-id').value = id;
+            document.getElementById('edit-acc-email').value = email;
+            document.getElementById('edit-acc-color').value = color;
+            document.getElementById('color-hex').textContent = color;
+            document.getElementById('edit-account-modal').style.display = 'flex';
+        }
+
+        // Live hex update
+        document.getElementById('edit-acc-color').addEventListener('input', (e) => {
+            document.getElementById('color-hex').textContent = e.target.value;
+        });
+
+        async function saveAccountColor() {
+            const id = document.getElementById('edit-acc-id').value;
+            const color = document.getElementById('edit-acc-color').value;
+
+            const res = await apiFetch(`/accounts/${id}`, {
+                method: 'PATCH',
+                body: JSON.stringify({ color: color })
+            });
+
+            if (res.ok) {
+                closeEditModal();
+                loadAccountsTable();
+            } else {
+                alert('Kaydedilemedi');
+            }
+        }
+
         loadUsers();
+        loadAccountsTable();
     </script>
 </body>
 

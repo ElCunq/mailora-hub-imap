@@ -164,11 +164,45 @@
       border-bottom: 1px solid #1f2937;
       background: none;
       box-sizing: border-box;
+      transition: background 0.1s;
+    }
+
+    .message-row.density-compact {
+      min-height: 28px;
+      font-size: 12px;
+      padding: 0 6px;
+    }
+
+    .message-row.density-comfortable {
+      min-height: 48px;
+      font-size: 14px;
+      padding: 0 12px;
+    }
+
+    .message-row.unread .status-dot {
+      background: #3b82f6;
+      box-shadow: 0 0 4px #3b82f6;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: transparent;
+      margin-right: 8px;
+    }
+
+    .message-row.selected {
+      background: #1e293b;
     }
 
     .message-row.unread {
-      background: #182335;
+      background: #131b29;
+    }
+
+    .message-row.unread .subject {
       font-weight: 600;
+      color: #fff;
     }
 
     .message-row:hover {
@@ -182,6 +216,8 @@
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
+      display: flex;
+      align-items: center;
     }
 
     .message-row .subject {
@@ -190,6 +226,16 @@
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
+      color: #9ca3af;
+    }
+
+    /* Fixed badges in list */
+    .message-row .badge {
+      flex: 0 0 auto;
+      margin-right: 8px;
+      margin-left: 0;
+      min-width: 40px;
+      text-align: center;
     }
 
     .message-row .attachments-cell {
@@ -220,7 +266,7 @@
       flex: 0 0 4rem;
       text-align: right;
       font-size: 11px;
-      color: #e5e7eb;
+      color: #52525b;
     }
 
     .preview-panel {
@@ -393,24 +439,32 @@
       </div>
       <div id="user-info" class="small"
         style="background:#1b2230;padding:8px;border-radius:6px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;">
-        <div>
-          <span id="display-user" style="font-weight:bold; color:#93c5fd;"></span>
-          <div id="admin-link" style="display:none; margin-top:8px;">
-            <a href="/static/admin.html"
-              style="display:inline-block; background:#059669; color:#f0fdf4; padding:6px 14px; border-radius:8px; text-decoration:none; font-size:12px; font-weight:700; border: 2px solid #34d399; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">
-              🛡️ ADMİN PANELİ
-            </a>
-          </div>
+        <span id="display-user" style="font-weight:bold; color:#93c5fd;"></span>
+        <!-- Admin link moved here, simpler style -->
+        <div id="admin-link" style="display:none; margin-top:2px;">
+          <a href="/static/admin.html" style="color:#10b981; font-size:11px; text-decoration:none;">🛡️ Admin</a>
         </div>
-        <button onclick="logout()" style="background:#ef4444; border:none; color:white; padding:4px 8px;">Çıkış</button>
+      </div>
+      <button onclick="logout()"
+        style="background:#ef4444; border:none; color:white; padding:4px 8px; border-radius:4px; font-size:11px;">Çıkış</button>
+
+      <!-- View Settings -->
+      <div class="mini-nav" style="margin-bottom:8px; justify-content: space-between;">
+        <span class="small" style="color:#9ca3af">Görünüm:</span>
+        <div style="display:flex; gap:4px">
+          <button onclick="setDensity('compact')" class="density-btn" id="btn-compact"
+            style="padding:2px 6px; font-size:10px;">Sıkışık</button>
+          <button onclick="setDensity('comfortable')" class="density-btn" id="btn-comfortable"
+            style="padding:2px 6px; font-size:10px;">Rahat</button>
+        </div>
       </div>
       <div id="settings" class="small"
         style="background:#1b2230;padding:8px;border-radius:6px;margin-bottom:10px;line-height:1.4"></div>
       <h2>Hesaplar</h2>
       <div id="accounts"></div>
-      <h2 style="margin-top:16px;">Hesap Ekle</h2>
-      <button onclick="window.location.href='/static/add_account.html'" style="width:100%; margin-top:8px;">+ Yeni Hesap
-        Ekle</button>
+      <h2 id="add-account-title" style="margin-top:16px; display:none;">Hesap Ekle</h2>
+      <button id="add-account-btn" onclick="window.location.href='/static/add_account.html'"
+        style="width:100%; margin-top:8px; display:none;">+ Yeni Hesap Ekle</button>
       <div id="add-result" class="small"></div>
       <h2 style="margin-top:16px;">Klasörler</h2>
       <div id="folders"></div>
@@ -431,7 +485,26 @@
         <button onclick="syncNow()">Sync</button>
         <button onclick="refreshMessages()">Yenile</button>
         <button onclick="markSelectedSeen()">Okundu</button>
+        <div style="position:relative; display:inline-block;">
+          <button onclick="toggleSnoozeMenu()">Ertele ▼</button>
+          <div id="snooze-menu"
+            style="display:none; position:absolute; top:100%; left:0; background:#1f2937; border:1px solid #374151; z-index:50; min-width:150px; border-radius:4px; box-shadow:0 4px 6px rgba(0,0,0,0.3);">
+            <div onclick="snoozeSelected('later_today')"
+              style="padding:8px; cursor:pointer; color:#e5e7eb; border-bottom:1px solid #374151;">Bugün (+2s)</div>
+            <div onclick="snoozeSelected('tomorrow_morning')"
+              style="padding:8px; cursor:pointer; color:#e5e7eb; border-bottom:1px solid #374151;">Yarın Sabah (09:00)
+            </div>
+            <div onclick="snoozeSelected('next_week')" style="padding:8px; cursor:pointer; color:#e5e7eb;">Gelecek Hafta
+            </div>
+          </div>
+        </div>
         <button onclick="deleteSelected()">Sil</button>
+      </div>
+      <div id="system-banner"
+        style="display:none; background:#7f1d1d; color:#fecaca; padding:8px 12px; margin-bottom:8px; border-radius:6px; font-size:12px; cursor:pointer; align-items:center; justify-content:space-between;"
+        onclick="toggleSystemMessages()">
+        <span id="system-count">0 Sistem Bildirimi</span>
+        <span style="font-size:10px">Göster/Gizle</span>
       </div>
       <div id="message-list" class="message-list flex flex-col items-stretch divide-y divide-white/5 overflow-y-auto">
       </div>
@@ -475,39 +548,192 @@
       const user = localStorage.getItem('auth_user');
       const role = localStorage.getItem('auth_role');
       if (user) el('display-user').textContent = user;
-      if (role === 'Admin') el('admin-link').style.display = 'block';
+      if (role === 'Admin') {
+        el('admin-link').style.display = 'block';
+        el('add-account-title').style.display = 'block';
+        el('add-account-btn').style.display = 'block';
+      }
     }
 
     async function loadAccounts() {
       await initAuth();
       try { const r = await fetch('/accounts'); accounts = await r.json(); renderAccounts(); if (!currentAccount && accounts.length) { selectAccount(accounts[0].id); } } catch (e) { console.error(e); }
     }
-    function renderAccounts() { el('accounts').innerHTML = (accounts.length ? accounts.map(a => `<div class="account-item ${a.id === currentAccount ? 'active' : ''}" onclick="selectAccount('${a.id}')">${escapeHtml(a.email)}<span class="badge">${escapeHtml((a.provider || 'custom').toString().toUpperCase())}</span></div>`).join('') : '<div class="empty">Hesap yok</div>'); }
+    function renderAccounts() { el('accounts').innerHTML = (accounts.length ? accounts.map(a => `<div class="account-item ${a.id === currentAccount ? 'active' : ''}" onclick="selectAccount('${a.id}')">${escapeHtml(a.email)}<span class="badge" style="background:${a.color || '#3b82f6'}">${escapeHtml((a.provider || 'custom').toString().toUpperCase())}</span></div>`).join('') : '<div class="empty">Hesap yok</div>'); }
     function selectAccount(id) { currentAccount = id; renderAccounts(); loadFolders(); refreshMessages(); }
     async function loadFolders() { const base = ['INBOX', 'Sent', 'Drafts', 'Spam', 'Trash']; el('folders').innerHTML = base.map(f => `<div class="folder-item ${f === currentFolder ? 'active' : ''}" onclick="selectFolder('${f}')">${f}</div>`).join(''); }
     function selectFolder(f) { currentFolder = f; const nodes = Array.from(document.querySelectorAll('#folders .folder-item')); nodes.forEach(n => { n.classList.toggle('active', n.textContent === f); }); refreshMessages(); }
+    let systemMessages = [];
+    let showSystem = false;
+
+    function isSystemMessage(m) {
+      const f = (m.from || '').toLowerCase();
+      const s = (m.subject || '').toLowerCase();
+      return f.includes('mailer-daemon') || f.includes('postmaster') ||
+        s.includes('warning: delay') || s.includes('failed to deliver') || s.includes('undelivered mail');
+    }
+
+    function toggleSystemMessages() {
+      showSystem = !showSystem;
+      if (showSystem) {
+        filtered = systemMessages;
+      } else {
+        // Re-run filter to restore view (excluding system messages)
+        filtered = messages.filter(m => !isSystemMessage(m));
+        // If search was active, re-apply it? For now just reset to non-system 
+        const sl = el('search');
+        if (sl && sl.value) filterMessages();
+      }
+      renderMessages();
+    }
+
     async function refreshMessages() {
       try {
-        const unified = el('unified-check').checked; const fast = el('fast-check') && el('fast-check').checked; if (unified) { const r = await fetch(`/unified/inbox?folder=${encodeURIComponent(currentFolder)}&limit=200`); const data = await r.json(); messages = (data.messages || []).map(m => ({ uid: Number(m.uid), from: m.from_addr || '', subject: m.subject || '', flags: m.flags || '', account_id: m.account_id, has_attachments: !!m.has_attachments })); filtered = messages; renderMessages(); return; }
-        if (!currentAccount) return; const folderToUse = await resolveFolderName(currentAccount, currentFolder); const limit = 50; if (fast) { let qs = ''; const unread = el('unread-check')?.checked; const att = el('att-check')?.checked; const params = new URLSearchParams(); if (unread) params.set('unread', 'true'); if (att) params.set('attachments', 'true'); if (params.toString()) qs = `?${params.toString()}`; const r = await fetch(`/messages/${currentAccount}/${encodeURIComponent(folderToUse)}${qs}`); const data = await r.json(); messages = (data.messages || []).map(m => ({ uid: Number(m.uid), from: m.from_addr || '', subject: m.subject || '', flags: m.flags || '', account_id: currentAccount, has_attachments: !!m.has_attachments })); } else { const r = await fetch(`/test/messages/${currentAccount}?limit=${limit}&folder=${encodeURIComponent(folderToUse)}`); const data = await r.json(); messages = (data.messages || []).map(m => ({ uid: Number(m.uid), from: m.from || '', subject: m.subject || '', flags: (m.flags || []).join(' '), account_id: currentAccount, has_attachments: false })); }
-        filtered = messages; selectedUids.clear(); renderMessages();
+        const unified = el('unified-check').checked; const fast = el('fast-check') && el('fast-check').checked;
+
+        let rawMessages = [];
+
+        if (unified) {
+          const r = await fetch(`/unified/inbox?folder=${encodeURIComponent(currentFolder)}&limit=200`);
+          const data = await r.json();
+          rawMessages = (data.messages || []).map(m => ({ uid: Number(m.uid), from: m.from_addr || '', subject: m.subject || '', flags: m.flags || '', account_id: m.account_id, has_attachments: !!m.has_attachments }));
+        } else {
+          if (!currentAccount) return;
+          const folderToUse = await resolveFolderName(currentAccount, currentFolder);
+          if (fast) {
+            let qs = ''; const unread = el('unread-check')?.checked; const att = el('att-check')?.checked; const params = new URLSearchParams(); if (unread) params.set('unread', 'true'); if (att) params.set('attachments', 'true'); if (params.toString()) qs = `?${params.toString()}`;
+            const r = await fetch(`/messages/${currentAccount}/${encodeURIComponent(folderToUse)}${qs}`);
+            const data = await r.json();
+            rawMessages = (data.messages || []).map(m => ({ uid: Number(m.uid), from: m.from_addr || '', subject: m.subject || '', flags: m.flags || '', account_id: currentAccount, has_attachments: !!m.has_attachments }));
+          } else {
+            const r = await fetch(`/test/messages/${currentAccount}?limit=50&folder=${encodeURIComponent(folderToUse)}`);
+            const data = await r.json();
+            rawMessages = (data.messages || []).map(m => ({ uid: Number(m.uid), from: m.from || '', subject: m.subject || '', flags: (m.flags || []).join(' '), account_id: currentAccount, has_attachments: false }));
+          }
+        }
+
+        // Separate system messages
+        messages = rawMessages;
+        systemMessages = messages.filter(isSystemMessage);
+
+        // If we are NOT showing system messages specifically, filter them out of the main list
+        // BUT if user is searching or in a specific folder like Trash/Spam, maybe keep them? 
+        // For now, simple logic: filter out of main INBOX/unified.
+
+        filtered = messages.filter(m => !isSystemMessage(m));
+
+        renderMessages();
       } catch (e) { console.error(e); }
     }
-    function filterMessages() { const q = el('search').value.toLowerCase(); if (el('fast-check')?.checked) { performSearch(); return; } filtered = messages.filter(m => (m.subject || '').toLowerCase().includes(q) || (m.from || '').toLowerCase().includes(q)); renderMessages(); }
+
+    function filterMessages() {
+      const q = el('search').value.toLowerCase();
+      if (el('fast-check')?.checked) { performSearch(); return; }
+
+      // If searching, search EVERYTHING? Or just filtered?
+      // Let's search everything.
+      const pool = showSystem ? systemMessages : messages.filter(m => !isSystemMessage(m));
+
+      filtered = pool.filter(m => (m.subject || '').toLowerCase().includes(q) || (m.from || '').toLowerCase().includes(q));
+      renderMessages();
+    }
+
     async function performSearch(before) { const term = el('search').value.trim(); const unread = el('unread-check')?.checked; const att = el('att-check')?.checked; const params = new URLSearchParams(); if (term) params.set('q', term); if (unread) params.set('unread', 'true'); if (att) params.set('attachments', 'true'); if (currentAccount) params.set('account_id', currentAccount); params.set('folder', currentFolder); params.set('limit', '100'); if (before) params.set('before_uid', before); const r = await fetch(`/search?${params.toString()}`); const data = await r.json(); messages = (data.messages || []).map(m => ({ uid: Number(m.uid), from: m.from_addr || '', subject: m.subject || '', flags: m.flags || '', account_id: m.account_id, has_attachments: !!m.has_attachments })); filtered = messages; renderMessages(); }
     function loadMore() { if (!filtered.length) return; const last = filtered[filtered.length - 1].uid; performSearch(last); }
+    let density = localStorage.getItem('app_density') || 'comfortable';
+    let selectedIndex = -1;
+
+    function setDensity(mode) {
+      density = mode;
+      localStorage.setItem('app_density', mode);
+      document.querySelectorAll('.density-btn').forEach(b => b.style.opacity = '0.5');
+      el('btn-' + mode).style.opacity = '1';
+      renderMessages();
+    }
+
+    // Init density button styles
+    setTimeout(() => setDensity(density), 0);
+
+    // Vim Shortcuts
+    document.addEventListener('keydown', (e) => {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+      if (e.key === 'j') {
+        if (selectedIndex < filtered.length - 1) {
+          selectedIndex++;
+          highlightRow();
+          ensureVisible();
+        }
+      } else if (e.key === 'k') {
+        if (selectedIndex > 0) {
+          selectedIndex--;
+          highlightRow();
+          ensureVisible();
+        }
+      } else if (e.key === 'Enter') {
+        if (selectedIndex >= 0 && filtered[selectedIndex]) {
+          const m = filtered[selectedIndex];
+          openMessage(m.uid, m.account_id || currentAccount);
+        }
+      } else if (e.key === '/' || e.key === 'f') { // f for find
+        e.preventDefault();
+        el('search').focus();
+      } else if (e.key === 'd' || e.key === 'Delete') {
+        // Future: delete selected
+      }
+    });
+
+    function highlightRow() {
+      const rows = document.querySelectorAll('.message-row');
+      rows.forEach((r, i) => {
+        if (i === selectedIndex) r.classList.add('selected');
+        else r.classList.remove('selected');
+      });
+    }
+
+    function ensureVisible() {
+      const rows = document.querySelectorAll('.message-row');
+      if (rows[selectedIndex]) {
+        rows[selectedIndex].scrollIntoView({ block: 'nearest' });
+      }
+    }
+
     function renderMessages() {
+      // System Banner Update
+      const banner = el('system-banner');
+      if (systemMessages.length > 0) {
+        banner.style.display = 'flex';
+        el('system-count').textContent = `${systemMessages.length} Sistem Bildirimi ${showSystem ? '(Gösteriliyor)' : ''}`;
+        banner.style.backgroundColor = showSystem ? '#991b1b' : '#7f1d1d';
+      } else {
+        banner.style.display = 'none';
+      }
+
       el('message-list').className = 'message-list flex flex-col items-stretch divide-y divide-white/5 overflow-y-auto';
       el('message-list').innerHTML = filtered.length
-        ? filtered.map(m => {
+        ? filtered.map((m, idx) => {
           const seen = (m.flags || '').includes('\\Seen');
-          const acc = (m.account_id ? `<span class=\"badge\">${escapeHtml((m.account_id.split('_')[1] || ''))}</span>` : '');
+          const accObj = accounts.find(a => a.id === m.account_id);
+          const color = accObj ? (accObj.color || '#3b82f6') : '#3b82f6';
+          const accName = accObj ? (accObj.display_name || accObj.email) : (m.account_id || '').split('_')[1];
+          // Prefer Display Name (Tag) if available, otherwise email or ID part
+          const badgeText = accObj && accObj.display_name ? accObj.display_name : (accName.includes('@') ? accName.split('@')[0] : accName);
+
+          const acc = (m.account_id ? `<span class=\"badge\" style=\"background:${color}\">${escapeHtml(badgeText)}</span>` : '');
           const fromRaw = m.from || '';
           const subjRaw = m.subject || '(No subject)';
           const fromText = escapeHtml(tryFixUtf8Mojibake(decodeRfc2047(fromRaw)).slice(0, 60));
           const subjectText = escapeHtml(tryFixUtf8Mojibake(decodeRfc2047(subjRaw)));
           const att = m.has_attachments ? `<span class='attachment-chip'>📎</span>` : '';
-          return `<div class=\"message-row ${seen ? '' : 'unread'}\" onclick=\"openMessage(${m.uid},'${m.account_id || currentAccount}')\"><div class='from'>${fromText} ${acc}</div><div class='subject'>${att} ${subjectText}</div><div class='attachments-cell' id='atts-${m.uid}'></div><div class='uid'>${m.uid}</div></div>`;
+          const dot = seen ? '' : `<div class="status-dot"></div>`;
+          const isSel = idx === selectedIndex ? 'selected' : '';
+
+          return `<div id="msg-row-${m.uid}" class=\"message-row ${seen ? '' : 'unread'} density-${density} ${isSel}\" onclick=\"selectedIndex=${idx}; highlightRow(); openMessage(${m.uid},'${m.account_id || currentAccount}')\">
+                    ${acc}
+                    <div class='from'>${dot} ${fromText}</div>
+                    <div class='subject'>${att} ${subjectText}</div>
+                    <div class='uid'>${m.uid}</div>
+                  </div>`;
         }).join('')
         : '<div class="empty">Mesaj yok</div>';
       const pager = el('pager');
@@ -520,36 +746,28 @@
         const fromMeta = tryFixUtf8Mojibake(decodeRfc2047(body.from || ''));
         const title = `<h3>${escapeHtml(titleText)}</h3>`;
         const meta = `<div class='small'>From: ${escapeHtml(fromMeta)} | UID: ${uid} | ${escapeHtml(useAcc)}</div><hr>`;
+
+        // Store for unblocking
+        window._currentMsgHtml = body.html_body || '';
+        window._currentMsgUid = uid;
+
         if (body.html_body && body.html_body.trim().length > 0) {
           el('preview').innerHTML = `${title}${meta}
-      <div class='preview-html-container'><iframe id='html-frame' sandbox='allow-scripts allow-popups allow-forms allow-same-origin'></iframe></div>
-      <div id='plain-fallback' style='display:none; white-space:pre-wrap; font-size:13px;'>${(body.plain_text || '').replace(/[&<>]/g, s => ({
+            <div id='image-banner' style='display:none; background:#fff3cd; color:#854d0e; padding:6px; font-size:12px; margin-bottom:6px; border-radius:4px;'>
+               Uzak görseller engellendi. <button onclick='unblockImages()' style='margin-left:8px; padding:2px 6px;'>Göster</button>
+            </div>
+            <div class='preview-html-container'><iframe id='html-frame' sandbox='allow-scripts allow-popups allow-forms allow-same-origin'></iframe></div>
+            <div id='plain-fallback' style='display:none; white-space:pre-wrap; font-size:13px;'>${(body.plain_text || '').replace(/[&<>]/g, s => ({
             "&": "&amp;", "<": "&lt;",
             ">": "&gt;"
           }[s]))}</div>
-      <div class='preview-actions'>
-        <button onclick='showHtml()'>HTML</button>
-        <button onclick='showPlain()'>Düz metin</button>
-      </div>
-      <div id='attachment-list' class='small' style='margin-top:8px'></div>`;
-          const iframe = document.getElementById('html-frame');
-          const shell = `<!doctype html><html><head><base target="_blank"><style>html,body{margin:0;padding:12px;font:14px system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#e5e7eb;background:#0f141c}img,video,iframe{max-width:100%;height:auto}table{max-width:100%;overflow:auto;display:block}a{color:#60a5fa} pre{white-space:pre-wrap}</style></head><body>__CONTENT__</body></html>`;
-          function decodeEntities(s) { const ta = document.createElement('textarea'); ta.innerHTML = s; return ta.value; }
-          let raw = body.html_body || '';
-          if (/&lt;<\/?[a-zA-Z]/.test(raw) && !/<\/?[a-zA-Z]/.test(raw)) { raw = decodeEntities(raw); }
-          let safeHtml = raw
-            .replace(/<(script)[^>]*>[\s\S]*?<\/\1>/gi, '') // Remove scripts only, KEEP styles
-            .replace(/<(form|object|embed|iframe)[^>]*>[\s\S]*?<\/\1>/gi, '') // Remove interactive objects
-            .replace(/ on[a-zA-Z]+=\(\"[^\"]*\"|'[^']*'\)/g, '')
-            .replace(/\b(href|src)\s*=\s*"(?:javascript:|data:)[^"]*"/gi, '$1="#"');
-          // Handle both double and single quotes for CID
-          safeHtml = safeHtml.replace(/src\s*=\s*(["'])cid:([^"']+)\1/gi, (m, q, cid) => {
-            return `data-cid="${cid}" src="/attachments/download?accountId=${encodeURIComponent(useAcc)}&uid=${uid}&part=${encodeURIComponent(cid)}&folder=${encodeURIComponent(folderToUse)}"`;
-          });
-          // Use srcdoc (safest for sandboxed content). 
-          // Previous blank screen was due to backend stripping/truncation, which is now fixed.
-          iframe.srcdoc = shell.replace('__CONTENT__', safeHtml);
-          console.log("HTML content assigned to srcdoc", { length: safeHtml.length });
+            <div class='preview-actions'>
+              <button onclick='showHtml()'>HTML</button>
+              <button onclick='showPlain()'>Düz metin</button>
+            </div>
+            <div id='attachment-list' class='small' style='margin-top:8px'></div>`;
+
+          renderHtmlContent(window._currentMsgHtml, true, useAcc, uid, folderToUse);
           window._lastPreviewMode = 'html';
         } else {
           el('preview').innerHTML = `${title}${meta}<div style='white-space:pre-wrap;font-size:13px;'>${body.plain_text || '(içerik yok)'}</div><div id='attachment-list' class='small' style='margin-top:8px'></div>`;
@@ -565,6 +783,49 @@
       } catch (e) {
         console.error("Body fetch error:", e);
         el('preview').innerHTML = `<div class="empty" style="color:#f87171">Body alınamadı: ${escapeHtml(e.message)}</div>`;
+      }
+    }
+
+    function renderHtmlContent(raw, blockImages, accId, uid, folder) {
+      const iframe = document.getElementById('html-frame');
+      if (!iframe) return;
+
+      const shell = `<!doctype html><html><head><base target="_blank"><style>html,body{margin:0;padding:12px;font:14px system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#e5e7eb;background:#0f141c}img,video,iframe{max-width:100%;height:auto}table{max-width:100%;overflow:auto;display:block}a{color:#60a5fa} pre{white-space:pre-wrap}</style></head><body>__CONTENT__</body></html>`;
+      function decodeEntities(s) { const ta = document.createElement('textarea'); ta.innerHTML = s; return ta.value; }
+
+      if (/&lt;<\/?[a-zA-Z]/.test(raw) && !/<\/?[a-zA-Z]/.test(raw)) { raw = decodeEntities(raw); }
+
+      let safeHtml = raw
+        .replace(/<(script)[^>]*>[\s\S]*?<\/\1>/gi, '') // Remove scripts
+        .replace(/<(form|object|embed|iframe)[^>]*>[\s\S]*?<\/\1>/gi, '') // Remove interactive
+        .replace(/ on[a-zA-Z]+=\(\"[^\"]*\"|'[^']*'\)/g, '')
+        .replace(/\bhref\s*=\s*"(?:javascript:|data:)[^"]*"/gi, 'href="#"');
+
+      // Detect remote images
+      const hasRemote = /<img[^>]+src=["']http/i.test(safeHtml);
+
+      if (blockImages && hasRemote) {
+        // Replace src="http..." with data-src="http..."
+        safeHtml = safeHtml.replace(/(<img[^>]+)src=(["'])(http[^"']+)\2/gi, '$1data-src=$2$3$2 src=$2data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7$2');
+        const banner = document.getElementById('image-banner');
+        if (banner) banner.style.display = 'block';
+      }
+
+      // Handle CID images (always allowed as they are local attachments)
+      safeHtml = safeHtml.replace(/src\s*=\s*(["'])cid:([^"']+)\1/gi, (m, q, cid) => {
+        return `data-cid="${cid}" src="/attachments/download?accountId=${encodeURIComponent(accId)}&uid=${uid}&part=${encodeURIComponent(cid)}&folder=${encodeURIComponent(folder)}"`;
+      });
+
+      iframe.srcdoc = shell.replace('__CONTENT__', safeHtml);
+    }
+
+    function unblockImages() {
+      const banner = document.getElementById('image-banner');
+      if (banner) banner.style.display = 'none';
+
+      const open = window._openMsg;
+      if (open && window._currentMsgHtml) {
+        renderHtmlContent(window._currentMsgHtml, false, open.accId, open.uid, open.folder);
       }
     }
 
@@ -616,7 +877,15 @@
         }
       }
     }
-    function markRowSeen(uid) { const row = document.getElementById(`atts-${uid}`)?.closest('.message-row'); if (row) row.classList.remove('unread'); }
+    function markRowSeen(uid) {
+      const row = document.getElementById(`msg-row-${uid}`);
+      if (row) {
+        row.classList.remove('unread');
+        // Remove dot if present (visual cleanup)
+        const dot = row.querySelector('.status-dot');
+        if (dot) dot.remove();
+      }
+    }
     async function markSeenOnOpen(accId, folder, uid) {
       // Skip if already seen in data
       const m = (filtered || []).find(x => Number(x.uid) === Number(uid) && (x.account_id || currentAccount) === accId);
@@ -702,9 +971,65 @@
     }
 
     // === Folder resolver ===
-    // Maps UI folder name to provider-specific mailbox name if needed.
-    // For now pass-through; can be extended using /test/folders response.
+    let folderCache = {}; // { accountId: [ {name, flags} ] }
+    let folderMappings = {}; // { accountId: { 'Sent': 'realName', ... } }
+
+    async function ensureFoldersLoaded(accountId) {
+      if (folderCache[accountId]) return;
+      try {
+        const r = await fetch(`/test/folders/${encodeURIComponent(accountId)}`);
+        if (!r.ok) throw new Error('Failed to list folders');
+        const list = await r.json();
+        folderCache[accountId] = list;
+
+        // Build mappings
+        const map = {};
+
+        // Helper to find by flag or name
+        const find = (flags, names) => {
+          // 1. Try generic flags (rfc6154) - strict check
+          // Gmail: \Sent, \Trash, \Drafts, \Junk are reliably present
+          const byFlag = list.find(f => f.flags.some(fl => flags.some(target => fl.toLowerCase() === target.toLowerCase())));
+          if (byFlag) return byFlag.name;
+
+          // 2. Try strict name match (ends with or exact match)
+          // e.g. "Sent" matches "[Gmail]/Sent Mail" (no) -> we need smarter matching
+          const byName = list.find(f => {
+            const n = f.name.toLowerCase();
+            return names.some(target => n === target || n.endsWith('/' + target) || n.endsWith('.' + target));
+          });
+          if (byName) return byName.name;
+
+          // 3. Fuzzy match as last resort
+          const byFuzzy = list.find(f => names.some(target => f.name.toLowerCase().includes(target)));
+          return byFuzzy ? byFuzzy.name : null;
+        };
+
+        map['INBOX'] = 'INBOX'; // Always INBOX
+        map['Sent'] = find(['\\Sent'], ['sent', 'sent items', 'sent mail', 'sent messages', 'gönderilen', 'outbox']);
+        map['Drafts'] = find(['\\Drafts'], ['drafts', 'taslak']);
+        map['Trash'] = find(['\\Trash'], ['trash', 'deleted', 'bin', 'çöp']);
+        map['Spam'] = find(['\\Junk', '\\Spam'], ['spam', 'junk', 'gereksiz']);
+
+        folderMappings[accountId] = map;
+        console.log(`[FolderMap] ${accountId}`, map);
+      } catch (e) {
+        console.error("Folder resolution failed:", e);
+        folderCache[accountId] = [];
+      }
+    }
+
     async function resolveFolderName(accountId, folder) {
+      // If it's a known generic folder, try to resolve it
+      const generics = ['Sent', 'Drafts', 'Trash', 'Spam'];
+      if (generics.includes(folder) || folder === 'INBOX') {
+        await ensureFoldersLoaded(accountId);
+        const map = folderMappings[accountId];
+        if (map && map[folder]) {
+          return map[folder];
+        }
+      }
+      // Fallback: use as-is (e.g. if user selected a custom folder directly, or if resolution failed)
       return folder;
     }
 
@@ -715,6 +1040,66 @@
     window.addEventListener('DOMContentLoaded', () => {
       try { loadAccounts(); loadFolders(); refreshMessages(); loadSettingsSummary(); } catch (e) { console.error(e); }
     });
+
+    function toggleSnoozeMenu() {
+      const m = document.getElementById('snooze-menu');
+      m.style.display = m.style.display === 'none' ? 'block' : 'none';
+    }
+
+    // Close menu when clicking outside
+    document.addEventListener('click', function (e) {
+      const menu = document.getElementById('snooze-menu');
+      const btn = e.target.closest('button[onclick="toggleSnoozeMenu()"]');
+      if (!btn && menu && menu.style.display === 'block') {
+        menu.style.display = 'none';
+      }
+    }, true);
+
+    async function snoozeSelected(type) {
+      if (selectedUids.size === 0) { alert('Mesaj seçiniz.'); return; }
+
+      let targetTime = new Date();
+      if (type === 'later_today') {
+        targetTime.setHours(targetTime.getHours() + 2);
+      } else if (type === 'tomorrow_morning') {
+        targetTime.setDate(targetTime.getDate() + 1);
+        targetTime.setHours(9, 0, 0, 0);
+      } else if (type === 'next_week') {
+        // Find next Monday
+        targetTime.setDate(targetTime.getDate() + (1 + 7 - targetTime.getDay()) % 7 || 7);
+        targetTime.setHours(9, 0, 0, 0);
+      }
+
+      const iso = targetTime.toISOString();
+
+      // Process all selected
+      for (let uid of selectedUids) {
+        // Find account/folder for this UID from 'messages' array (or use current if single view)
+        // Since unified view mixes accounts, we must find the message object
+        const m = messages.find(x => x.uid == uid);
+        if (!m) continue;
+
+        try {
+          // currentFolder might be 'INBOX' in unified view, but backend needs actual folder
+          // 'm.folder' from unified message object contains real folder name
+          const folder = m.folder || currentFolder;
+          await fetch(`/snooze/${m.account_id}/${encodeURIComponent(folder)}/${uid}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ until: iso })
+          });
+
+          // UI Update: Remove row
+          const row = document.getElementById('msg-row-' + uid);
+          if (row) row.remove();
+        } catch (e) {
+          console.error(e);
+        }
+      }
+
+      selectedUids.clear();
+      toggleSnoozeMenu(); // Hide menu
+    }
   </script>
 </body>
 

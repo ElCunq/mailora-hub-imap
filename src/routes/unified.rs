@@ -1,5 +1,6 @@
 /// Unified Inbox - aggregates messages from all accounts
 use axum::{extract::{State, Query}, http::StatusCode, Json};
+use crate::rbac::AuthUser;
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
 use sqlx::Row; // for try_get in dynamic row access
@@ -30,23 +31,48 @@ pub struct UnifiedQuery { pub limit: Option<u32>, pub offset: Option<u32>, pub u
 /// GET /unified/inbox - Returns all INBOX messages from all accounts, sorted by date
 pub async fn unified_inbox(
     State(pool): State<SqlitePool>,
+    auth_user: AuthUser,
     Query(q): Query<UnifiedQuery>
 ) -> Result<Json<UnifiedInboxResponse>, StatusCode> {
     let limit = q.limit.unwrap_or(100).min(500) as i64;
     let offset = q.offset.unwrap_or(0) as i64;
     let folder = q.folder.unwrap_or_else(|| "INBOX".to_string());
-    let unread_filter = if q.unread_only.unwrap_or(false) { "AND (flags NOT LIKE '%\\Seen%')" } else { "" };
-    let sql = format!(
-        "SELECT account_id, folder, uid, message_id, subject, from_addr, to_addr, date, flags, size \
-         FROM messages WHERE folder = ? {} ORDER BY date DESC LIMIT ? OFFSET ?",
-        unread_filter
-    );
-    let messages = sqlx::query_as::<_, UnifiedMessage>(&sql)
-        .bind(folder)
-        .bind(limit)
-        .bind(offset)
-        .fetch_all(&pool)
-        .await
+    let unread_filter = if q.unread_only.unwrap_or(false) { "AND (m.flags NOT LIKE '%\\Seen%')" } else { "" };
+    
+    // Admin sees all, Member sees only assigned
+    let snooze_filter = "AND (snoozed_until IS NULL OR snoozed_until <= datetime('now'))";
+
+    let messages = if auth_user.role == "Admin" {
+        let unread_filter_adm = if q.unread_only.unwrap_or(false) { "AND (flags NOT LIKE '%\\Seen%')" } else { "" };
+        let sql = format!(
+            "SELECT account_id, folder, uid, message_id, subject, from_addr, to_addr, date, flags, size \
+             FROM messages WHERE folder = ? {} {} ORDER BY date DESC LIMIT ? OFFSET ?",
+            unread_filter_adm, snooze_filter
+        );
+        sqlx::query_as::<_, UnifiedMessage>(&sql)
+            .bind(folder)
+            .bind(limit)
+            .bind(offset)
+            .fetch_all(&pool)
+            .await
+    } else {
+        let sql = format!(
+            "SELECT m.account_id, m.folder, m.uid, m.message_id, m.subject, m.from_addr, m.to_addr, m.date, m.flags, m.size \
+             FROM messages m \
+             JOIN user_accounts ua ON m.account_id = ua.account_id \
+             WHERE m.folder = ? AND ua.user_id = ? {} {} ORDER BY m.date DESC LIMIT ? OFFSET ?",
+            unread_filter, snooze_filter
+        );
+        sqlx::query_as::<_, UnifiedMessage>(&sql)
+            .bind(folder)
+            .bind(auth_user.id)
+            .bind(limit)
+            .bind(offset)
+            .fetch_all(&pool)
+            .await
+    };
+
+    let messages = messages
         .map_err(|e| {
             tracing::error!("Failed to fetch unified inbox: {e}");
             StatusCode::INTERNAL_SERVER_ERROR
@@ -87,20 +113,40 @@ pub struct EventsResponse {
 
 pub async fn unified_events(
     State(pool): State<SqlitePool>,
+    auth_user: AuthUser,
 ) -> Result<Json<EventsResponse>, StatusCode> {
-    let events = sqlx::query_as!(
-        EventRecord,
-        r#"
-        SELECT id as "id!", direction as "direction!", mailbox as "mailbox!", 
-               actor, peer, subject, ts as "ts!"
-        FROM events
-        ORDER BY ts DESC
-        LIMIT 100
-        "#
-    )
-    .fetch_all(&pool)
-    .await
-    .map_err(|e| {
+    let events = if auth_user.role == "Admin" {
+        sqlx::query_as!(
+            EventRecord,
+            r#"
+            SELECT id as "id!", direction as "direction!", mailbox as "mailbox!", 
+                   actor, peer, subject, ts as "ts!"
+            FROM events
+            ORDER BY ts DESC
+            LIMIT 100
+            "#
+        )
+        .fetch_all(&pool)
+        .await
+    } else {
+         sqlx::query_as!(
+            EventRecord,
+            r#"
+            SELECT e.id as "id!", e.direction as "direction!", e.mailbox as "mailbox!", 
+                   e.actor, e.peer, e.subject, e.ts as "ts!"
+            FROM events e
+            JOIN user_accounts ua ON e.mailbox = ua.account_id
+            WHERE ua.user_id = ?
+            ORDER BY e.ts DESC
+            LIMIT 100
+            "#,
+            auth_user.id
+        )
+        .fetch_all(&pool)
+        .await
+    };
+
+    let events = events.map_err(|e| {
         tracing::error!("Failed to fetch events: {e}");
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
@@ -113,9 +159,25 @@ pub async fn unified_events(
 #[derive(Debug, Serialize)]
 pub struct UnreadCounters { pub total_unread: i64, pub per_account: Vec<(String,i64)> }
 
-pub async fn unified_unread(State(pool): State<SqlitePool>) -> Result<Json<UnreadCounters>, StatusCode> {
-    let rows = sqlx::query("SELECT account_id, COUNT(*) as c FROM messages WHERE folder='INBOX' AND (flags NOT LIKE '%\\Seen%') GROUP BY account_id")
-        .fetch_all(&pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+pub async fn unified_unread(
+    State(pool): State<SqlitePool>, 
+    auth_user: AuthUser
+) -> Result<Json<UnreadCounters>, StatusCode> {
+    // Only count messages that are NOT snoozed
+    let snooze_filter = "(snoozed_until IS NULL OR snoozed_until <= datetime('now'))";
+
+    let rows = if auth_user.role == "Admin" {
+         let sql = format!("SELECT account_id, COUNT(*) as c FROM messages WHERE folder='INBOX' AND (flags NOT LIKE '%\\Seen%') AND {} GROUP BY account_id", snooze_filter);
+         sqlx::query(&sql)
+            .fetch_all(&pool).await
+    } else {
+         let sql = format!("SELECT m.account_id, COUNT(*) as c FROM messages m JOIN user_accounts ua ON m.account_id = ua.account_id WHERE m.folder='INBOX' AND (m.flags NOT LIKE '%\\Seen%') AND {} AND ua.user_id = ? GROUP BY m.account_id", snooze_filter);
+         sqlx::query(&sql)
+            .bind(auth_user.id)
+            .fetch_all(&pool).await
+    };
+
+    let rows = rows.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let mut per_account = Vec::new();
     let mut total = 0i64;
     for r in rows { if let (Ok(acc), Ok(c)) = (r.try_get::<String,_>("account_id"), r.try_get::<i64,_>("c")) { per_account.push((acc.clone(), c)); total += c; } }

@@ -101,6 +101,7 @@ pub struct Account {
     // New per-account send behavior hints
     pub append_policy: Option<String>, // stored as text column (auto|never|force)
     pub sent_folder_hint: Option<String>,
+    pub color: Option<String>,
     // Helper field for password (populated from credentials_encrypted)
     #[sqlx(skip)]
     #[serde(skip)]
