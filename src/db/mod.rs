@@ -137,6 +137,7 @@ pub async fn run_migrations(pool: &SqlitePool) -> Result<()> {
                         || msg.contains("cannot add a PRIMARY KEY")
                         || msg.contains("duplicate")
                         || msg.contains("not unique")
+                        || msg.contains("no such column")
                         || msg.contains("incomplete input")
                         || msg.contains("cannot commit - no transaction is active");
                     if !benign {
