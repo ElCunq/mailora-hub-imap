@@ -1,0 +1,739 @@
+<!doctype html>
+<html lang="tr">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Ayarlar - Mailora Hub</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-primary: #0a0d12;
+      --bg-secondary: #111827;
+      --bg-tertiary: #1a1f2e;
+      --border: #2d3748;
+      --text-primary: #f1f5f9;
+      --text-secondary: #94a3b8;
+      --text-muted: #64748b;
+      --accent-blue: #3b82f6;
+      --accent-purple: #8b5cf6;
+      --accent-green: #10b981;
+      --accent-red: #ef4444;
+      --accent-orange: #f59e0b;
+      --gradient-primary: linear-gradient(135deg, #3b82f6, #8b5cf6);
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      min-height: 100vh;
+    }
+
+    /* Header */
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: rgba(17, 24, 39, 0.9);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .header-logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .logo-icon {
+      width: 36px;
+      height: 36px;
+      background: var(--gradient-primary);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+    }
+
+    .header-title {
+      font-size: 18px;
+      font-weight: 600;
+      background: var(--gradient-primary);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .header-subtitle {
+      color: var(--text-muted);
+      font-size: 13px;
+      margin-left: 8px;
+    }
+
+    .header-back {
+      margin-left: auto;
+      color: var(--accent-blue);
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 500;
+      padding: 8px 16px;
+      border-radius: 8px;
+      transition: all 0.2s;
+    }
+
+    .header-back:hover {
+      background: rgba(59, 130, 246, 0.1);
+    }
+
+    /* Main Layout */
+    main {
+      display: grid;
+      grid-template-columns: 280px 1fr;
+      min-height: calc(100vh - 70px);
+    }
+
+    /* Sidebar Navigation */
+    nav {
+      border-right: 1px solid var(--border);
+      background: var(--bg-secondary);
+      padding: 20px;
+    }
+
+    .nav-section {
+      margin-bottom: 24px;
+    }
+
+    .nav-label {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-muted);
+      margin-bottom: 12px;
+      padding-left: 12px;
+    }
+
+    .nav-item {
+      padding: 12px 16px;
+      border-radius: 10px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 14px;
+      color: var(--text-secondary);
+      transition: all 0.2s;
+      margin-bottom: 4px;
+    }
+
+    .nav-item:hover {
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--text-primary);
+    }
+
+    .nav-item.active {
+      background: rgba(59, 130, 246, 0.15);
+      color: var(--accent-blue);
+      font-weight: 500;
+    }
+
+    .nav-item .icon {
+      font-size: 16px;
+    }
+
+    /* Content Area */
+    section {
+      padding: 32px;
+      overflow-y: auto;
+    }
+
+    /* Cards */
+    .card {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      margin-bottom: 24px;
+      overflow: hidden;
+      transition: all 0.3s;
+    }
+
+    .card:hover {
+      border-color: rgba(59, 130, 246, 0.3);
+    }
+
+    .card-header {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .card-header h4 {
+      margin: 0;
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .card-header .icon {
+      font-size: 18px;
+    }
+
+    .card-content {
+      padding: 20px;
+    }
+
+    /* Form Rows */
+    .form-row {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+
+    .form-row:last-child {
+      margin-bottom: 0;
+    }
+
+    .form-label {
+      width: 180px;
+      color: var(--text-secondary);
+      font-size: 13px;
+      flex-shrink: 0;
+    }
+
+    .form-input {
+      flex: 1;
+      padding: 10px 14px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text-primary);
+      font-size: 13px;
+      font-family: inherit;
+      transition: all 0.2s;
+    }
+
+    .form-input:focus {
+      outline: none;
+      border-color: var(--accent-blue);
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    }
+
+    .form-input:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    select.form-input {
+      cursor: pointer;
+    }
+
+    /* Pill/Badge */
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      font-size: 12px;
+      margin-right: 8px;
+      margin-bottom: 8px;
+    }
+
+    .pill.active {
+      background: rgba(16, 185, 129, 0.15);
+      border-color: rgba(16, 185, 129, 0.3);
+      color: var(--accent-green);
+    }
+
+    .pill.inactive {
+      background: rgba(239, 68, 68, 0.1);
+      border-color: rgba(239, 68, 68, 0.3);
+      color: var(--accent-red);
+    }
+
+    /* Buttons */
+    .btn {
+      padding: 10px 18px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--bg-tertiary);
+      color: var(--text-primary);
+      font-size: 13px;
+      font-weight: 500;
+      font-family: inherit;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn:hover {
+      background: var(--bg-secondary);
+      border-color: var(--accent-blue);
+    }
+
+    .btn-primary {
+      background: var(--gradient-primary);
+      border: none;
+      color: white;
+    }
+
+    .btn-primary:hover {
+      opacity: 0.9;
+      transform: translateY(-1px);
+    }
+
+    .btn-danger {
+      background: rgba(239, 68, 68, 0.15);
+      border-color: rgba(239, 68, 68, 0.3);
+      color: var(--accent-red);
+    }
+
+    .btn-danger:hover {
+      background: rgba(239, 68, 68, 0.25);
+    }
+
+    /* Tab Content */
+    .tab {
+      animation: fadeIn 0.3s ease;
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(10px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    /* Helper */
+    .helper-text {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+
+    /* Account Card */
+    .account-nav-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .account-avatar {
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      background: var(--gradient-primary);
+    }
+
+    /* Color picker */
+    input[type="color"] {
+      -webkit-appearance: none;
+      border: none;
+      width: 40px;
+      height: 40px;
+      cursor: pointer;
+      border-radius: 8px;
+      padding: 0;
+      overflow: hidden;
+    }
+
+    input[type="color"]::-webkit-color-swatch-wrapper {
+      padding: 0;
+    }
+
+    input[type="color"]::-webkit-color-swatch {
+      border: 2px solid var(--border);
+      border-radius: 8px;
+    }
+
+    /* Empty State */
+    .empty-state {
+      text-align: center;
+      padding: 40px;
+      color: var(--text-muted);
+    }
+
+    .empty-state .icon {
+      font-size: 48px;
+      margin-bottom: 16px;
+      opacity: 0.5;
+    }
+  </style>
+</head>
+
+<body>
+  <header>
+    <div class="header-logo">
+      <div class="logo-icon">✉</div>
+      <span class="header-title">Mailora Hub</span>
+    </div>
+    <span class="header-subtitle">Ayarlar</span>
+    <a href="/static/app_premium.html" class="header-back">← Uygulamaya Dön</a>
+  </header>
+
+  <main>
+    <nav>
+      <div class="nav-section">
+        <div class="nav-label">Genel</div>
+        <div class="nav-item active" data-tab="system" onclick="openTab('system',this)">
+          <span class="icon">⚙️</span>
+          <span>Sistem</span>
+        </div>
+        <div class="nav-item" data-tab="security" onclick="openTab('security',this)">
+          <span class="icon">🔒</span>
+          <span>Güvenlik</span>
+        </div>
+        <div class="nav-item" data-tab="features" onclick="openTab('features',this)">
+          <span class="icon">✨</span>
+          <span>Özellikler</span>
+        </div>
+      </div>
+      <div class="nav-section">
+        <div class="nav-label">Hesaplar</div>
+        <div id="nav-accounts"></div>
+      </div>
+    </nav>
+
+    <section>
+      <!-- System Tab -->
+      <div id="tab-system" class="tab">
+        <div class="card">
+          <div class="card-header">
+            <span class="icon">💾</span>
+            <h4>Veritabanı</h4>
+          </div>
+          <div class="card-content">
+            <div class="form-row">
+              <label class="form-label">Bağlantı URL</label>
+              <input id="db-url" class="form-input" disabled />
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <span class="icon">📬</span>
+            <h4>Mail Sunucuları</h4>
+          </div>
+          <div class="card-content">
+            <div class="form-row">
+              <label class="form-label">IMAP Sunucu</label>
+              <input id="imap-hostport" class="form-input" disabled />
+            </div>
+            <div class="form-row">
+              <label class="form-label">SMTP Sunucu</label>
+              <input id="smtp-hostport" class="form-input" disabled />
+            </div>
+            <div class="form-row">
+              <label class="form-label">OAuth Redirect</label>
+              <input id="oauth-redirect" class="form-input" disabled />
+            </div>
+            <div class="form-row">
+              <label class="form-label">Sağlayıcılar</label>
+              <div id="providers"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <span class="icon">📊</span>
+            <h4>Telemetry</h4>
+          </div>
+          <div class="card-content">
+            <div class="form-row">
+              <label class="form-label">Log Seviyesi</label>
+              <input id="log-level" class="form-input" disabled />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Security Tab -->
+      <div id="tab-security" class="tab" style="display:none">
+        <div class="card">
+          <div class="card-header">
+            <span class="icon">🛡️</span>
+            <h4>HTML Temizleme</h4>
+          </div>
+          <div class="card-content">
+            <div class="form-row">
+              <label class="form-label">Durum</label>
+              <span id="sanitize-status" class="pill">—</span>
+            </div>
+            <p class="helper-text" style="margin-top: 12px;">
+              HTML içeriğinde script, iframe, form gibi potansiyel tehlikeli elementler temizlenir.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Features Tab -->
+      <div id="tab-features" class="tab" style="display:none">
+        <div class="card">
+          <div class="card-header">
+            <span class="icon">🎯</span>
+            <h4>Aktif Özellikler</h4>
+          </div>
+          <div class="card-content">
+            <div class="form-row">
+              <label class="form-label">Ekler</label>
+              <span id="feat-attachments" class="pill">—</span>
+            </div>
+            <div class="form-row">
+              <label class="form-label">Unified Inbox</label>
+              <span id="feat-unified" class="pill">—</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Account Tab (Dynamic) -->
+      <div id="tab-account" class="tab" style="display:none"></div>
+    </section>
+  </main>
+
+  <script>
+    // Auth check & Interceptor
+    if (!localStorage.getItem('auth_token')) {
+      window.location.href = '/static/login.html';
+    }
+
+    const originalFetch = window.fetch;
+    window.fetch = function () {
+      let [resource, config] = arguments;
+      if (!config) config = {};
+      if (!config.headers) config.headers = {};
+      if (localStorage.getItem('auth_token')) {
+        config.headers['Authorization'] = localStorage.getItem('auth_token');
+      }
+      return originalFetch(resource, config);
+    };
+
+    let settings = null;
+    let accounts = [];
+
+    function openTab(name, el) {
+      document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+      if (el) el.classList.add('active');
+      document.querySelectorAll('.tab').forEach(t => t.style.display = 'none');
+      if (name === 'account') {
+        document.getElementById('tab-account').style.display = 'block';
+      } else {
+        document.getElementById('tab-' + name).style.display = 'block';
+      }
+    }
+
+    async function loadSettings() {
+      try {
+        const r = await fetch('/settings');
+        settings = await r.json();
+        document.getElementById('db-url').value = settings.database.url;
+        document.getElementById('imap-hostport').value = `${settings.imap.server}:${settings.imap.port}`;
+        document.getElementById('smtp-hostport').value = `${settings.smtp.server}:${settings.smtp.port}`;
+        document.getElementById('oauth-redirect').value = settings.oauth.redirect_uri;
+        document.getElementById('providers').innerHTML = settings.oauth.providers.map(p => `<span class="pill">${p}</span>`).join('');
+        document.getElementById('log-level').value = settings.telemetry.log_level;
+
+        const sanitizeEl = document.getElementById('sanitize-status');
+        sanitizeEl.textContent = settings.security.sanitize_html ? 'Aktif' : 'Pasif';
+        sanitizeEl.className = `pill ${settings.security.sanitize_html ? 'active' : 'inactive'}`;
+
+        const attEl = document.getElementById('feat-attachments');
+        attEl.textContent = settings.features.attachments ? 'Açık' : 'Kapalı';
+        attEl.className = `pill ${settings.features.attachments ? 'active' : 'inactive'}`;
+
+        const unifiedEl = document.getElementById('feat-unified');
+        unifiedEl.textContent = settings.features.unified_view ? 'Açık' : 'Kapalı';
+        unifiedEl.className = `pill ${settings.features.unified_view ? 'active' : 'inactive'}`;
+      } catch (e) {
+        console.error('Settings load error:', e);
+      }
+    }
+
+    async function loadAccounts() {
+      try {
+        const r = await fetch('/accounts');
+        accounts = await r.json();
+        const nav = document.getElementById('nav-accounts');
+
+        if (!accounts.length) {
+          nav.innerHTML = '<div class="empty-state" style="padding:20px"><div class="icon">📭</div>Hesap yok</div>';
+          return;
+        }
+
+        nav.innerHTML = accounts.map(a => `
+          <div class="nav-item" onclick="openAccount('${a.id}', this)">
+            <div class="account-avatar" style="background:${a.color || '#3b82f6'}">📧</div>
+            <span style="flex:1; overflow:hidden; text-overflow:ellipsis;">${a.email}</span>
+          </div>
+        `).join('');
+      } catch (e) {
+        console.error('Accounts load error:', e);
+      }
+    }
+
+    async function openAccount(id, el) {
+      document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+      if (el) el.classList.add('active');
+
+      const acc = accounts.find(a => a.id === id);
+      if (!acc) return;
+
+      const c = document.getElementById('tab-account');
+      const role = localStorage.getItem('auth_role');
+      const isAdmin = role === 'Admin';
+      const disabled = isAdmin ? '' : 'disabled';
+
+      c.innerHTML = `
+        <div class="card">
+          <div class="card-header">
+            <div class="account-avatar" style="background:${acc.color || '#3b82f6'}">📧</div>
+            <h4>${acc.email}</h4>
+          </div>
+          <div class="card-content">
+            <div class="form-row">
+              <label class="form-label">Hesap Etiketi</label>
+              <input id="dn-${acc.id}" class="form-input" value="${acc.display_name || ''}" placeholder="Örn: İş, Kişisel" ${disabled}>
+            </div>
+            <div class="form-row">
+              <label class="form-label">Renk</label>
+              <input id="cl-${acc.id}" type="color" value="${acc.color || '#3b82f6'}" ${disabled}>
+            </div>
+            <div class="form-row">
+              <label class="form-label">IMAP Host</label>
+              <input id="ih-${acc.id}" class="form-input" value="${acc.imap_host}" ${disabled}>
+            </div>
+            <div class="form-row">
+              <label class="form-label">IMAP Port</label>
+              <input id="ip-${acc.id}" class="form-input" type="number" value="${acc.imap_port}" ${disabled}>
+            </div>
+            <div class="form-row">
+              <label class="form-label">SMTP Host</label>
+              <input id="sh-${acc.id}" class="form-input" value="${acc.smtp_host}" ${disabled}>
+            </div>
+            <div class="form-row">
+              <label class="form-label">SMTP Port</label>
+              <input id="sp-${acc.id}" class="form-input" type="number" value="${acc.smtp_port}" ${disabled}>
+            </div>
+            <div class="form-row">
+              <label class="form-label">Şifre (değiştir)</label>
+              <input id="pw-${acc.id}" class="form-input" type="password" placeholder="••••••" ${disabled}>
+            </div>
+            <div class="form-row">
+              <label class="form-label">Append Policy</label>
+              <select id="ap-${acc.id}" class="form-input" ${disabled}>
+                <option value="auto" ${acc.append_policy === 'auto' ? 'selected' : ''}>auto</option>
+                <option value="never" ${acc.append_policy === 'never' ? 'selected' : ''}>never</option>
+                <option value="force" ${acc.append_policy === 'force' ? 'selected' : ''}>force</option>
+              </select>
+            </div>
+            <div class="form-row">
+              <label class="form-label">Sent Folder Hint</label>
+              <input id="sf-${acc.id}" class="form-input" value="${acc.sent_folder_hint || ''}" ${disabled}>
+            </div>
+            <div class="form-row">
+              <label class="form-label">Durum</label>
+              <select id="en-${acc.id}" class="form-input" ${disabled}>
+                <option value="1" ${acc.enabled ? 'selected' : ''}>Aktif</option>
+                <option value="0" ${!acc.enabled ? 'selected' : ''}>Pasif</option>
+              </select>
+            </div>
+            ${isAdmin ? `
+              <div class="form-row" style="justify-content:flex-end;gap:12px;margin-top:24px;padding-top:16px;border-top:1px solid var(--border);">
+                <button class="btn btn-danger" onclick="removeAccount('${acc.id}')">🗑️ Kaldır</button>
+                <button class="btn btn-primary" onclick="saveAccount('${acc.id}')">💾 Kaydet</button>
+              </div>
+            ` : ''}
+          </div>
+        </div>
+      `;
+      openTab('account');
+    }
+
+    async function saveAccount(id) {
+      const acc = accounts.find(a => a.id === id);
+      if (!acc) return;
+
+      const payload = {
+        display_name: document.getElementById('dn-' + id).value.trim() || null,
+        imap_host: document.getElementById('ih-' + id).value.trim(),
+        imap_port: parseInt(document.getElementById('ip-' + id).value, 10),
+        smtp_host: document.getElementById('sh-' + id).value.trim(),
+        smtp_port: parseInt(document.getElementById('sp-' + id).value, 10),
+        password: document.getElementById('pw-' + id).value.trim() || undefined,
+        enabled: document.getElementById('en-' + id).value === '1',
+        append_policy: document.getElementById('ap-' + id).value || 'auto',
+        sent_folder_hint: document.getElementById('sf-' + id).value.trim() || null,
+        color: document.getElementById('cl-' + id).value || null,
+      };
+
+      try {
+        const res = await fetch(`/accounts/${id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const j = await res.json();
+        if (!j.success) {
+          alert('Kaydetme hatası: ' + (j.error || 'unknown'));
+          return;
+        }
+        await loadAccounts();
+        openAccount(id);
+      } catch (e) {
+        alert('Hata: ' + e.message);
+      }
+    }
+
+    async function removeAccount(id) {
+      if (!confirm('Bu hesap silinsin mi?')) return;
+      try {
+        const res = await fetch(`/accounts/${id}`, { method: 'DELETE' });
+        if (res.status === 204) {
+          await loadAccounts();
+          openTab('system', document.querySelector('[data-tab="system"]'));
+        } else {
+          alert('Silme başarısız');
+        }
+      } catch (e) {
+        alert('Hata: ' + e.message);
+      }
+    }
+
+    // Initialize
+    (async function init() {
+      await loadSettings();
+      await loadAccounts();
+    })();
+  </script>
+</body>
+
+</html>

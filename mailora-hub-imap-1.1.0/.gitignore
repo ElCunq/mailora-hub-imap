@@ -1,0 +1,30 @@
+# Rust
+target/
+**/*.rs.bk
+*.pdb
+
+# Database (runtime)
+*.db
+*.db-shm
+*.db-wal
+
+# Logs
+*.log
+build.log
+
+# Runtime state
+accounts_state.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+

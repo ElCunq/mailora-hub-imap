@@ -1,0 +1,7 @@
+// src/models/mod.rs
+pub mod account;
+pub mod attachment;
+pub mod message;
+pub mod thread;
+pub mod user;
+pub mod outbox;

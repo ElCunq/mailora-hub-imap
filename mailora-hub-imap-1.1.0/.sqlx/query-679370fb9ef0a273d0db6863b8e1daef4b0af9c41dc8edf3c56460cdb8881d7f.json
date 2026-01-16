@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n        INSERT INTO accounts (\n            id, email, provider, display_name, \n            imap_host, imap_port, smtp_host, smtp_port,\n            credentials_encrypted, enabled, sync_frequency_secs,\n            created_at, updated_at\n        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 13
+    },
+    "nullable": []
+  },
+  "hash": "679370fb9ef0a273d0db6863b8e1daef4b0af9c41dc8edf3c56460cdb8881d7f"
+}
