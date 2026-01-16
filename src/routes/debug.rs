@@ -2,7 +2,7 @@ use axum::{extract::Query, Json};
 use serde::Serialize;
 
 use crate::imap::folders::list_mailboxes;
-use crate::imap::sync::{fetch_new_since_in, initial_snapshot_in};
+use crate::imap::sync::{fetch_new_since, initial_snapshot};
 use crate::persist::ACCOUNT_STATE;
 use crate::services::diff_service::ACCOUNTS;
 
@@ -12,8 +12,9 @@ pub struct StateSummary {
     pub state_counts: Vec<(String, usize)>,
 }
 
-#[derive(serde::Deserialize)]
-pub struct ProbeQs {
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(non_snake_case)]
+pub struct DebugStateQuery {
     pub accountId: Option<String>,
 }
 
@@ -31,6 +32,14 @@ pub struct ProbeResultMulti {
     pub host: String,
     pub email: String,
     pub results: Vec<FolderProbe>,
+}
+
+#[derive(serde::Deserialize)]
+#[allow(non_snake_case)]
+pub struct ProbeQs {
+    pub accountId: Option<String>,
+    pub folder: Option<String>,
+    pub limit: Option<u32>,
 }
 
 pub async fn state() -> Json<StateSummary> {
@@ -79,34 +88,10 @@ pub async fn probe_diff(
 
     let mut results = Vec::new();
     for folder in targets {
-        if let Ok(snap) = initial_snapshot_in(
-            &creds.host,
-            creds.port,
-            &creds.email,
-            &creds.password,
-            &folder,
-        )
-        .await
-        {
-            match fetch_new_since_in(
-                &creds.host,
-                creds.port,
-                &creds.email,
-                &creds.password,
-                snap.last_uid,
-                &folder,
-            )
-            .await
-            {
-                Ok((new_last, added)) => results.push(FolderProbe {
-                    folder,
-                    last_uid: snap.last_uid,
-                    new_last_uid: new_last,
-                    incremental_count: added.len(),
-                }),
-                Err(e) => {
-                    tracing::debug!(%folder, "probe error: {e}");
-                }
+        if let Ok(snap) = initial_snapshot(&creds.host, creds.port, &creds.email, &creds.password).await {
+            match fetch_new_since(&creds.host, creds.port, &creds.email, &creds.password, snap.last_uid).await {
+                Ok((new_last, added)) => results.push(FolderProbe { folder, last_uid: snap.last_uid, new_last_uid: new_last, incremental_count: added.len() }),
+                Err(e) => { tracing::debug!(%folder, "probe error: {e}"); }
             }
         }
     }

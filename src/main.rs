@@ -12,7 +12,6 @@ mod persist;
 mod routes;
 mod services;
 mod smtp;
-use routes::jmap_proxy::JmapProxyState;
 
 #[derive(Clone)]
 struct AppState {
@@ -62,19 +61,17 @@ async fn main() -> Result<()> {
     if std::path::Path::new("migrations").exists() {
         // Ensure file exists for file-based sqlite (avoid open error on some setups)
         if let Some(path) = db_file_path(&db_url) {
-            if let Some(parent) = path.parent() {
-                std::fs::create_dir_all(parent).ok();
-            }
-            if !path.exists() {
-                std::fs::File::create(&path).ok();
-            }
+            if let Some(parent) = path.parent() { std::fs::create_dir_all(parent).ok(); }
+            if !path.exists() { std::fs::File::create(&path).ok(); }
         }
         let pool = sqlx::SqlitePool::connect(&db_url).await?;
         if let Err(e) = db::run_migrations(&pool).await {
-            tracing::warn!("migration error: {e}");
+            // Ignore common "already exists" failures, log as info
+            let msg = e.to_string();
+            if msg.contains("already exists") { tracing::info!("migration benign: {msg}"); } else { tracing::warn!("migration error: {msg}"); }
         }
         if let Err(e) = db::seed_account(&pool).await {
-            tracing::warn!("seed error: {e}");
+            tracing::info!("seed skipped: {e}");
         }
 
         // Create idle watcher manager
@@ -88,6 +85,41 @@ async fn main() -> Result<()> {
             idle_manager: idle_manager.clone(),
             oauth_manager: oauth_manager.clone(),
         };
+
+        // Start background scheduler
+        crate::services::scheduler::start(pool.clone());
+
+        // Initial full sync on startup (non-blocking)
+        {
+            let pool_clone = pool.clone();
+            tokio::spawn(async move {
+                match services::account_service::list_accounts(&pool_clone).await {
+                    Ok(accts) => {
+                        for acc in accts {
+                            if !acc.enabled { continue; }
+                            // Skip Gmail for now
+                            if matches!(acc.provider, crate::models::account::EmailProvider::Gmail) { continue; }
+                            let mut acc_dec = acc.clone();
+                            if acc_dec.password.is_empty() {
+                                if let Ok(a) = acc_dec.clone().with_password() { acc_dec = a; } else { continue; }
+                            }
+                            if acc_dec.password.is_empty() { continue; }
+                            let p = pool_clone.clone();
+                            tokio::spawn(async move {
+                                match services::message_sync_service::sync_account_messages(&p, &acc_dec).await {
+                                    Ok(stats) => {
+                                        tracing::info!(email=%acc_dec.email, folders=%stats.len(), "initial sync completed");
+                                        let _ = services::account_service::update_last_sync(&p, &acc_dec.id).await;
+                                    }
+                                    Err(e) => tracing::warn!(email=%acc_dec.email, error=%e.to_string(), "initial sync failed"),
+                                }
+                            });
+                        }
+                    }
+                    Err(e) => tracing::warn!("initial sync: list_accounts failed: {e}"),
+                }
+            });
+        }
 
         let idle_routes = Router::new()
             .route(
@@ -112,26 +144,8 @@ async fn main() -> Result<()> {
             .merge(routes::routes())
             .merge(idle_routes)
             .merge(oauth_routes)
-            .nest_service("/static", ServeDir::new("static"))
             // App state
             .with_state(state.clone());
-
-        // Build JMAP proxy router with its own state and merge
-        let jmap_state = JmapProxyState {
-            http: reqwest::Client::new(),
-            jmap_base: std::env::var("JMAP_BASE")
-                .unwrap_or_else(|_| "http://127.0.0.1:8787".to_string()),
-        };
-        let jmap_router = Router::new()
-            .route("/jmap", axum::routing::post(routes::jmap_proxy::proxy_jmap))
-            .route(
-                "/.well-known/jmap",
-                get(routes::jmap_proxy::proxy_well_known),
-            )
-            .route("/jmap/session", get(routes::jmap_proxy::proxy_session))
-            .with_state(jmap_state);
-
-        let app = app.merge(jmap_router);
 
         let port: u16 = std::env::var("PORT")
             .ok()

@@ -1,5 +1,4 @@
 pub mod jmap_proxy;
-pub mod stalwart;
 use crate::persist;
 use crate::services::diff_service::AccountCreds;
 use crate::services::diff_service::ACCOUNTS; // add account store
@@ -10,6 +9,7 @@ use axum::{
     Router,
 };
 use serde::Deserialize; // correct import from crate root
+use tower_http::services::ServeDir;
 
 pub mod accounts;
 pub mod debug;
@@ -19,8 +19,11 @@ pub mod oauth;
 pub mod sync;
 pub mod test;
 pub mod unified;
+pub mod flags;
+pub mod settings;
 
 #[derive(Deserialize)]
+#[allow(non_snake_case)]
 struct LoginReq {
     email: String,
     password: String,
@@ -45,9 +48,6 @@ async fn login(Json(payload): Json<LoginReq>) -> impl IntoResponse {
     match res {
         Ok(snap) => {
             // store creds with accountId = 1 for now
-            {
-                use tokio::runtime::Handle; // ensure within async context
-            }
             let store = ACCOUNTS.clone();
             {
                 // insert with key "1"
@@ -100,13 +100,18 @@ async fn login(Json(payload): Json<LoginReq>) -> impl IntoResponse {
 }
 
 async fn root_page() -> impl IntoResponse {
-    Html(include_str!("../../static/index.html"))
+    Html(include_str!("../../static/app.html"))
+}
+
+async fn app_page() -> impl IntoResponse {
+    Html(include_str!("../../static/app.html"))
 }
 
 use axum::extract::Json as AxumJson;
 use serde::Serialize;
 
 #[derive(Deserialize)]
+#[allow(non_snake_case)]
 struct SendReq {
     accountId: String,
     to: String,
@@ -124,7 +129,7 @@ async fn send_action(AxumJson(req): AxumJson<SendReq>) -> impl IntoResponse {
         store.get(&req.accountId).cloned()
     };
     if creds_opt.is_none() {
-        return StatusCode::NOT_FOUND.into_response();
+        return AxumJson(serde_json::json!({"ok": false, "error": "account not found"})).into_response();
     }
     // Simple SMTP send using lettre; fallback to env SMTP if not available
     let smtp_host = std::env::var("SMTP_HOST").unwrap_or_else(|_| "smtp.gmail.com".into());
@@ -145,8 +150,8 @@ async fn send_action(AxumJson(req): AxumJson<SendReq>) -> impl IntoResponse {
         &req.subject,
         &req.body,
     ) {
-        Ok(_) => AxumJson(SendResp { ok: true }).into_response(),
-        Err(e) => AxumJson(serde_json::json!({"ok":false,"error":e.to_string()})).into_response(),
+        Ok(_) => AxumJson(serde_json::json!({"ok": true})).into_response(),
+        Err(e) => AxumJson(serde_json::json!({"ok": false, "error": e.to_string()})).into_response(),
     }
 }
 
@@ -157,12 +162,16 @@ where
 {
     Router::new()
         .route("/", get(root_page))
+        .route("/app", get(app_page))
+        .nest_service("/static", ServeDir::new("static"))
         .route("/login", post(login))
         .route("/diff", get(diff::diff_handler))
         .route("/body", get(diff::body_handler))
         .route("/folders", get(diff::folders_handler))
         .route("/attachments", get(diff::attachments_handler))
+        .route("/attachments/download", get(diff::download_attachment))
         .route("/unified/inbox", get(unified::unified_inbox))
+        .route("/unified/unread", get(unified::unified_unread))
         .route("/unified/events", get(unified::unified_events))
         .route("/accounts", post(accounts::add_account))
         .route("/accounts", get(accounts::list_accounts))
@@ -171,13 +180,20 @@ where
             "/accounts/:id",
             axum::routing::delete(accounts::delete_account),
         )
+        .route(
+            "/accounts/:id",
+            axum::routing::patch(accounts::patch_account),
+        )
         .route("/providers", get(accounts::list_providers))
         .route("/test/connection/:account_id", get(test::test_connection))
         .route("/test/messages/:account_id", get(test::fetch_messages))
         .route("/test/smtp/:account_id", post(test::smtp_test))
-        .route("/test/async-smtp/:account_id", post(test::async_smtp_test))
+        .route("/test/smtp-append/:account_id", post(test::smtp_send_and_append))
+        .route("/test/sent-finalize/:account_id", get(test::sent_finalize))
         .route("/test/body/:account_id/:uid", get(test::fetch_message_body))
         .route("/test/accounts", get(test::list_test_accounts))
+        .route("/test/update-append-policy/:account_id", post(test::update_append_policy))
+        .route("/debug/metrics", get(test::metrics_snapshot))
         .route("/send", post(send_action))
         .route("/debug/state", get(debug::state))
         .route("/debug/probe", get(debug::probe_diff))
@@ -188,5 +204,9 @@ where
             "/messages/:account_id/:folder",
             get(sync::get_folder_messages),
         )
-        .route("/stalwart/connect", post(stalwart::connect_stalwart_api))
+        .route("/messages/:account_id/:folder/:uid/flags", post(flags::update_flags))
+        .route("/test/folders/:account_id", get(test::list_folders))
+        .route("/settings", get(settings::get_settings))
+        .route("/search", get(sync::search_messages))
+        .route("/sync/:account_id/backfill-attachments", post(sync::backfill_attachments_endpoint))
 }
