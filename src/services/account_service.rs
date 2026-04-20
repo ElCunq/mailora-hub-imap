@@ -38,6 +38,9 @@ pub async fn add_account(
         )
     };
 
+    let computed_carddav_url = config.carddav_url.map(|u| u.replace("[EMAIL]", email));
+    let computed_caldav_url = config.caldav_url.map(|u| u.replace("[EMAIL]", email));
+
     let credentials_encrypted = Account::encode_credentials(email, password);
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)?
@@ -55,8 +58,8 @@ pub async fn add_account(
             id, email, provider, display_name, 
             imap_host, imap_port, smtp_host, smtp_port,
             credentials_encrypted, enabled, sync_frequency_secs,
-            created_at, updated_at, color
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            created_at, updated_at, color, carddav_url, caldav_url
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         "#,
     )
     .bind(&id)
@@ -73,6 +76,8 @@ pub async fn add_account(
     .bind(now)
     .bind(now)
     .bind("#3b82f6")
+    .bind(&computed_carddav_url)
+    .bind(&computed_caldav_url)
     .execute(pool)
     .await?;
 
@@ -94,6 +99,8 @@ pub async fn add_account(
         append_policy: Some("auto".to_string()),
         sent_folder_hint: None,
         color: Some("#3b82f6".to_string()),
+        carddav_url: computed_carddav_url,
+        caldav_url: computed_caldav_url,
         password: String::new(),
     };
 
@@ -127,6 +134,8 @@ pub async fn list_accounts(pool: &SqlitePool) -> Result<Vec<Account>> {
         let append_policy: Option<String> = row.try_get("append_policy").ok();
         let sent_folder_hint: Option<String> = row.try_get("sent_folder_hint").ok();
         let color: Option<String> = row.try_get("color").ok();
+        let carddav_url: Option<String> = row.try_get("carddav_url").ok();
+        let caldav_url: Option<String> = row.try_get("caldav_url").ok();
 
         accounts.push(Account {
             id,
@@ -146,6 +155,8 @@ pub async fn list_accounts(pool: &SqlitePool) -> Result<Vec<Account>> {
             append_policy,
             sent_folder_hint,
             color,
+            carddav_url,
+            caldav_url,
             password: String::new(),
         });
     }
@@ -179,6 +190,8 @@ pub async fn get_account(pool: &SqlitePool, account_id: &str) -> Result<Option<A
             let append_policy: Option<String> = row.try_get("append_policy").ok();
             let sent_folder_hint: Option<String> = row.try_get("sent_folder_hint").ok();
             let color: Option<String> = row.try_get("color").ok();
+            let carddav_url: Option<String> = row.try_get("carddav_url").ok();
+            let caldav_url: Option<String> = row.try_get("caldav_url").ok();
 
             let mut acc = Account {
                 id,
@@ -198,6 +211,8 @@ pub async fn get_account(pool: &SqlitePool, account_id: &str) -> Result<Option<A
                 append_policy,
                 sent_folder_hint,
                 color,
+                carddav_url,
+                caldav_url,
                 password: String::new(),
             };
 

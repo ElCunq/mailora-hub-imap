@@ -43,30 +43,40 @@ impl EmailProvider {
                 imap_port: 993,
                 smtp_host: "smtp.gmail.com".to_string(),
                 smtp_port: 587,
+                carddav_url: Some("https://www.googleapis.com/carddav/v1/principals/[EMAIL]/lists/default/".to_string()),
+                caldav_url: Some("https://apidata.googleusercontent.com/caldav/v2/[EMAIL]/events".to_string()),
             },
             Self::Outlook => ProviderConfig {
                 imap_host: "outlook.office365.com".to_string(),
                 imap_port: 993,
                 smtp_host: "smtp.office365.com".to_string(),
                 smtp_port: 587,
+                carddav_url: None,
+                caldav_url: None,
             },
             Self::Yahoo => ProviderConfig {
                 imap_host: "imap.mail.yahoo.com".to_string(),
                 imap_port: 993,
                 smtp_host: "smtp.mail.yahoo.com".to_string(),
                 smtp_port: 587,
+                carddav_url: Some("https://carddav.address.yahoo.com/".to_string()),
+                caldav_url: Some("https://caldav.calendar.yahoo.com/".to_string()),
             },
             Self::Icloud => ProviderConfig {
                 imap_host: "imap.mail.me.com".to_string(),
                 imap_port: 993,
                 smtp_host: "smtp.mail.me.com".to_string(),
                 smtp_port: 587,
+                carddav_url: Some("https://contacts.icloud.com/".to_string()),
+                caldav_url: Some("https://caldav.icloud.com/".to_string()),
             },
             Self::Custom => ProviderConfig {
                 imap_host: String::new(),
                 imap_port: 993,
                 smtp_host: String::new(),
                 smtp_port: 587,
+                carddav_url: None,
+                caldav_url: None,
             },
         }
     }
@@ -78,6 +88,8 @@ pub struct ProviderConfig {
     pub imap_port: u16,
     pub smtp_host: String,
     pub smtp_port: u16,
+    pub carddav_url: Option<String>,
+    pub caldav_url: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
@@ -102,6 +114,8 @@ pub struct Account {
     pub append_policy: Option<String>, // stored as text column (auto|never|force)
     pub sent_folder_hint: Option<String>,
     pub color: Option<String>,
+    pub carddav_url: Option<String>,
+    pub caldav_url: Option<String>,
     // Helper field for password (populated from credentials_encrypted)
     #[sqlx(skip)]
     #[serde(skip)]

@@ -11,3 +11,6 @@ pub mod auth_service;
 pub mod scheduler;
 pub mod message_service;
 pub mod idle_watcher_service;
+pub mod contact_service;
+pub mod carddav_service;
+pub mod caldav_service;

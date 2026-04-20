@@ -1,8 +1,6 @@
-use crate::db::Database;
 use crate::models::{account::Account, outbox::OutboxEmail};
 use crate::services::account_service;
 use sqlx::SqlitePool;
-use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::sleep;
 

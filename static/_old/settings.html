@@ -301,6 +301,8 @@
           <div class="row"><label>Durum</label>
             <select id="en-${acc.id}" ${disabled}><option value="1" ${acc.enabled ? 'selected' : ''}>Aktif</option><option value="0" ${!acc.enabled ? 'selected' : ''}>Pasif</option></select>
           </div>
+          <div class="row"><label>CardDAV URL</label><input id="crd-${acc.id}" value="${acc.carddav_url || ''}" placeholder="https://..." ${disabled}></div>
+          <div class="row"><label>CalDAV URL</label><input id="cld-${acc.id}" value="${acc.caldav_url || ''}" placeholder="https://..." ${disabled}></div>
           <div class="row" style="justify-content:flex-end;gap:8px;${btnStyle}">
             <button onclick="removeAccount('${acc.id}')">Kaldır</button>
             <button class="primary" onclick="saveAccount('${acc.id}')">Kaydet</button>
@@ -323,6 +325,8 @@
         append_policy: document.getElementById('ap-' + id).value || 'auto',
         sent_folder_hint: document.getElementById('sf-' + id).value.trim() || null,
         color: document.getElementById('cl-' + id).value || null,
+        carddav_url: document.getElementById('crd-' + id).value.trim() || null,
+        caldav_url: document.getElementById('cld-' + id).value.trim() || null,
       };
       const res = await fetch(`/accounts/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
       const j = await res.json();

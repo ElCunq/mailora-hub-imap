@@ -26,6 +26,8 @@ pub mod unified;
 pub mod flags;
 pub mod settings;
 pub mod snooze;
+pub mod contacts;
+pub mod calendar;
 
 #[derive(Deserialize)]
 #[allow(non_snake_case)]
@@ -105,11 +107,11 @@ async fn login(Json(payload): Json<LoginReq>) -> impl IntoResponse {
 }
 
 async fn root_page() -> impl IntoResponse {
-    Html(include_str!("../../static/app.html"))
+    Html(include_str!("../../static/index.html"))
 }
 
 async fn app_page() -> impl IntoResponse {
-    Html(include_str!("../../static/app.html"))
+    Html(include_str!("../../static/index.html"))
 }
 
 use axum::extract::Json as AxumJson;
@@ -160,7 +162,7 @@ async fn send_action(
     }
 }
 
-pub fn routes<S>() -> Router<S>
+pub fn routes<S>(pool: &sqlx::SqlitePool) -> Router<S>
 where
     S: Clone + Send + Sync + 'static,
     sqlx::SqlitePool: axum::extract::FromRef<S>,
@@ -213,4 +215,21 @@ where
         .route("/sync/:account_id/backfill-attachments", post(sync::backfill_attachments_endpoint))
         .route("/snooze/:account_id/:folder/:uid", post(snooze::snooze_message))
         .route("/unsnooze/:account_id/:folder/:uid", post(snooze::unsnooze_message))
+        // ─── Contacts (PIM v1.6) ─────────────────────────────────────────────
+        .route("/contacts", get(contacts::list_contacts).post(contacts::create_contact))
+        .route("/contacts/suggest", get(contacts::suggest_contacts))
+        .route("/contacts/groups", get(contacts::list_groups).post(contacts::create_group))
+        .route("/contacts/import", post(contacts::import_contacts))
+        .route("/contacts/export", get(contacts::export_contacts))
+        .route("/contacts/:id", get(contacts::get_contact).put(contacts::update_contact).delete(contacts::delete_contact))
+        .route("/contacts/:id/groups/:group_id", post(contacts::add_to_group).delete(contacts::remove_from_group))
+        .route("/contacts/conflicts", get(contacts::list_conflicts))
+        .route("/contacts/conflicts/:id/resolve", post(contacts::resolve_conflict))
+        .route("/contacts/duplicates", get(contacts::list_duplicates))
+        .route("/contacts/duplicates/merge", post(contacts::merge_duplicates))
+        .route("/sync/carddav/:account_id", post(contacts::sync_carddav))
+        // ─── Calendar (PIM v1.7) ─────────────────────────────────────────────
+        .nest("/calendar", calendar::router().with_state(pool.clone()))
+        // ─── PIM Auto-Discovery Fallback ─────────────────────────────────────
+        .route("/.well-known/carddav", get(|| async { axum::response::Redirect::permanent("/static/contacts.html") }))
 }

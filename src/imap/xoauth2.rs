@@ -2,10 +2,10 @@
 ///
 /// This module provides OAuth2 authentication for IMAP connections
 /// using the XOAUTH2 SASL mechanism.
-use async_imap::Session;
-use tokio::net::TcpStream;
-use tokio_native_tls::TlsStream;
-use tokio_util::compat::{Compat, TokioAsyncReadCompatExt};
+// use async_imap::Session;
+// use tokio::net::TcpStream;
+// use tokio_native_tls::TlsStream;
+// use tokio_util::compat::{Compat, TokioAsyncReadCompatExt};
 #[allow(unused_imports)] // keep Compat for future use
 
 /// Generate XOAUTH2 authentication string

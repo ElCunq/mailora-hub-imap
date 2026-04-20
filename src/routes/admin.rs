@@ -1,9 +1,9 @@
 use axum::{
-    extract::{State, Json, Path},
+    extract::{Path, State},
     http::StatusCode,
     response::IntoResponse,
-    routing::{get, post, patch, delete},
-    Router,
+    routing::{get, patch, delete},
+    Json, Router,
 };
 use crate::models::user::User;
 use crate::rbac::AdminUser;

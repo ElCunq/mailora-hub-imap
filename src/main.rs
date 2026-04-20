@@ -9,6 +9,7 @@ mod imap;
 mod models;
 mod oauth;
 mod persist;
+mod pim;
 mod rbac;
 mod routes;
 mod services;
@@ -188,7 +189,7 @@ async fn main() -> Result<()> {
 
         let app = Router::new()
             .route("/healthz", get(|| async { "ok" }))
-            .merge(routes::routes())
+            .merge(routes::routes(&pool))
             .merge(routes::auth::router().with_state(state.pool.clone()))
             .merge(routes::admin::router().with_state(state.pool.clone()))
             .merge(routes::discovery::router())

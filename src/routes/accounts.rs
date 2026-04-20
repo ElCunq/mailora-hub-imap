@@ -238,6 +238,8 @@ async fn add_oauth_account(
         append_policy: None,
         sent_folder_hint: None,
         color: Some("#3b82f6".to_string()),
+        carddav_url: None,
+        caldav_url: None,
         password: String::new(),
     })
 }
@@ -394,6 +396,8 @@ pub struct PatchAccountRequest {
     pub append_policy: Option<String>, // auto|never|force
     pub sent_folder_hint: Option<String>,
     pub color: Option<String>,
+    pub carddav_url: Option<String>,
+    pub caldav_url: Option<String>,
 }
 
 /// PATCH /accounts/:id - Update mutable account settings
@@ -427,7 +431,6 @@ pub async fn patch_account(
     let new_smtp_host = req.smtp_host.unwrap_or(existing.smtp_host.clone());
     let new_smtp_port = req.smtp_port.unwrap_or(existing.smtp_port);
     let new_append_policy = req.append_policy.as_ref().map(|s| s.to_lowercase());
-    let new_append_policy = req.append_policy.as_ref().map(|s| s.to_lowercase());
     let new_sent_folder_hint = req.sent_folder_hint.or(existing.sent_folder_hint.clone());
     let new_color = req.color.or(existing.color.clone());
 
@@ -440,7 +443,7 @@ pub async fn patch_account(
 
     // Persist update (provider immutable for now)
     let res = sqlx::query(
-        "UPDATE accounts SET display_name = ?, imap_host = ?, imap_port = ?, smtp_host = ?, smtp_port = ?, enabled = ?, append_policy = ?, sent_folder_hint = ?, color = ?, credentials_encrypted = ?, updated_at = strftime('%s','now') WHERE id = ?"
+        "UPDATE accounts SET display_name = ?, imap_host = ?, imap_port = ?, smtp_host = ?, smtp_port = ?, enabled = ?, append_policy = ?, sent_folder_hint = ?, color = ?, credentials_encrypted = ?, carddav_url = ?, caldav_url = ?, updated_at = strftime('%s','now') WHERE id = ?"
     )
     .bind(&new_display_name)
     .bind(&new_imap_host)
@@ -452,6 +455,8 @@ pub async fn patch_account(
     .bind(&new_sent_folder_hint)
     .bind(&new_color)
     .bind(&new_creds_enc)
+    .bind(&existing.carddav_url)
+    .bind(&existing.caldav_url)
     .bind(&account_id)
     .execute(&pool)
     .await;

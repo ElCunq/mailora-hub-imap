@@ -1,5 +1,4 @@
-use axum::{response::IntoResponse, routing::Router, Json};
-use serde_json::json;
+use axum::{response::IntoResponse, routing::Router};
 use std::sync::Arc;
 
 #[allow(dead_code)]

@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "\n        SELECT id as \"id!\", direction as \"direction!\", mailbox as \"mailbox!\", \n               actor, peer, subject, ts as \"ts!\"\n        FROM events\n        ORDER BY ts DESC\n        LIMIT 100\n        ",
+  "query": "\n            SELECT id as \"id!\", direction as \"direction!\", mailbox as \"mailbox!\", \n                   actor, peer, subject, ts as \"ts!\"\n            FROM events\n            ORDER BY ts DESC\n            LIMIT 100\n            ",
   "describe": {
     "columns": [
       {
@@ -52,5 +52,5 @@
       false
     ]
   },
-  "hash": "ce2f0f98b5c5d20988ec9713d1d262e5e9ae3e397b75d3c3bfd10f082c3f671e"
+  "hash": "6f9ac25eae6b8724913a9ccf038c0b838a2d59198cf77dcc3e61b02bd2afacf0"
 }

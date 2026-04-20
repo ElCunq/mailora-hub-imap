@@ -1,6 +1,6 @@
 use anyhow::Result;
 use async_imap::Session;
-use base64::Engine; // needed for STANDARD.decode
+// use base64::Engine; // needed for STANDARD.decode
 use futures::StreamExt;
 use serde::Serialize;
 use tokio::net::TcpStream;
@@ -372,7 +372,7 @@ pub async fn fetch_message_body_in(
         }
         // If ENVELOPE missing, try header fields from raw
         if subject.is_empty() || from.is_empty() || date.is_none() {
-            if let Some(full) = raw_full.as_ref() {
+            if let Some(_full) = raw_full.as_ref() {
 
             }
         }
@@ -517,7 +517,7 @@ pub async fn fetch_message_body_in(
         }
         // If ENVELOPE missing, try header fields from raw
         if subject.is_empty() || from.is_empty() || date.is_none() {
-            if let Some(full) = raw_full.as_ref() {
+            if let Some(_full) = raw_full.as_ref() {
 
             }
         }

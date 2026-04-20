@@ -208,7 +208,7 @@ pub async fn sync_folder_messages_with_session(
                             e
                         ),
                     },
-                    Err(e) => {
+                    Err(_e) => {
                          // ... error handling same as before
                         warn!("Failed to parse fetched message (error suppressed to avoid log spam)");
                         error_count += 1;
