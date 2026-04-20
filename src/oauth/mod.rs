@@ -2,7 +2,7 @@ use oauth2::basic::BasicClient;
 use oauth2::reqwest::async_http_client;
 use oauth2::{
     AuthUrl, AuthorizationCode, ClientId, ClientSecret, CsrfToken, PkceCodeChallenge,
-    PkceCodeVerifier, RedirectUrl, RevocationUrl, Scope, TokenResponse, TokenUrl,
+    PkceCodeVerifier, RedirectUrl, Scope, TokenResponse, TokenUrl,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -225,6 +225,7 @@ impl OAuthManager {
     }
 }
 
+#[allow(dead_code)]
 /// XOAUTH2 authentication string for IMAP/SMTP
 pub fn generate_xoauth2_string(email: &str, access_token: &str) -> String {
     format!("user={}\x01auth=Bearer {}\x01\x01", email, access_token)

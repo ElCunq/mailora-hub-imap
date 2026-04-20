@@ -1,4 +1,4 @@
-use axum::{handler::get, Router};
+use axum::{routing::get, Router};
 
 pub async fn body_handler() -> &'static str {
     "Body endpoint"

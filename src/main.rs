@@ -9,10 +9,11 @@ mod imap;
 mod models;
 mod oauth;
 mod persist;
+mod pim;
+mod rbac;
 mod routes;
 mod services;
 mod smtp;
-use routes::jmap_proxy::JmapProxyState;
 
 #[derive(Clone)]
 struct AppState {
@@ -62,19 +63,23 @@ async fn main() -> Result<()> {
     if std::path::Path::new("migrations").exists() {
         // Ensure file exists for file-based sqlite (avoid open error on some setups)
         if let Some(path) = db_file_path(&db_url) {
-            if let Some(parent) = path.parent() {
-                std::fs::create_dir_all(parent).ok();
-            }
-            if !path.exists() {
-                std::fs::File::create(&path).ok();
-            }
+            if let Some(parent) = path.parent() { std::fs::create_dir_all(parent).ok(); }
+            if !path.exists() { std::fs::File::create(&path).ok(); }
         }
         let pool = sqlx::SqlitePool::connect(&db_url).await?;
+        
+        // Check for broken schema (legacy) and fix if needed
+        if let Err(e) = db::check_and_fix_schema(&pool).await {
+            tracing::warn!("schema fix failed: {e}");
+        }
+
         if let Err(e) = db::run_migrations(&pool).await {
-            tracing::warn!("migration error: {e}");
+            // Ignore common "already exists" failures, log as info
+            let msg = e.to_string();
+            if msg.contains("already exists") { tracing::info!("migration benign: {msg}"); } else { tracing::warn!("migration error: {msg}"); }
         }
         if let Err(e) = db::seed_account(&pool).await {
-            tracing::warn!("seed error: {e}");
+            tracing::info!("seed skipped: {e}");
         }
 
         // Create idle watcher manager
@@ -89,7 +94,82 @@ async fn main() -> Result<()> {
             oauth_manager: oauth_manager.clone(),
         };
 
-        let idle_routes = Router::new()
+        // Start background scheduler
+        crate::services::scheduler::start(pool.clone());
+
+        // Start background maintenance service
+        {
+            let p = pool.clone();
+            tokio::spawn(async move {
+                services::maintenance_service::start_maintenance_loop(p).await;
+            });
+        }
+
+        // Start background outbox service
+        {
+            let p = pool.clone();
+            tokio::spawn(async move {
+                services::outbox_service::start_outbox_loop(p).await;
+            });
+        }
+
+        // Initial full sync and IDLE start on startup (non-blocking)
+        {
+            let pool_clone = pool.clone();
+            let idle_mgr_clone = idle_manager.clone();
+            tokio::spawn(async move {
+                match services::account_service::list_accounts(&pool_clone).await {
+                    Ok(accts) => {
+                        for acc in accts {
+                            if !acc.enabled { continue; }
+                            
+                            // Start IDLE watcher immediately
+                            if acc.provider != crate::models::account::EmailProvider::Gmail { // Gmail IDLE can be tricky, but let's try or skip if unsure. Standard implementations usually support it. Let's enable for all except maybe complex oauth if not ready?
+                                // Actually let's just try to start it.
+                                let mgr = idle_mgr_clone.clone();
+                                let acc_for_idle = acc.clone();
+                                tokio::spawn(async move {
+                                    // Decrypt password if needed
+                                    let mut final_acc = acc_for_idle.clone();
+                                    if final_acc.password.is_empty() {
+                                         if let Ok(a) = final_acc.clone().with_password() { final_acc = a; }
+                                    }
+                                    if !final_acc.password.is_empty() {
+                                        if let Err(e) = mgr.start_watcher(final_acc).await {
+                                            tracing::warn!("Failed to auto-start IDLE for {}: {}", acc_for_idle.email, e);
+                                        }
+                                    }
+                                });
+                            }
+
+                            // Skip Gmail sync for now (legacy logic)
+                            if matches!(acc.provider, crate::models::account::EmailProvider::Gmail) { continue; }
+                            
+                            let mut acc_dec = acc.clone();
+                            if acc_dec.password.is_empty() {
+                                if let Ok(a) = acc_dec.clone().with_password() { acc_dec = a; } else { continue; }
+                            }
+                            if acc_dec.password.is_empty() { continue; }
+                            
+                            let p = pool_clone.clone();
+                            tokio::spawn(async move {
+                                // Use sync_account (which now reuses session)
+                                match services::message_sync_service::sync_account_messages(&p, &acc_dec).await {
+                                    Ok(stats) => {
+                                        tracing::info!(email=%acc_dec.email, folders=%stats.len(), "initial sync completed");
+                                        let _ = services::account_service::update_last_sync(&p, &acc_dec.id).await;
+                                    }
+                                    Err(e) => tracing::warn!(email=%acc_dec.email, error=%e.to_string(), "initial sync failed"),
+                                }
+                            });
+                        }
+                    }
+                    Err(e) => tracing::warn!("initial sync: list_accounts failed: {e}"),
+                }
+            });
+        }
+
+        let idle_routes: Router<AppState> = Router::new()
             .route(
                 "/idle/start/:account_id",
                 axum::routing::post(routes::idle::start_idle_watcher),
@@ -109,29 +189,14 @@ async fn main() -> Result<()> {
 
         let app = Router::new()
             .route("/healthz", get(|| async { "ok" }))
-            .merge(routes::routes())
+            .merge(routes::routes(&pool))
+            .merge(routes::auth::router().with_state(state.pool.clone()))
+            .merge(routes::admin::router().with_state(state.pool.clone()))
+            .merge(routes::discovery::router())
             .merge(idle_routes)
             .merge(oauth_routes)
-            .nest_service("/static", ServeDir::new("static"))
             // App state
             .with_state(state.clone());
-
-        // Build JMAP proxy router with its own state and merge
-        let jmap_state = JmapProxyState {
-            http: reqwest::Client::new(),
-            jmap_base: std::env::var("JMAP_BASE")
-                .unwrap_or_else(|_| "http://127.0.0.1:8787".to_string()),
-        };
-        let jmap_router = Router::new()
-            .route("/jmap", axum::routing::post(routes::jmap_proxy::proxy_jmap))
-            .route(
-                "/.well-known/jmap",
-                get(routes::jmap_proxy::proxy_well_known),
-            )
-            .route("/jmap/session", get(routes::jmap_proxy::proxy_session))
-            .with_state(jmap_state);
-
-        let app = app.merge(jmap_router);
 
         let port: u16 = std::env::var("PORT")
             .ok()

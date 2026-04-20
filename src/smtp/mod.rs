@@ -1,5 +1,5 @@
+use lettre::transport::smtp::client::{TlsParameters, Tls};
 use lettre::transport::smtp::authentication::Mechanism;
-use lettre::transport::smtp::client::{Tls, TlsParameters};
 use tracing_subscriber::FmtSubscriber;
 pub fn gmail_smtp_test() -> anyhow::Result<()> {
     // 0) Debug log aç (lettre diyaloğunu görmek için)
@@ -42,50 +42,7 @@ pub fn gmail_smtp_test() -> anyhow::Result<()> {
     Ok(())
 }
 use lettre::transport::smtp::extension::ClientId;
-/// Gmail SMTP için async-smtp ile test fonksiyonu (0.8 API)
-pub async fn send_async_smtp_test(
-    host: &str,
-    username: &str,
-    password: &str,
-    to: &str,
-    subject: &str,
-    body: &str,
-) -> anyhow::Result<()> {
-    use async_smtp::{authentication::Credentials, Envelope, SendableEmail, SmtpClient};
-
-    // App Password'daki tüm whitespace karakterlerini kaldır
-    let clean_password: String = password.chars().filter(|c| !c.is_whitespace()).collect();
-    let creds = Credentials::new(username.to_string(), clean_password);
-
-    let envelope_587 = Envelope::new(Some(username.parse()?), vec![to.parse()?])?;
-    let message_587 = format!(
-        "From: <{}>\r\nTo: <{}>\r\nSubject: {}\r\n\r\n{}",
-        username, to, subject, body
-    );
-    let email_587 = SendableEmail::new(envelope_587, message_587.into_bytes());
-
-    let envelope_465 = Envelope::new(Some(username.parse()?), vec![to.parse()?])?;
-    let message_465 = format!(
-        "From: <{}>\r\nTo: <{}>\r\nSubject: {}\r\n\r\n{}",
-        username, to, subject, body
-    );
-    let email_465 = SendableEmail::new(envelope_465, message_465.into_bytes());
-
-    use async_smtp::authentication::Mechanism;
-    use tokio::net::TcpStream;
-
-    // Sadece 587 (STARTTLS) ile dene
-    let stream = TcpStream::connect((host, 587)).await?;
-    let client = SmtpClient::new().smtp_utf8(true);
-    let mut transport = async_smtp::SmtpTransport::new(client, stream).await?;
-    // Kimlik doğrulama
-    transport
-        .try_login(&creds, &[Mechanism::Login, Mechanism::Plain])
-        .await?;
-    transport.send(email_587).await?;
-    Ok(())
-}
-// filepath: /mailora-hub-imap/mailora-hub-imap/src/smtp/mod.rs
+/// filepath: /mailora-hub-imap/mailora-hub-imap/src/smtp/mod.rs
 use anyhow::Result;
 use lettre::transport::smtp::authentication::Credentials;
 use lettre::{Message, SmtpTransport, Transport};
@@ -164,12 +121,12 @@ pub fn send_simple(
     let client_id = std::env::var("SMTP_HELLO_NAME")
         .ok()
         .and_then(|val| match val.parse::<IpAddr>() {
-            Ok(ip) => Some(ClientId::new(ip.to_string())),
+            Ok(ip) => Some(ClientId::Domain(ip.to_string())), // replaced new
             Err(_) => Some(ClientId::Domain(val)),
         })
         .unwrap_or_else(|| {
             host.parse::<IpAddr>()
-                .map(|ip| ClientId::new(ip.to_string()))
+                .map(|ip| ClientId::Domain(ip.to_string())) // replaced new
                 .unwrap_or_else(|_| ClientId::Domain(host.to_string()))
         });
 
@@ -205,7 +162,213 @@ pub fn send_simple(
     }
 }
 
-/// Send email and log to events table
+/// Build a Message with explicit Message-Id. Returns (message, message_id)
+pub fn build_email(from: &str, to: &str, subject: &str, body: &str) -> Result<(Message, String)> {
+    use lettre::message::Mailbox;
+    use lettre::message::header::MessageId;
+    use uuid::Uuid;
+
+    let from_mb: Mailbox = from.parse()?;
+    let to_mb: Mailbox = to.parse()?;
+    let domain = from.split('@').nth(1).unwrap_or("mailora.local");
+    let msg_id_value = format!("{}@{}", Uuid::new_v4(), domain);
+
+    let builder = Message::builder()
+        .from(from_mb)
+        .to(to_mb)
+        .subject(subject)
+        .header(MessageId::from(msg_id_value.clone()));
+
+    let message = builder.body(body.to_string())?;
+    Ok((message, msg_id_value))
+}
+
+/// Send a prebuilt Message via lettre
+pub fn send_prebuilt(
+    host: &str,
+    port: u16,
+    username: &str,
+    password: &str,
+    msg: &Message,
+) -> Result<()> {
+    use lettre::transport::smtp::{authentication::Mechanism, client::{Tls, TlsParameters}};
+
+    let clean_password: String = password.chars().filter(|c| !c.is_whitespace()).collect();
+    let creds = Credentials::new(username.to_string(), clean_password);
+
+    let tls = TlsParameters::builder(host.into())
+        .dangerous_accept_invalid_certs(true)
+        .build()?;
+
+    let mut builder = match SmtpTransport::relay(host) {
+        Ok(b) => b,
+        Err(_) => SmtpTransport::builder_dangerous(host),
+    };
+
+    let client_id = std::env::var("SMTP_HELLO_NAME")
+        .ok()
+        .map(|val| ClientId::Domain(val))
+        .unwrap_or_else(|| ClientId::Domain(host.to_string()));
+
+    builder = builder
+        .port(port)
+        .hello_name(client_id)
+        .authentication(vec![Mechanism::Plain, Mechanism::Login])
+        .credentials(creds);
+
+    let builder = if port == 465 { builder.tls(Tls::Wrapper(tls)) } else { builder.tls(Tls::Required(tls)) };
+
+    let mailer = builder.build();
+    mailer.send(msg)?;
+    Ok(())
+}
+
+#[derive(Debug, serde::Serialize, serde::Deserialize, Clone)]
+pub struct AppendResult {
+    pub folder: String,
+    pub uid: Option<u32>,
+}
+
+/// Append raw RFC822 to a Sent-like folder and resolve UID via Message-Id search
+pub async fn append_to_sent(
+    account: &crate::models::account::Account,
+    raw: &[u8],
+    message_id: &str,
+    from_addr: &str,
+    subject: &str,
+) -> Result<AppendResult> {
+    use crate::imap::conn;
+
+    let mut imap = conn::connect(&account.imap_host, account.imap_port, &account.email, &account.password).await?;
+    let session = &mut imap.session;
+
+    // Collect Sent candidates
+    let mut candidates: Vec<String> = Vec::new();
+    if let Ok(list_stream) = session.list(None, Some("*" )).await {
+        use futures::StreamExt;
+        let mut names = Vec::new();
+        let mut s = list_stream;
+        while let Some(item) = s.next().await { if let Ok(m) = item { names.push(m.name().to_string()); } }
+        candidates = crate::imap::folders::detect_sent_candidates(&names);
+    }
+    if candidates.is_empty() {
+        candidates = vec![
+            "[Gmail]/Sent Mail".into(),
+            "Sent".into(),
+            "Sent Items".into(),
+            "Sent Messages".into(),
+            "INBOX.Sent".into(),
+        ];
+    }
+
+    // Prefer Gmail special-use when provider is gmail
+    if account.provider.as_str() == "gmail" {
+        if let Some(pos) = candidates.iter().position(|f| f == "[Gmail]/Sent Mail") {
+            if pos != 0 { let f = candidates.remove(pos); candidates.insert(0, f); }
+        }
+    }
+
+    // Providers that auto-save Sent: do not APPEND unless policy overrides
+    let policy = account.append_policy_enum();
+    let append_allowed = match policy {
+        crate::models::account::AppendPolicy::Never => false,
+        crate::models::account::AppendPolicy::Force => true,
+        crate::models::account::AppendPolicy::Auto => account.provider.as_str() != "gmail",
+    };
+    // If user provided sent_folder_hint, force it to front
+    if let Some(hint) = account.sent_folder_hint.as_ref() {
+        if let Some(pos) = candidates.iter().position(|f| f == hint) { let f = candidates.remove(pos); candidates.insert(0,f); }
+        else { candidates.insert(0, hint.clone()); }
+    }
+
+    // Adaptive retry/backoff
+    let (max_attempts, base_ms) = if account.provider.as_str() == "gmail" { (5u32, 250u64) } else { (10u32, 300u64) };
+
+    // Helper: search for the message across candidates
+    let mid_raw = message_id.trim_matches(['<','>']);
+    let header_variants = vec![
+        format!("HEADER Message-ID \"{}\"", mid_raw),
+        format!("HEADER Message-ID \"<{}>\"", mid_raw),
+        format!("HEADER Message-Id \"{}\"", mid_raw),
+        format!("HEADER Message-Id \"<{}>\"", mid_raw),
+    ];
+    let gmail_variants = vec![
+        format!("X-GM-RAW \"rfc822msgid:{}\"", mid_raw),
+        format!("X-GM-RAW \"rfc822msgid:\\<{}\\>\"", mid_raw),
+    ];
+    let fallback_variants = vec![
+        format!("SUBJECT \"{}\" FROM \"{}\"", subject, from_addr),
+    ];
+
+    let mut found_folder: Option<String> = None;
+    let mut uid_opt: Option<u32> = None;
+
+    'outer: for attempt in 0..max_attempts {
+        for cand in candidates.iter() {
+            let _ = session.select(cand).await;
+            // 1) Standard header variants
+            for q in &header_variants {
+                if let Ok(uids) = session.uid_search(q).await {
+                    if !uids.is_empty() { found_folder = Some(cand.clone()); uid_opt = uids.iter().copied().max(); break 'outer; }
+                }
+            }
+            // 2) Gmail-specific search by rfc822msgid
+            for q in &gmail_variants {
+                if let Ok(uids) = session.uid_search(q).await {
+                    if !uids.is_empty() { found_folder = Some(cand.clone()); uid_opt = uids.iter().copied().max(); break 'outer; }
+                }
+            }
+            // 3) Fallback: subject + from (prefer non-Gmail)
+            if account.provider.as_str() != "gmail" {
+                for q in &fallback_variants {
+                    if let Ok(uids) = session.uid_search(q).await {
+                        if !uids.is_empty() { found_folder = Some(cand.clone()); uid_opt = uids.iter().copied().max(); break 'outer; }
+                    }
+                }
+            }
+        }
+        // Backoff to allow server to place auto-saved Sent copy (if any)
+        tokio::time::sleep(std::time::Duration::from_millis(base_ms + (attempt as u64) * base_ms)).await;
+    }
+
+    // If found without APPEND, set Seen and return
+    if let (Some(folder), Some(uid)) = (found_folder.clone(), uid_opt) {
+        let _ = session.uid_store(&uid.to_string(), "+FLAGS (\\Seen)").await;
+        let _ = session.logout().await;
+        return Ok(AppendResult { folder, uid: Some(uid) });
+    }
+
+    // Not found: perform APPEND to first accepting candidate
+    if append_allowed {
+        let mut appended_folder: Option<String> = None;
+        for cand in candidates.iter() {
+            let _ = session.select(cand).await; // best-effort
+            match session.append(cand, raw).await {
+                Ok(()) => { appended_folder = Some(cand.clone()); break; }
+                Err(e) => { tracing::debug!(folder = %cand, error = %e, "APPEND failed, trying next candidate"); }
+            }
+        }
+        let folder = appended_folder.ok_or_else(|| anyhow::anyhow!("No Sent-like folder accepted APPEND"))?;
+
+        // Try to parse APPENDUID via subsequent SEARCH (async-imap does not return it today)
+        // Fast path: immediately search Message-Id in the appended folder
+        let _ = session.select(&folder).await;
+        for q in &header_variants { if let Ok(uids) = session.uid_search(q).await { if let Some(uid) = uids.iter().copied().max() { uid_opt = Some(uid); break; } } }
+        if uid_opt.is_none() { for q in &gmail_variants { if let Ok(uids) = session.uid_search(q).await { if let Some(uid) = uids.iter().copied().max() { uid_opt = Some(uid); break; } } } }
+        if uid_opt.is_none() && account.provider.as_str() != "gmail" { for q in &fallback_variants { if let Ok(uids) = session.uid_search(q).await { if let Some(uid) = uids.iter().copied().max() { uid_opt = Some(uid); break; } } } }
+        // If still none, fallback to existing retry loop below
+        if uid_opt.is_some() { let _ = session.uid_store(&uid_opt.unwrap().to_string(), "+FLAGS (\\Seen)").await; }
+        let _ = session.logout().await;
+        return Ok(AppendResult { folder, uid: uid_opt });
+    } else {
+        // Skip APPEND for auto-sent providers; return expected Sent folder and uid if any
+        let folder = candidates.first().cloned().unwrap_or_else(|| "Sent".to_string());
+        let _ = session.logout().await;
+        return Ok(AppendResult { folder, uid: uid_opt });
+    }
+}
+
+/// Send email and log to events table (legacy). Prefer building and appending via append_to_sent.
 pub async fn send_and_log(
     pool: &sqlx::SqlitePool,
     mailbox: &str,

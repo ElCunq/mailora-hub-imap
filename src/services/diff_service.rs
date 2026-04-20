@@ -7,6 +7,7 @@ use tokio::sync::RwLock;
 
 // In-memory account credential store (very temporary, not secure)
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[allow(non_snake_case)]
 pub struct AccountCreds {
     pub email: String,
     pub password: String,
@@ -58,6 +59,7 @@ pub fn decode_cursor(s: &str) -> Result<CursorToken> {
 
 #[derive(Serialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
+#[allow(dead_code)]
 pub enum ChangeItem {
     // include folder so client can fetch body from correct mailbox
     MessageAdded {
@@ -85,6 +87,7 @@ pub struct DiffResponseWire {
     pub changes: Vec<ChangeItem>,
 }
 
+#[allow(dead_code)]
 pub async fn initial_diff_with_folder(
     account_id: &str,
     folder: &str,
@@ -107,10 +110,12 @@ pub async fn initial_diff_with_folder(
     }
 }
 
+#[allow(dead_code)]
 pub async fn initial_diff(account_id: &str, uidvalidity: u32, last_uid: u32) -> DiffResponseWire {
     initial_diff_with_folder(account_id, "INBOX", uidvalidity, last_uid).await
 }
 
+#[allow(dead_code)]
 pub async fn incremental_diff(
     account_id: &str,
     cursor: &CursorToken,
@@ -142,6 +147,7 @@ pub async fn incremental_diff(
     }
 }
 
+#[allow(dead_code)]
 // Placeholder diff compute (not used by routes::diff which has its own handler for now)
 pub async fn compute_diff(_req: DiffRequest) -> DiffResponse {
     DiffResponse { changes: vec![] }

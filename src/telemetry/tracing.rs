@@ -1,7 +1,7 @@
-// filepath: /mailora-hub-imap/mailora-hub-imap/src/telemetry/tracing.rs
-use tracing::{info, Level};
+use tracing::info;
 use tracing_subscriber::{fmt, layer::SubscriberExt, EnvFilter, Registry};
 
+#[allow(dead_code)]
 pub fn init_tracing() {
     let env_filter = EnvFilter::new("info");
     let fmt_layer = fmt::layer().with_target(false);

@@ -1,4 +1,4 @@
-use axum::{handler::get, Router, Json};
+use axum::{routing::get, Router, Json};
 use serde_json::json;
 
 pub async fn handle_events() -> Json<serde_json::Value> {

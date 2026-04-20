@@ -1,9 +1,10 @@
 use anyhow::Result;
 use axum::{extract::Query, Json};
+use axum::extract::State;
+use axum::http::StatusCode;
 use serde::{Deserialize, Serialize};
 
 use crate::imap::folders::list_mailboxes;
-use crate::persist::ACCOUNT_STATE;
 use crate::services::diff_service::ChangeItem;
 use crate::services::diff_service::ACCOUNTS;
 use crate::services::diff_service::{
@@ -11,6 +12,7 @@ use crate::services::diff_service::{
 };
 
 #[derive(Deserialize)]
+#[allow(non_snake_case)]
 pub struct DiffQs {
     pub accountId: String,
     pub since: Option<String>,
@@ -18,6 +20,7 @@ pub struct DiffQs {
 }
 
 #[derive(Deserialize)]
+#[allow(non_snake_case)]
 pub struct BodyQs {
     pub accountId: String,
     pub uid: u32,
@@ -25,6 +28,7 @@ pub struct BodyQs {
 }
 
 #[derive(Serialize)]
+#[allow(non_snake_case)]
 pub struct BodyResponse {
     pub accountId: String,
     pub uid: u32,
@@ -37,14 +41,26 @@ pub struct BodyResponse {
 }
 
 #[derive(Deserialize)]
+#[allow(non_snake_case)]
 pub struct FoldersQs {
     pub accountId: String,
 }
 
 #[derive(Deserialize)]
+#[allow(non_snake_case)]
 pub struct AttachQs {
     pub accountId: String,
     pub uid: u32,
+    pub folder: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[allow(non_snake_case)]
+pub struct DownloadQs {
+    pub accountId: String,
+    pub uid: u32,
+    pub part: String,
+    pub folder: Option<String>,
 }
 
 async fn list_all_folders_excluding_spam(
@@ -99,64 +115,22 @@ pub async fn diff_handler(
                 .as_ref()
                 .and_then(|fs| fs.iter().find(|f| &f.name == folder).map(|f| f.last_uid))
                 .unwrap_or(cur.last_uid);
-            let (mut new_last_f, mut new_msgs) = crate::imap::sync::fetch_new_since_in(
-                &creds.host,
-                creds.port,
-                &creds.email,
-                &creds.password,
-                last_for_folder,
-                folder,
-            )
-            .await
-            .map_err(|e| (axum::http::StatusCode::BAD_GATEWAY, e.to_string()))?;
-            if new_msgs.is_empty() && folder == "INBOX" {
-                if let Ok(state_vec_probe) = crate::imap::sync::snapshot_state(
+            // Use fetch_new_since for INBOX only; for other folders we need a folder-aware version (not yet available) so skip incremental for non-INBOX for now.
+            let (mut new_last_f, new_msgs) = if folder == "INBOX" {
+                crate::imap::sync::fetch_new_since(
                     &creds.host,
                     creds.port,
                     &creds.email,
                     &creds.password,
+                    last_for_folder,
                 )
                 .await
-                {
-                    let newer_uids: Vec<u32> = state_vec_probe
-                        .iter()
-                        .filter_map(|s| {
-                            if s.uid > last_for_folder {
-                                Some(s.uid)
-                            } else {
-                                None
-                            }
-                        })
-                        .collect();
-                    if !newer_uids.is_empty() {
-                        match crate::imap::sync::fetch_meta_for_uids_in(
-                            &creds.host,
-                            creds.port,
-                            &creds.email,
-                            &creds.password,
-                            &newer_uids,
-                            folder,
-                        )
-                        .await
-                        {
-                            Ok(fetched) if !fetched.is_empty() => {
-                                new_msgs = fetched;
-                            }
-                            _ => {
-                                new_msgs = newer_uids
-                                    .into_iter()
-                                    .map(|uid| crate::imap::sync::NewMessageMeta {
-                                        uid,
-                                        subject: String::new(),
-                                        from: String::new(),
-                                        date: None,
-                                        size: None,
-                                    })
-                                    .collect();
-                            }
-                        }
-                    }
-                }
+                .map_err(|e| (axum::http::StatusCode::BAD_GATEWAY, e.to_string()))?
+            } else {
+                (last_for_folder, Vec::new())
+            };
+            if new_msgs.is_empty() && folder == "INBOX" {
+                // no additional probing now
             }
             // Add change items
             for m in &new_msgs {
@@ -225,12 +199,11 @@ pub async fn diff_handler(
     let names = list_all_folders_excluding_spam(&creds).await?;
     let mut fcs: Vec<FolderCursor> = Vec::new();
     for name in names.iter() {
-        if let Ok(snap) = crate::imap::sync::initial_snapshot_in(
+        if let Ok(snap) = crate::imap::sync::initial_snapshot(
             &creds.host,
             creds.port,
             &creds.email,
             &creds.password,
-            name,
         )
         .await
         {
@@ -388,26 +361,189 @@ pub async fn folders_handler(
 }
 
 pub async fn attachments_handler(
+    State(pool): State<sqlx::SqlitePool>,
     Query(q): Query<AttachQs>,
-) -> Result<Json<Vec<crate::imap::sync::AttachmentMeta>>, (axum::http::StatusCode, String)> {
+) -> Result<Json<Vec<crate::imap::sync::AttachmentMeta>>, (StatusCode, String)> {
+    // First try in-memory creds (login session)
     let creds_opt = {
         let store = ACCOUNTS.read().await;
         store.get(&q.accountId).cloned()
     };
-    let creds = creds_opt.ok_or((
-        axum::http::StatusCode::NOT_FOUND,
-        "account not logged in".into(),
-    ))?;
-    let atts = crate::imap::sync::list_attachments(
+    let creds = if let Some(c) = creds_opt {
+        c
+    } else {
+        // Fallback to DB account
+        let account = crate::services::account_service::get_account(&pool, &q.accountId)
+            .await
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+            .ok_or((StatusCode::NOT_FOUND, "account not found".into()))?;
+        let (email, password) = account
+            .get_credentials()
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        crate::services::diff_service::AccountCreds {
+            email,
+            password,
+            host: account.imap_host,
+            port: account.imap_port,
+        }
+    };
+    let req_folder = q.folder.as_deref().unwrap_or("INBOX");
+
+    // Try requested folder first
+    let mut atts = crate::imap::sync::list_attachments(
         &creds.host,
         creds.port,
         &creds.email,
         &creds.password,
+        req_folder,
         q.uid,
     )
     .await
-    .map_err(|e| (axum::http::StatusCode::BAD_GATEWAY, e.to_string()))?;
+    .map_err(|e| (StatusCode::BAD_GATEWAY, e.to_string()))?;
+
+    // If none found, try a lighter BODYSTRUCTURE-based probe then scan other folders
+    let mut found_folder = req_folder.to_string();
+    if atts.is_empty() {
+        // quick probe: try INBOX BODYSTRUCTURE to detect parts even if raw fetch is large-blocked
+        // fall back to scanning other folders
+        let folders = list_all_folders_excluding_spam(&creds).await?;
+        for f in folders.iter() {
+            if f == req_folder { continue; }
+            match crate::imap::sync::list_attachments(
+                &creds.host,
+                creds.port,
+                &creds.email,
+                &creds.password,
+                f,
+                q.uid,
+            ).await {
+                Ok(v) if !v.is_empty() => { atts = v; found_folder = f.clone(); break; }
+                _ => {}
+            }
+        }
+    }
+
+    // Persist to DB: resolve message_id then replace attachments, using the found folder
+    if !atts.is_empty() {
+        let msg_row = sqlx::query_scalar::<_, i64>(
+            "SELECT id FROM messages WHERE account_id = ? AND folder = ? AND uid = ?",
+        )
+        .bind(&q.accountId)
+        .bind(&found_folder)
+        .bind(q.uid as i64)
+        .fetch_optional(&pool)
+        .await
+        .map_err(int_err)?;
+
+        if let Some(msg_id) = msg_row {
+            // Replace all attachments for this message_id
+            let _ = sqlx::query("DELETE FROM attachments WHERE message_id = ?")
+                .bind(msg_id)
+                .execute(&pool)
+                .await;
+            for a in &atts {
+                let _ = sqlx::query(
+                    r#"INSERT INTO attachments(message_id, filename, content_type, size, content_id, is_inline, data, file_path)
+                        VALUES(?,?,?,?,?,0,NULL,NULL)"#,
+                )
+                .bind(msg_id)
+                .bind(a.filename.as_deref())
+                .bind(a.content_type.as_deref())
+                .bind(a.size.map(|v| v as i64))
+                .bind(Option::<String>::None)
+                .execute(&pool)
+                .await;
+            }
+            let has_any = !atts.is_empty();
+            let _ = sqlx::query("UPDATE messages SET has_attachments = ? WHERE id = ?")
+                .bind(if has_any { 1 } else { 0 })
+                .bind(msg_id)
+                .execute(&pool)
+                .await;
+        }
+    }
+
     Ok(Json(atts))
+}
+
+pub async fn download_attachment(
+    State(pool): State<sqlx::SqlitePool>,
+    Query(q): Query<DownloadQs>,
+) -> Result<axum::response::Response, (StatusCode, String)> {
+    let creds_opt = {
+        let store = ACCOUNTS.read().await;
+        store.get(&q.accountId).cloned()
+    };
+    let creds = if let Some(c) = creds_opt {
+        c
+    } else {
+        let account = crate::services::account_service::get_account(&pool, &q.accountId)
+            .await
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+            .ok_or((StatusCode::NOT_FOUND, "account not found".into()))?;
+        let (email, password) = account
+            .get_credentials()
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        crate::services::diff_service::AccountCreds {
+            email,
+            password,
+            host: account.imap_host,
+            port: account.imap_port,
+        }
+    };
+    let req_folder = q.folder.as_deref().unwrap_or("INBOX");
+
+    // Try requested folder first
+    if let Ok(Some((bytes, ctype, filename))) = crate::imap::sync::fetch_attachment_part(
+        &creds.host,
+        creds.port,
+        &creds.email,
+        &creds.password,
+        req_folder,
+        q.uid,
+        &q.part,
+    )
+    .await
+    {
+        let mut resp = axum::http::Response::builder().status(200);
+        if let Some(ct) = ctype { resp = resp.header(axum::http::header::CONTENT_TYPE, ct); }
+        if let Some(fname) = filename {
+            resp = resp.header(
+                axum::http::header::CONTENT_DISPOSITION,
+                format!("attachment; filename=\"{}\"", fname),
+            );
+        }
+        return Ok(resp.body(axum::body::Body::from(bytes)).unwrap());
+    }
+
+    // Fallback: scan other folders
+    let folders = list_all_folders_excluding_spam(&creds).await?;
+    for f in folders.iter() {
+        if f == req_folder { continue; }
+        if let Ok(Some((bytes, ctype, filename))) = crate::imap::sync::fetch_attachment_part(
+            &creds.host,
+            creds.port,
+            &creds.email,
+            &creds.password,
+            f,
+            q.uid,
+            &q.part,
+        )
+        .await
+        {
+            let mut resp = axum::http::Response::builder().status(200);
+            if let Some(ct) = ctype { resp = resp.header(axum::http::header::CONTENT_TYPE, ct); }
+            if let Some(fname) = filename {
+                resp = resp.header(
+                    axum::http::header::CONTENT_DISPOSITION,
+                    format!("attachment; filename=\"{}\"", fname),
+                );
+            }
+            return Ok(resp.body(axum::body::Body::from(bytes)).unwrap());
+        }
+    }
+
+    Err((StatusCode::NOT_FOUND, "part not found".into()))
 }
 
 fn int_err<E: std::fmt::Display>(e: E) -> (axum::http::StatusCode, String) {

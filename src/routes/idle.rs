@@ -6,7 +6,7 @@ use axum::{
     Json,
 };
 use futures::stream::Stream;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use sqlx::SqlitePool;
 use std::convert::Infallible;
 use std::sync::Arc;

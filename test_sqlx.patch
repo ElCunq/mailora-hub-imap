@@ -1,0 +1,34 @@
+--- src/services/contact_service.rs
++++ src/services/contact_service.rs
+@@ -467,7 +467,20 @@
+ ) -> Result<()> {
+     let mut tx = pool.begin().await?;
+ 
+-    let conflict = sqlx::query!(
++    #[derive(sqlx::FromRow)]
++    struct ConflictRow {
++        id: String,
++        contact_id: String,
++    }
++
++    let conflict = sqlx::query_as!(
++        ConflictRow,
+         "SELECT id, contact_id FROM contact_conflicts WHERE id = ?",
+         conflict_id
+     )
+@@ -511,7 +524,13 @@
+     ).fetch_all(pool).await?;
+ 
+-    let name_dups = sqlx::query!(
+-        r#"SELECT full_name, GROUP_CONCAT(id) as ids
++    #[derive(sqlx::FromRow)]
++    struct NameDupRow {
++        full_name: Option<String>,
++        ids: Option<String>,
++    }
++
++    let name_dups = sqlx::query_as!(
++        NameDupRow,
++        r#"SELECT full_name, GROUP_CONCAT(id) as ids
+            FROM contacts 
+            WHERE account_id = ? AND sync_status != 'pending_delete' AND full_name != 'Unknown'

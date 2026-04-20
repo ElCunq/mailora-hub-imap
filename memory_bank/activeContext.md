@@ -1,58 +1,34 @@
 # Active Context
 
-Current focus:
-- **Milestone 1.1 (Multi-Account Management) ✅ TAMAMLANDI**
-- **Gmail IMAP Testi ✅ BAŞARILI** - 311 mesaj, 11 klasör
-- **Sonraki Adım:** Milestone 1.2 - IDLE Watchers & Real-time Sync
+Tarih: 2025-12-25
+Branch: v1.1.0-dev
 
-Recent changes (3 Kasım 2025):
-- ✅ IMAP test servisi oluşturuldu (`src/services/imap_test_service.rs`)
-- ✅ Test endpoints eklendi (`src/routes/test.rs`)
-  - `GET /test/connection/:account_id` - IMAP bağlantı testi
-  - `GET /test/messages/:account_id?limit=N` - Mesaj önizleme
-  - `GET /test/accounts` - Test hesap listesi
-- ✅ Gerçek Gmail hesabı test edildi (cenkorfa1@gmail.com)
-  - 311 mesaj INBOX'ta
-  - 11 klasör başarıyla listelendi
-  - IDLE, UIDPLUS, CONDSTORE capabilities doğrulandı
-Test Sonuçları:
-- ✅ IMAP bağlantı: 1.5 saniye
-- ✅ Folder listesi: 11 klasör (INBOX, Spam, Sent, etc.)
-- ✅ Message fetch: 10 mesaj/1.5 saniye
-- ✅ Capabilities: IDLE, CONDSTORE, UIDPLUS ✓
-- ✅ `test_gmail_imap.sh` - Kapsamlı test scripti
-- ✅ `GMAIL_TEST_RESULTS.md` - Detaylı test raporu
+## Mevcut Durum
+Proje **Auto-Discovery (Magic Login)** ve **UI Unifikasyonu (Dark Theme)** ile güçlendirildi. Stabilite sorunları çözüldü. Şimdi ise **Kurumsal (Enterprise) Mod** özelliklerine başlanmıştır; temel **RBAC** altyapısı kuruldu.
 
-Test Sonuçları:
-- ✅ IMAP bağlantı: 1.5 saniye
-- ✅ Folder listesi: 11 klasör (INBOX, Spam, Sent, etc.)
-- ✅ Message fetch: 10 mesaj/1.5 saniye
-- ✅ Capabilities: IDLE, CONDSTORE, UIDPLUS ✓
+### Son Tamamlananlar (v1.1.0 -> v1.2.0-dev)
+- **Kurumsal Mod Hazırlığı:**
+  - `users` tablosu ile **RBAC** (Role-Based Access Control) temeli atıldı (Admin / Member rolleri).
+  - `auth_service` ve API uç noktaları (`/auth/register`, `/auth/login`) oluşturuldu.
+  - Basit bir `static/login.html` ve `static/register.html` arayüzü eklendi.
+  - İlk kayıt olan kullanıcı otomatik olarak **Admin** yetkisine sahip oluyor.
+  - Ana uygulama (`app.html`), token yoksa giriş sayfasına yönlendiriyor.
+- **Auto-Discovery (Magic Login):** (Tamamlandı)
+  - Mozilla ISPDB entegrasyonu.
+  - DNS SRV (`_imap._tcp`, `_submission._tcp`) sorgulama.
+- **UI Unifikasyonu:** (Tamamlandı)
+  - `add_account.html` ana uygulama ile uyumlu hale getirildi.
 
-## Next Steps (Milestone 1.3)
-1. ✅ ~~Test account CRUD endpoints~~
-2. ✅ ~~Test with real Gmail account~~
-3. ✅ ~~Message body fetch~~
-4. ✅ ~~IDLE watchers~~
-5. **TODO: Message sync to SQLite** (messages table)
-6. **TODO: SMTP send service** (lettre integration)
-7. **TODO: Attachment handling**
-8. **TODO: Thread grouping**
-9. **TODO: Full-text search** (SQLite FTS5)
-10. **TODO: Unified inbox UI**
+## Odak
+- Kurumsal mod için "Olay Günlüğü" (Event Logging) ve Admin Paneli.
+- PIM Entegrasyonu (CalDAV/CardDAV) hazırlığı.
 
-Decisions:
-- Provider enum: gmail, outlook, yahoo, icloud, custom
-- Account ID format: `acc_{email_sanitized}` (ör: acc_user_gmail_com)
-- Credentials: Base64 encoded "email:password" (geçici, production'da OS keychain)
-- Sync frequency default: 300 saniye (5 dakika)
-- IMAP/SMTP defaults provider'dan otomatik
+## Sıradaki İşler (Faz 3 - Enterprise & PIM)
+- **Admin Paneli:** Kullanıcıları listeleme, silme ve sistem loglarını (`event_logs`) görüntüleme.
+- **Olay Günlüğü:** `LOGIN`, `FETCH`, `SEND` gibi önemli eylemleri veritabanına kaydetme.
+- **Tam Metin Arama (FTS):** SQLite FTS5 entegrasyonu.
+- **Kalıcı Kuyruklar:** Giden e-postalar için `Outbox` mekanizması.
 
-Milestones:
-- ✅ M0: IDLE + meta listing + basic FETCH (completed)
-- ✅ M1: IMAP IDLE watcher + SMTP send + event log + unified endpoints (COMPLETED)
-- ✅ M1.1: Multi-Account Management (TAMAMLANDI - test bekliyor)
-- ⏳ M1.2: External IMAP sync per account + IDLE watchers
-- ⏳ M2: BODYSTRUCTURE selection + lazy fetch
-- ⏳ M3: Personal mode Stalwart embedding
-- ⏳ M4: Enterprise RBAC visibility
+## Kararlar
+- **RBAC:** Basit bir JWT benzeri token ("id:role") yapısı şimdilik yeterli görüldü (MVP için). İleride gerçek JWT'ye geçilecek.
+- **Kayıt Politikası:** "Herkese açık" kayıt politikası benimsendi (ilk üye Admin, diğerleri Member).
