@@ -68,6 +68,12 @@ function render() {
         const sel = s.selectedMessageId === m.id ? 'selected' : '';
         const unread = !m.read ? 'unread' : '';
         const badges = [];
+
+        const acc = s.accounts.find(a => a.id === m.accountId);
+        if (s.selectedAccountId === 'unified' && acc) {
+            badges.push(`<span class="badge" style="background:${acc.color}20;color:${acc.color};border:1px solid ${acc.color}50">${acc.displayName || acc.email.split('@')[0]}</span>`);
+        }
+
         if (state === MSG_STATE.PINNED) badges.push('<span class="badge pin">📌</span>');
         if (m.important) badges.push('<span class="badge important">⭐</span>');
         if (m.isNewsletter) badges.push('<span class="badge newsletter">📰</span>');

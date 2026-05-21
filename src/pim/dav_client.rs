@@ -92,7 +92,7 @@ impl DavClient {
         }
 
         let text = resp.text().await?;
-        Ok(parse_multistatus_hrefs(&text, self.base_url_stripped()))
+        Ok(parse_multistatus_collections(&text, self.base_url_stripped()))
     }
 
     /// REPORT — fetch all card/cal hrefs with etags (CardDAV/CalDAV report).
@@ -238,9 +238,14 @@ impl DavClient {
 
         let text = resp.text().await?;
         // Simple XML extraction for current-user-principal
-        let principal_href = extract_xml_value(&text, "href")
-            .or_else(|| extract_xml_value(&text, "d:href"))
-            .ok_or_else(|| anyhow!("Could not discover principal href"))?;
+        let principal_href = match extract_xml_value(&text, "href")
+            .or_else(|| extract_xml_value(&text, "d:href")) {
+                Some(href) => href,
+                None => {
+                    tracing::warn!("discover_principal response: {}", text);
+                    return Err(anyhow!("Could not discover principal href"));
+                }
+            };
 
         // Try to discover calendar-home-set
         let body_home = r#"<?xml version="1.0" encoding="utf-8"?>
@@ -309,6 +314,37 @@ fn parse_multistatus_hrefs(xml: &str, base_url: &str) -> Vec<DavResource> {
         let content_type = extract_xml_value(block, "getcontenttype");
 
         // Make href absolute if relative
+        let full_href = if href.starts_with('/') {
+            format!("{}{}", base_url, href)
+        } else if href.starts_with("http") {
+            href
+        } else {
+            continue;
+        };
+
+        resources.push(DavResource { href: full_href, etag, content_type });
+    }
+    resources
+}
+
+fn parse_multistatus_collections(xml: &str, base_url: &str) -> Vec<DavResource> {
+    let mut resources = Vec::new();
+    let mut pos = 0;
+    while let Some(start) = xml[pos..].find("<response>").or_else(|| xml[pos..].find("<d:response>")) {
+        let block_start = pos + start;
+        let end_tag = if xml[block_start..].contains("</response>") { "</response>" } else { "</d:response>" };
+        let Some(block_end) = xml[block_start..].find(end_tag) else { break; };
+        let block = &xml[block_start..block_start + block_end + end_tag.len()];
+        pos = block_start + block_end + end_tag.len();
+
+        let href = extract_xml_value(block, "href").unwrap_or_default();
+        if href.is_empty() {
+            continue;
+        }
+        let etag = extract_xml_value(block, "getetag")
+            .map(|e| e.trim_matches('"').to_string());
+        let content_type = extract_xml_value(block, "getcontenttype");
+
         let full_href = if href.starts_with('/') {
             format!("{}{}", base_url, href)
         } else if href.starts_with("http") {

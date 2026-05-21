@@ -191,3 +191,53 @@ pub fn now_epoch() -> i64 {
         .unwrap()
         .as_secs() as i64
 }
+
+pub async fn normalize_legacy_dates(pool: &SqlitePool) -> Result<()> {
+    tracing::info!("Normalizing legacy message dates to RFC 3339 standard...");
+    
+    #[derive(sqlx::FromRow)]
+    struct DateRow {
+        id: i64,
+        date: Option<String>,
+    }
+    
+    let rows: Vec<DateRow> = sqlx::query_as("SELECT id, date FROM messages WHERE date IS NOT NULL")
+        .fetch_all(pool)
+        .await?;
+
+    let mut update_count = 0;
+    for row in rows {
+        if let Some(ref d_str) = row.date {
+            let d_str_trimmed = d_str.trim();
+            if d_str_trimmed.is_empty() {
+                continue;
+            }
+            
+            // If already ISO 8601 / RFC 3339 format, skip
+            if chrono::DateTime::parse_from_rfc3339(d_str_trimmed).is_ok() {
+                continue;
+            }
+
+            // Parse RFC 2822 format (e.g. "Wed, 8 Mar 2023 21:12:00 +0000")
+            if let Ok(parsed) = chrono::DateTime::parse_from_rfc2822(d_str_trimmed) {
+                let normalized = parsed.to_rfc3339();
+                sqlx::query("UPDATE messages SET date = ? WHERE id = ?")
+                    .bind(&normalized)
+                    .bind(row.id)
+                    .execute(pool)
+                    .await?;
+                update_count += 1;
+                continue;
+            }
+
+            // Fallback: try parsing generic dates with a few standard patterns if needed
+        }
+    }
+    
+    if update_count > 0 {
+        tracing::info!("Successfully normalized {} legacy message dates.", update_count);
+    } else {
+        tracing::info!("All message dates are already normalized.");
+    }
+    Ok(())
+}

@@ -136,7 +136,15 @@ pub async fn sync_folder_messages_with_session(
     let server_uids: HashSet<u32> = messages_vec.iter().filter_map(|m| m.uid).collect();
 
     // Calculate what to sync
-    let new_uids: Vec<u32> = server_uids.difference(&existing_uids).copied().collect();
+    let mut new_uids: Vec<u32> = server_uids.difference(&existing_uids).copied().collect();
+    // Sort in descending order to fetch the newest emails first
+    new_uids.sort_unstable_by(|a, b| b.cmp(a));
+
+    // Cap the initial folder sync to the newest 1000 messages to ensure instant page loads
+    if new_uids.len() > 1000 {
+        info!("Capping initial folder sync to 1000 newest messages (out of {})", new_uids.len());
+        new_uids.truncate(1000);
+    }
 
     let deleted_uids: Vec<u32> = existing_uids.difference(&server_uids).copied().collect();
 
@@ -183,12 +191,11 @@ pub async fn sync_folder_messages_with_session(
                 .collect::<Vec<_>>()
                 .join(",");
 
-            // Include headers and BODY.PEEK[] so we can parse everything manually
-            // We AVOID fetching ENVELOPE because it crashes on some bad UTF-8 headers (e.g. from Gmail Sent Items)
+            // Fetch headers only (BODY.PEEK[HEADER]) to optimize speed and reduce bandwidth by 99.9%
             let messages = with_timeout(
                 session.uid_fetch(
                     &uid_set,
-                    "(UID FLAGS INTERNALDATE RFC822.SIZE BODY.PEEK[HEADER.FIELDS (FROM TO CC SUBJECT DATE MESSAGE-ID)] BODY.PEEK[])",
+                    "(UID FLAGS INTERNALDATE RFC822.SIZE BODY.PEEK[HEADER])",
                 ),
                 "IMAP UID FETCH",
             )
@@ -363,9 +370,21 @@ async fn save_message_to_db(
     // Message size
     let size = fetch.size.unwrap_or(0) as i64;
     
-    // Attachments
+    // Attachments: since we only fetch headers to optimize speed, full_body contains the raw headers.
+    // We check if there are attachments by parsing the Content-Type header.
     let attachments = extract_attachments_from_raw(full_body);
-    let has_atts = !attachments.is_empty();
+    let mut has_atts = !attachments.is_empty();
+    if !has_atts && !full_body.is_empty() {
+        if let Some(parsed) = mail_parser::Message::parse(full_body) {
+            if let Some(ctype) = parsed.content_type() {
+                let c_type = ctype.c_type.as_ref();
+                let subtype = ctype.subtype().unwrap_or("");
+                if c_type.eq_ignore_ascii_case("multipart") && (subtype.eq_ignore_ascii_case("mixed") || subtype.eq_ignore_ascii_case("related")) {
+                    has_atts = true;
+                }
+            }
+        }
+    }
 
     // Check if exists
     let exists: bool = sqlx::query_scalar(

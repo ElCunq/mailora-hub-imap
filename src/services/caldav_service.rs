@@ -10,9 +10,16 @@ use tracing::{error, info, warn};
 pub async fn sync_caldav(pool: &SqlitePool, account_id: &str) -> Result<()> {
     // 1. Fetch account credentials and URL
     // Here we'll just mock the fetching similar to carddav_service
-    let account = get_account_creds(pool, account_id).await?;
+    let mut account = get_account_creds(pool, account_id).await?;
     if account.caldav_url.is_none() || account.caldav_url.as_ref().unwrap().is_empty() {
-        return Ok(()); // Nothing to sync
+        if let Some(discovered_url) = discover_caldav_url(&account).await {
+            if let Err(e) = save_caldav_url(pool, account_id, &discovered_url).await {
+                warn!("Failed to save discovered CalDAV URL for account {}: {}", account_id, e);
+            }
+            account.caldav_url = Some(discovered_url);
+        } else {
+            return Ok(()); // Nothing to sync, discovery failed
+        }
     }
     
     let base_url = account.caldav_url.unwrap();
@@ -415,4 +422,50 @@ async fn insert_attendees_alarms(tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>, e
          .execute(&mut **tx).await?;
     }
     Ok(())
+}
+
+async fn save_caldav_url(pool: &SqlitePool, account_id: &str, url: &str) -> Result<()> {
+    sqlx::query("UPDATE accounts SET caldav_url = ? WHERE id = ?")
+        .bind(url).bind(account_id).execute(pool).await?;
+    Ok(())
+}
+
+pub async fn discover_caldav_url(account: &AccountCreds) -> Option<String> {
+    let domain = account.email.split('@').nth(1)?;
+
+    // 1. Hardcoded known providers
+    let known = known_caldav_url(domain, &account.email);
+    if known.is_some() { return known; }
+
+    // 2. .well-known/caldav
+    let well_known = format!("https://{}/.well-known/caldav", domain);
+    if probe_url(&well_known).await { return Some(well_known); }
+
+    // 3. HTTP fallback
+    let well_known_http = format!("http://{}/.well-known/caldav", domain);
+    if probe_url(&well_known_http).await { return Some(well_known_http); }
+
+    None
+}
+
+fn known_caldav_url(domain: &str, _email: &str) -> Option<String> {
+    match domain {
+        "gmail.com" | "googlemail.com" => Some("https://apidata.googleusercontent.com/caldav/v2/".into()),
+        "icloud.com" | "me.com" | "mac.com" => Some("https://caldav.icloud.com/".into()),
+        "yahoo.com" => Some("https://caldav.calendar.yahoo.com/".into()),
+        _ => None,
+    }
+}
+
+async fn probe_url(url: &str) -> bool {
+    let Ok(client) = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .redirect(reqwest::redirect::Policy::limited(5))
+        .build()
+    else { return false; };
+
+    match client.head(url).send().await {
+        Ok(r) => r.status().is_success() || r.status().as_u16() == 401 || r.status().as_u16() == 207,
+        Err(_) => false,
+    }
 }

@@ -22,11 +22,11 @@ async function init() {
         store.dispatch({ type: ACTION.SET_ACCOUNTS, payload: accounts });
 
         if (accounts.length > 0) {
-            const accId = accounts[0].id;
-            const folders = await dataSource.getFolders(accId);
-            store.dispatch({ type: ACTION.SET_FOLDERS, payload: folders });
+            // Add unified as the default account view
+            store.dispatch({ type: ACTION.SET_FOLDERS, payload: ['INBOX', 'Sent', 'Drafts', 'Spam', 'Trash'] });
+            store.dispatch({ type: ACTION.SELECT_ACCOUNT, payload: 'unified' });
 
-            const messages = await dataSource.getMessages(accId, 'INBOX');
+            const messages = await dataSource.getUnifiedInbox('INBOX', 200);
             store.dispatch({ type: ACTION.SET_MESSAGES, payload: messages });
         }
     } catch (e) {
@@ -42,10 +42,16 @@ let lastFold = null;
 store.subscribe('selectedAccountId', async (accId) => {
     if (!accId || accId === lastAcc) return;
     lastAcc = accId;
-    const folders = await dataSource.getFolders(accId);
-    store.dispatch({ type: ACTION.SET_FOLDERS, payload: folders });
-    const msgs = await dataSource.getMessages(accId, store.getState().selectedFolder);
-    store.dispatch({ type: ACTION.SET_MESSAGES, payload: msgs });
+    if (accId === 'unified') {
+        store.dispatch({ type: ACTION.SET_FOLDERS, payload: ['INBOX', 'Sent', 'Drafts', 'Trash', 'Spam'] });
+        const msgs = await dataSource.getUnifiedInbox(store.getState().selectedFolder);
+        store.dispatch({ type: ACTION.SET_MESSAGES, payload: msgs });
+    } else {
+        const folders = await dataSource.getFolders(accId);
+        store.dispatch({ type: ACTION.SET_FOLDERS, payload: folders });
+        const msgs = await dataSource.getMessages(accId, store.getState().selectedFolder);
+        store.dispatch({ type: ACTION.SET_MESSAGES, payload: msgs });
+    }
 });
 
 store.subscribe('selectedFolder', async (folder) => {
@@ -53,8 +59,13 @@ store.subscribe('selectedFolder', async (folder) => {
     lastFold = folder;
     const accId = store.getState().selectedAccountId;
     if (accId) {
-        const msgs = await dataSource.getMessages(accId, folder);
-        store.dispatch({ type: ACTION.SET_MESSAGES, payload: msgs });
+        if (accId === 'unified') {
+            const msgs = await dataSource.getUnifiedInbox(folder);
+            store.dispatch({ type: ACTION.SET_MESSAGES, payload: msgs });
+        } else {
+            const msgs = await dataSource.getMessages(accId, folder);
+            store.dispatch({ type: ACTION.SET_MESSAGES, payload: msgs });
+        }
     }
 });
 
@@ -63,9 +74,16 @@ async function handleSync() {
     const accId = store.getState().selectedAccountId;
     if (!accId) return;
     try {
-        await dataSource.syncAccount(accId);
-        const msgs = await dataSource.getMessages(accId, store.getState().selectedFolder);
-        store.dispatch({ type: ACTION.SET_MESSAGES, payload: msgs });
+        if (accId === 'unified') {
+            const accounts = store.getState().accounts;
+            for (const acc of accounts) { await dataSource.syncAccount(acc.id).catch(() => { }); }
+            const msgs = await dataSource.getUnifiedInbox(store.getState().selectedFolder);
+            store.dispatch({ type: ACTION.SET_MESSAGES, payload: msgs });
+        } else {
+            await dataSource.syncAccount(accId);
+            const msgs = await dataSource.getMessages(accId, store.getState().selectedFolder);
+            store.dispatch({ type: ACTION.SET_MESSAGES, payload: msgs });
+        }
     } catch (e) { console.error("Sync error:", e); }
 }
 

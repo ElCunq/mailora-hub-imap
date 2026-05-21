@@ -597,6 +597,7 @@
                 <span class="logo-text">Mailora</span>
             </div>
             <div class="header-actions">
+                <button class="compose-btn" onclick="triggerCalDavSync()" style="background:var(--bg-tertiary); border:1px solid var(--border); color:var(--text-primary); margin-right:8px;">🔄 Şimdi Eşitle</button>
                 <button class="compose-btn" onclick="openEventModal()">📅 Yeni Etkinlik</button>
                 <button class="icon-btn" id="theme-btn" onclick="toggleTheme()" title="Tema">🌙</button>
             </div>
@@ -613,6 +614,11 @@
             <a href="admin_demo.html" class="nav-link" style="color:var(--accent-purple)">🧪 Admin (Mock)</a>
 
             <div id="mini-calendar"></div>
+
+            <div class="section-label" style="margin-top:20px">Takvimlerim</div>
+            <div class="calendar-list" id="calendar-list" style="margin-top:10px; display:flex; flex-direction:column; gap:6px;">
+                <div style="font-size:12px; color:var(--text-muted); padding:4px 8px;">Yükleniyor...</div>
+            </div>
 
             <div class="section-label" style="margin-top:20px">Yaklaşan Etkinlikler</div>
             <div class="upcoming-list" id="upcoming-list"></div>
@@ -719,8 +725,14 @@
                 const accRes = await fetch('/accounts', fetchOpts);
                 if (!accRes.ok) throw new Error('Accounts fetch failed or unauthorized');
                 const accData = await accRes.json();
-                if (!accData.success) { render(); return; }
-                accounts = accData.data;
+                if (Array.isArray(accData)) {
+                    accounts = accData;
+                } else if (accData && accData.success && Array.isArray(accData.data)) {
+                    accounts = accData.data;
+                } else {
+                    render();
+                    return;
+                }
 
                 // Fetch calendars
                 calendars = [];
@@ -739,6 +751,26 @@
                 const sel = document.getElementById('calendarSelect');
                 if (sel) {
                     sel.innerHTML = calendars.map(c => `<option value="${c.id}" data-acc="${c.accountId}">${c.display_name} (${c.accountEmail})</option>`).join('');
+                }
+
+                // Populate calendar list in sidebar
+                const listEl = document.getElementById('calendar-list');
+                if (listEl) {
+                    if (calendars.length === 0) {
+                        listEl.innerHTML = `<div style="font-size:12px; color:var(--text-muted); padding:4px 8px;">Takvim bulunamadı.</div>`;
+                    } else {
+                        listEl.innerHTML = calendars.map(c => {
+                            const color = c.color || '#3b82f6';
+                            return `
+                                <div style="display:flex; align-items:center; gap:8px; font-size:13px; color:var(--text-secondary); padding:4px 8px; border-radius:6px; background:rgba(255,255,255,0.02)">
+                                    <div style="width:10px; height:10px; border-radius:50%; background:${color}; flex-shrink:0;"></div>
+                                    <span style="text-overflow:ellipsis; overflow:hidden; white-space:nowrap; flex:1;" title="${c.display_name} (${c.accountEmail})">
+                                        <strong>${c.display_name}</strong> <span style="font-size:10px; color:var(--text-muted)">(${c.accountEmail.split('@')[0]})</span>
+                                    </span>
+                                </div>
+                            `;
+                        }).join('');
+                    }
                 }
 
                 // Fetch events
@@ -997,10 +1029,44 @@
                 if (data.success) {
                     closeEventModal();
                     await loadData(); // reload
+                    // Automatically trigger sync to push the new event immediately in background
+                    fetch(`/calendar/accounts/${accountId}/caldav/sync`, {
+                        method: 'POST',
+                        headers: fetchOpts.headers
+                    }).catch(() => {});
                 } else {
                     alert('Hata: ' + data.error);
                 }
             } catch (e) { console.error(e); }
+        }
+
+        async function triggerCalDavSync() {
+            const btn = document.querySelector('.header-actions button[onclick="triggerCalDavSync()"]');
+            if (btn) {
+                btn.disabled = true;
+                btn.textContent = '🔄 Eşitleniyor...';
+            }
+            try {
+                let syncCount = 0;
+                for (const acc of accounts) {
+                    const res = await fetch(`/calendar/accounts/${acc.id}/caldav/sync`, {
+                        method: 'POST',
+                        headers: fetchOpts.headers
+                    });
+                    if (res.ok) syncCount++;
+                }
+                // Wait 1.5 seconds for background sync to start/do some work
+                await new Promise(resolve => setTimeout(resolve, 1500));
+                await loadData();
+                alert('Takvim eşzamanlama işlemi arka planda başlatıldı.');
+            } catch (e) {
+                console.error("Sync error:", e);
+            } finally {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.textContent = '🔄 Şimdi Eşitle';
+                }
+            }
         }
 
         function toggleTheme() {

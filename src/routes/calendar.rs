@@ -30,13 +30,45 @@ async fn list_calendars(
         .fetch_all(&pool)
         .await;
         
-    match rows {
-        Ok(cals) => Json(json!({ "success": true, "data": cals })).into_response(),
+    let mut cals = match rows {
+        Ok(c) => c,
         Err(e) => {
             error!("Fail list calendars: {}", e);
-            Json(json!({ "success": false, "error": e.to_string() })).into_response()
+            return Json(json!({ "success": false, "error": e.to_string() })).into_response();
+        }
+    };
+
+    if cals.is_empty() {
+        let default_id = format!("local_{}", account_id);
+        let now = Utc::now().to_rfc3339();
+        
+        let insert_res = sqlx::query(
+            "INSERT INTO calendars (id, account_id, url, display_name, color, description, created_at, updated_at) VALUES (?, ?, 'local', 'Kişisel Takvim', '#3b82f6', 'Varsayılan Yerel Takvim', ?, ?)"
+        )
+        .bind(&default_id)
+        .bind(&account_id)
+        .bind(&now)
+        .bind(&now)
+        .execute(&pool)
+        .await;
+
+        if insert_res.is_ok() {
+            cals.push(Calendar {
+                id: default_id,
+                account_id: account_id,
+                url: "local".to_string(),
+                display_name: Some("Kişisel Takvim".to_string()),
+                color: Some("#3b82f6".to_string()),
+                description: Some("Varsayılan Yerel Takvim".to_string()),
+                ctag: None,
+                sync_token: None,
+                created_at: now.clone(),
+                updated_at: now,
+            });
         }
     }
+
+    Json(json!({ "success": true, "data": cals })).into_response()
 }
 
 // GET /accounts/:id/calendars/:cal_id/events

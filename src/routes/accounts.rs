@@ -87,6 +87,8 @@ pub struct AccountResponse {
     pub enabled: bool,
     pub last_sync_ts: Option<i64>,
     pub color: Option<String>,
+    pub carddav_url: Option<String>,
+    pub caldav_url: Option<String>,
 }
 
 impl From<Account> for AccountResponse {
@@ -103,6 +105,8 @@ impl From<Account> for AccountResponse {
             enabled: acc.enabled,
             last_sync_ts: acc.last_sync_ts,
             color: acc.color,
+            carddav_url: acc.carddav_url,
+            caldav_url: acc.caldav_url,
         }
     }
 }
@@ -433,6 +437,8 @@ pub async fn patch_account(
     let new_append_policy = req.append_policy.as_ref().map(|s| s.to_lowercase());
     let new_sent_folder_hint = req.sent_folder_hint.or(existing.sent_folder_hint.clone());
     let new_color = req.color.or(existing.color.clone());
+    let new_carddav_url = req.carddav_url.or(existing.carddav_url.clone());
+    let new_caldav_url = req.caldav_url.or(existing.caldav_url.clone());
 
     // Credentials: if password changed re-encode; we keep email immutable here
     let new_creds_enc = if let Some(pass) = req.password.as_ref() {
@@ -455,8 +461,8 @@ pub async fn patch_account(
     .bind(&new_sent_folder_hint)
     .bind(&new_color)
     .bind(&new_creds_enc)
-    .bind(&existing.carddav_url)
-    .bind(&existing.caldav_url)
+    .bind(&new_carddav_url)
+    .bind(&new_caldav_url)
     .bind(&account_id)
     .execute(&pool)
     .await;

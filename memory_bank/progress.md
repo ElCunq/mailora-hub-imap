@@ -120,3 +120,13 @@ Kısa vadeli odak (Faz 1)
 - **UI:**
   - Giriş (`login.html`) ve Kayıt (`register.html`) sayfaları oluşturuldu.
   - Uygulama ana ekranına (`app.html`) oturum kontrolü eklendi; oturum yoksa yönlendiriliyor.
+
+## 2026-05-21 – v1.1.0 – Unified Inbox, Premium UI & Takvim Otomasyonu (Takvim Kararsız)
+- **Unified Inbox ve Arayüz Düzenlemeleri (Başarılı & Kararlı):**
+  - Tüm hesapların iletilerini tek bir çatı altında birleştiren "Tüm Hesaplar" görünümü (`app.js`, `mock.js`, `sidebar.js`) entegre edildi ve kararlı şekilde çalışmaktadır.
+  - İletilere hangi hesap orijinli olduklarını belirten özelleştirilmiş renkli rozetler (badges) `message-list.js` ile başarıyla eklendi.
+- **Premium add_account.html Entegrasyonu (Başarılı & Kararlı):**
+  - Eski `_old/add_account.html` arayüzü ve otonom keşif/manuel kurulum mantığı, premium karanlık tasarıma dönüştürülerek tam uyum sağlandı.
+- **Takvim Otomasyonu (Çalışmıyor / Kararsız):**
+  - CalDAV / Takvim kısmının otomatik olarak sunucuyla eşzamanlanması ve otonom senkronize olması kararsız çalışmakta / çalışmamaktadır; iyileştirilmesi ve debug edilmesi hedeflenmektedir.
+

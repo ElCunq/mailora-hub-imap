@@ -82,6 +82,10 @@ async fn main() -> Result<()> {
             tracing::info!("seed skipped: {e}");
         }
 
+        if let Err(e) = db::normalize_legacy_dates(&pool).await {
+            tracing::warn!("date normalization failed: {e}");
+        }
+
         // Create idle watcher manager
         let idle_manager = Arc::new(services::idle_watcher_service::IdleWatcherManager::new());
 
