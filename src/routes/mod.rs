@@ -28,6 +28,7 @@ pub mod settings;
 pub mod snooze;
 pub mod contacts;
 pub mod calendar;
+pub mod outbox;
 
 #[derive(Deserialize)]
 #[allow(non_snake_case)]
@@ -215,6 +216,10 @@ where
         .route("/sync/:account_id/backfill-attachments", post(sync::backfill_attachments_endpoint))
         .route("/snooze/:account_id/:folder/:uid", post(snooze::snooze_message))
         .route("/unsnooze/:account_id/:folder/:uid", post(snooze::unsnooze_message))
+        // ─── Outbox (Reliable Sending Queue) ─────────────────────────────────
+        .route("/outbox", get(outbox::list_outbox))
+        .route("/outbox/:id", get(outbox::get_outbox).delete(outbox::delete_outbox))
+        .route("/outbox/:id/retry", post(outbox::retry_outbox))
         // ─── Contacts (PIM v1.6) ─────────────────────────────────────────────
         .route("/contacts", get(contacts::list_contacts).post(contacts::create_contact))
         .route("/contacts/suggest", get(contacts::suggest_contacts))

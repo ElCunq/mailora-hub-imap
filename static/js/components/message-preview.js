@@ -18,13 +18,25 @@ async function render() {
     c.innerHTML = `<div class="empty-state"><div class="spinner"></div><div>Yükleniyor...</div></div>`;
 
     try {
-        const bodyData = await dataSource.getMessage(msg.accountId, msg.uid, msg.folder);
-        const attData = await dataSource.getAttachments(msg.accountId, msg.uid, msg.folder);
+        let bodyData, attData;
+        if (msg.isOutbox) {
+            bodyData = {
+                subject: msg.subject || '(Konu Yok)',
+                from: 'Giden Kutusu Kuyruğu',
+                html_body: '',
+                plain_text: msg.body || '',
+                date: msg.date || '',
+            };
+            attData = [];
+        } else {
+            bodyData = await dataSource.getMessage(msg.accountId, msg.uid, msg.folder);
+            attData = await dataSource.getAttachments(msg.accountId, msg.uid, msg.folder);
 
-        // Okundu olarak işaretle
-        if (!msg.read) {
-            store.dispatch({ type: ACTION.MARK_READ, payload: msg.id });
-            try { await dataSource.updateFlags(msg.accountId, msg.folder, msg.uid, { seen: true }); } catch (e) { }
+            // Okundu olarak işaretle
+            if (!msg.read) {
+                store.dispatch({ type: ACTION.MARK_READ, payload: msg.id });
+                try { await dataSource.updateFlags(msg.accountId, msg.folder, msg.uid, { seen: true }); } catch (e) { }
+            }
         }
 
         const readMin = Math.max(1, Math.ceil((bodyData.plain_text?.length || 0) / 1000));
@@ -58,6 +70,37 @@ async function render() {
             </div>`;
         }
 
+        let outboxStatusHtml = '';
+        if (msg.isOutbox) {
+            const statusColor = {
+                queued: '#f59e0b',
+                processing: '#3b82f6',
+                sent: '#10b981',
+                failed: '#ef4444'
+            }[msg.outboxStatus] || 'var(--text-muted)';
+
+            const statusLabel = {
+                queued: '⏳ Kuyrukta Bekliyor',
+                processing: '⚙️ Gönderiliyor...',
+                sent: '✅ Gönderildi',
+                failed: '❌ Gönderim Başarısız Oldu'
+            }[msg.outboxStatus] || msg.outboxStatus;
+
+            outboxStatusHtml = `
+                <div class="outbox-status-card" style="padding:16px; background:var(--bg-secondary); border:1px solid var(--border); border-radius:8px; margin-bottom:20px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                        <span style="font-weight:600; color:${statusColor}; font-size:14px;">${statusLabel}</span>
+                        <span style="font-size:12px; color:var(--text-muted)">Deneme Sayısı: ${msg.retries || 0}/3</span>
+                    </div>
+                    ${msg.outboxError ? `<div style="color:#ef4444; font-size:12px; margin-bottom:12px; padding:10px; background:rgba(239,68,68,0.08); border:1px solid rgba(239,68,68,0.2); border-radius:6px; line-height: 1.4;"><strong>Hata Detayı:</strong> ${msg.outboxError}</div>` : ''}
+                    <div style="display:flex; gap:10px;">
+                        ${msg.outboxStatus === 'failed' ? `<button class="tool-btn" id="btn-outbox-retry" style="padding:6px 12px; font-size:12px; background:var(--gradient-primary); color:white; border:none; border-radius:4px; cursor:pointer;">🔄 Tekrar Dene</button>` : ''}
+                        <button class="tool-btn" id="btn-outbox-delete" style="padding:6px 12px; font-size:12px; background:rgba(239,68,68,0.2); color:#ef4444; border:1px solid rgba(239,68,68,0.3); border-radius:4px; cursor:pointer;">🗑️ Gönderimi İptal Et</button>
+                    </div>
+                </div>
+            `;
+        }
+
         c.innerHTML = `
             <div class="preview-header">
                 <div class="preview-from">
@@ -71,6 +114,7 @@ async function render() {
                     ${msg.labels?.map(l => '<span class="label-badge">' + l + '</span>').join('') || ''}
                 </div>
             </div>
+            ${msg.isOutbox ? '' : `
             <div class="preview-toolbar">
                 <button class="tool-btn" id="btn-reply">↩️ Yanıtla</button>
                 <button class="tool-btn" id="btn-forward">➡️ İlet</button>
@@ -79,8 +123,10 @@ async function render() {
                 <button class="tool-btn" id="btn-translate">🌍 Çevir</button>
                 ${msg.isNewsletter ? '<button class="tool-btn newsletter-btn" id="btn-unsub">📰 Abonelikten Çık</button>' : ''}
             </div>
+            `}
             <div id="ai-summary" class="ai-box" style="display:none"></div>
             <div id="translate-box" class="translate-box" style="display:none"></div>
+            ${outboxStatusHtml}
             ${bodyHtml}
             ${attHtml}
         `;
@@ -109,30 +155,74 @@ async function render() {
         c.innerHTML = `<div class="empty-state"><div style="color:var(--accent-red)">Hata: ${err.message}</div></div>`;
         return;
     }
-    // Quick reply - Dynamic from AI if available
-    c.insertAdjacentHTML('beforeend', `<div class="quick-replies" id="dynamic-replies-container" style="margin-top:12px">
-        <div style="font-size:11px;color:var(--text-muted);display:flex;align-items:center;gap:6px"><div class="spinner" style="width:10px;height:10px;border-width:2px"></div> ✨ Akıllı yanıt üretiliyor...</div>
-    </div>`);
-    // Feature bindings
-    el('btn-ner')?.addEventListener('click', () => showNER(msg));
-    el('btn-ai')?.addEventListener('click', () => showAI(msg));
-    el('btn-translate')?.addEventListener('click', () => showTranslate(msg));
-    el('btn-unsub')?.addEventListener('click', () => unsubNewsletter(msg));
-    el('btn-reply')?.addEventListener('click', () => { store.dispatch({ type: ACTION.TOGGLE_COMPOSE }); });
 
-    // Fetch Generative MT5 Smart Replies
-    fetch(`${AI_API}/smart-reply`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: msg.raw_body?.replace(/<[^>]*>/g, '') || msg.preview || '' })
-    }).then(res => res.json()).then(data => {
-        const qrContainer = el('dynamic-replies-container');
-        if (qrContainer && data.replies) {
-            qrContainer.innerHTML = `<span style="font-size:11px;color:var(--text-muted);margin-right:8px">✨ MT5 Yanıtları:</span>` +
-                data.replies.map(r => `<button class="qr-btn" data-qr="${r}">${r}</button>`).join('');
-            qrContainer.querySelectorAll('.qr-btn').forEach(b => b.onclick = () => alert('Gönderildi: ' + b.dataset.qr));
-        }
-    }).catch(e => console.error("Smart reply failed", e));
+    if (msg.isOutbox) {
+        // Attach outbox action listeners
+        el('btn-outbox-retry')?.addEventListener('click', async () => {
+            try {
+                const r = await fetch(`/outbox/${msg.uid}/retry`, { method: 'POST' });
+                const data = await r.json();
+                if (data.ok) {
+                    const accId = store.getState().selectedAccountId;
+                    const folder = store.getState().selectedFolder;
+                    const msgs = accId === 'unified' 
+                        ? await dataSource.getUnifiedInbox(folder)
+                        : await dataSource.getMessages(accId, folder);
+                    store.dispatch({ type: ACTION.SET_MESSAGES, payload: msgs });
+                } else {
+                    alert('Hata: ' + data.error);
+                }
+            } catch (e) {
+                alert('İstek gönderilemedi: ' + e.message);
+            }
+        });
+
+        el('btn-outbox-delete')?.addEventListener('click', async () => {
+            if (!confirm('Bu e-posta gönderimini iptal etmek ve kuyruktan silmek istiyor musunuz?')) return;
+            try {
+                const r = await fetch(`/outbox/${msg.uid}`, { method: 'DELETE' });
+                const data = await r.json();
+                if (data.ok) {
+                    const accId = store.getState().selectedAccountId;
+                    const folder = store.getState().selectedFolder;
+                    const msgs = accId === 'unified' 
+                        ? await dataSource.getUnifiedInbox(folder)
+                        : await dataSource.getMessages(accId, folder);
+                    store.dispatch({ type: ACTION.SET_MESSAGES, payload: msgs });
+                    store.dispatch({ type: ACTION.SELECT_MESSAGE, payload: null });
+                } else {
+                    alert('Hata: ' + data.error);
+                }
+            } catch (e) {
+                alert('İstek gönderilemedi: ' + e.message);
+            }
+        });
+    } else {
+        // Quick reply - Dynamic from AI if available
+        c.insertAdjacentHTML('beforeend', `<div class="quick-replies" id="dynamic-replies-container" style="margin-top:12px">
+            <div style="font-size:11px;color:var(--text-muted);display:flex;align-items:center;gap:6px"><div class="spinner" style="width:10px;height:10px;border-width:2px"></div> ✨ Akıllı yanıt üretiliyor...</div>
+        </div>`);
+        // Feature bindings
+        el('btn-ner')?.addEventListener('click', () => showNER(msg));
+        el('btn-ai')?.addEventListener('click', () => showAI(msg));
+        el('btn-translate')?.addEventListener('click', () => showTranslate(msg));
+        el('btn-unsub')?.addEventListener('click', () => unsubNewsletter(msg));
+        el('btn-reply')?.addEventListener('click', () => { store.dispatch({ type: ACTION.TOGGLE_COMPOSE }); });
+
+        // Fetch Generative MT5 Smart Replies
+        fetch(`${AI_API}/smart-reply`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: msg.raw_body?.replace(/<[^>]*>/g, '') || msg.preview || '' })
+        }).then(res => res.json()).then(data => {
+            const qrContainer = el('dynamic-replies-container');
+            if (qrContainer && data.replies) {
+                qrContainer.innerHTML = `<span style="font-size:11px;color:var(--text-muted);margin-right:8px">✨ MT5 Yanıtları:</span>` +
+                    data.replies.map(r => `<button class="qr-btn" data-qr="${r}">${r}</button>`).join('');
+                qrContainer.querySelectorAll('.qr-btn').forEach(b => b.onclick = () => alert('Gönderildi: ' + b.dataset.qr));
+            }
+        }).catch(e => console.error("Smart reply failed", e));
+    }
 }
 const AI_API = 'http://localhost:5000';
 

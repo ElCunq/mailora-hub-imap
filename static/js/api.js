@@ -121,6 +121,30 @@ export async function getFolders(accountId) {
 // ─── Messages ────────────────────────────────────────────────────────
 export async function getMessages(accountId, folder) {
     if (!accountId) return [];
+    if (folder === 'Outbox') {
+        const r = await apiFetch(`/outbox?account_id=${encodeURIComponent(accountId)}`);
+        const data = await r.json();
+        return (data.messages || []).map(m => ({
+            id: `outbox_${m.id}`,
+            uid: m.id,
+            accountId: m.account_id,
+            from: fixText('Kuyruktaki E-posta'),
+            email: m.to_addr,
+            subject: fixText(m.subject || '(Konu Yok)'),
+            preview: `[${m.status.toUpperCase()}] Alıcı: ${m.to_addr}. ${m.last_error ? 'Hata: ' + m.last_error : ''}`,
+            date: new Date(m.created_at * 1000).toISOString(),
+            folder: 'Outbox',
+            read: true,
+            hasAttachment: false,
+            flags: '',
+            important: false,
+            isOutbox: true,
+            outboxStatus: m.status,
+            outboxError: m.last_error,
+            toAddr: m.to_addr,
+            body: m.body
+        }));
+    }
     const resolvedFolder = await resolveFolderName(accountId, folder || 'Inbox');
     const r = await apiFetch(`/messages/${encodeURIComponent(accountId)}/${encodeURIComponent(resolvedFolder)}`);
     const data = await r.json();
@@ -144,6 +168,30 @@ export async function getMessages(accountId, folder) {
 // ─── Unified Inbox ───────────────────────────────────────────────────
 export async function getUnifiedInbox(folder, limit) {
     const f = folder || 'INBOX';
+    if (f === 'Outbox') {
+        const r = await apiFetch(`/outbox`);
+        const data = await r.json();
+        return (data.messages || []).map(m => ({
+            id: `outbox_${m.id}`,
+            uid: m.id,
+            accountId: m.account_id,
+            from: fixText('Kuyruktaki E-posta'),
+            email: m.to_addr,
+            subject: fixText(m.subject || '(Konu Yok)'),
+            preview: `[${m.status.toUpperCase()}] Alıcı: ${m.to_addr}. ${m.last_error ? 'Hata: ' + m.last_error : ''}`,
+            date: new Date(m.created_at * 1000).toISOString(),
+            folder: 'Outbox',
+            read: true,
+            hasAttachment: false,
+            flags: '',
+            important: false,
+            isOutbox: true,
+            outboxStatus: m.status,
+            outboxError: m.last_error,
+            toAddr: m.to_addr,
+            body: m.body
+        }));
+    }
     const l = limit || 200;
     const r = await apiFetch(`/unified/inbox?folder=${encodeURIComponent(f)}&limit=${l}`);
     const data = await r.json();
@@ -166,6 +214,17 @@ export async function getUnifiedInbox(folder, limit) {
 
 // ─── Single Message Body ─────────────────────────────────────────────
 export async function getMessage(accountId, uid, folder) {
+    if (folder === 'Outbox') {
+        const r = await apiFetch(`/outbox/${uid}`);
+        const body = await r.json();
+        return {
+            subject: fixText(body.subject || ''),
+            from: fixText('Giden Kutusu Kuyruğu'),
+            html_body: '',
+            plain_text: body.body || '',
+            date: new Date(body.created_at * 1000).toISOString(),
+        };
+    }
     const resolvedFolder = await resolveFolderName(accountId, folder || 'Inbox');
     const r = await apiFetch(`/test/body/${encodeURIComponent(accountId)}/${uid}?folder=${encodeURIComponent(resolvedFolder)}`);
     const body = await r.json();
@@ -180,6 +239,9 @@ export async function getMessage(accountId, uid, folder) {
 
 // ─── Attachments ─────────────────────────────────────────────────────
 export async function getAttachments(accountId, uid, folder) {
+    if (folder === 'Outbox') {
+        return [];
+    }
     const resolvedFolder = await resolveFolderName(accountId, folder || 'Inbox');
     const r = await apiFetch(`/attachments?accountId=${encodeURIComponent(accountId)}&uid=${encodeURIComponent(uid)}&folder=${encodeURIComponent(resolvedFolder)}`);
     return r.json();

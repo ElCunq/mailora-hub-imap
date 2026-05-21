@@ -32,7 +32,7 @@ function renderFolders() {
     const s = store.getState();
     const c = el('folder-list');
     if (!c) return;
-    const icons = { Inbox: '📥', Sent: '📤', Drafts: '📝', Spam: '⚠️', Trash: '🗑️' };
+    const icons = { Inbox: '📥', Sent: '📤', Drafts: '📝', Spam: '⚠️', Trash: '🗑️', Outbox: '⏳' };
     c.innerHTML = s.folders.map(f => `
         <div class="folder-item ${s.selectedFolder === f ? 'active' : ''}" data-folder="${f}">
             <span>${icons[f] || '📁'}</span><span>${f}</span>

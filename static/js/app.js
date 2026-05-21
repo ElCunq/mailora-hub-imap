@@ -43,11 +43,14 @@ store.subscribe('selectedAccountId', async (accId) => {
     if (!accId || accId === lastAcc) return;
     lastAcc = accId;
     if (accId === 'unified') {
-        store.dispatch({ type: ACTION.SET_FOLDERS, payload: ['INBOX', 'Sent', 'Drafts', 'Trash', 'Spam'] });
+        store.dispatch({ type: ACTION.SET_FOLDERS, payload: ['INBOX', 'Sent', 'Drafts', 'Trash', 'Spam', 'Outbox'] });
         const msgs = await dataSource.getUnifiedInbox(store.getState().selectedFolder);
         store.dispatch({ type: ACTION.SET_MESSAGES, payload: msgs });
     } else {
         const folders = await dataSource.getFolders(accId);
+        if (!folders.includes('Outbox')) {
+            folders.push('Outbox');
+        }
         store.dispatch({ type: ACTION.SET_FOLDERS, payload: folders });
         const msgs = await dataSource.getMessages(accId, store.getState().selectedFolder);
         store.dispatch({ type: ACTION.SET_MESSAGES, payload: msgs });
