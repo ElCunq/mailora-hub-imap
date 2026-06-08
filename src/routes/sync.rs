@@ -176,7 +176,7 @@ pub async fn search_messages(
     Query(qs): Query<SearchQs>,
 ) -> Result<Json<Value>, (StatusCode, String)> {
     #[derive(sqlx::FromRow, serde::Serialize)]
-    struct Row { account_id: String, folder: String, uid: i64, subject: Option<String>, from_addr: Option<String>, date: Option<String>, flags: Option<String>, has_attachments: bool, size: Option<i64> }
+    struct Row { account_id: String, folder: String, uid: i64, subject: Option<String>, from_addr: Option<String>, date: Option<String>, flags: Option<String>, has_attachments: bool, size: Option<i64>, preview: Option<String> }
 
     let mut sql = String::new();
     let mut args: Vec<String> = Vec::new(); // using String params for everything for simplicity
@@ -186,7 +186,7 @@ pub async fn search_messages(
 
     if has_query {
         // FTS Path
-        sql.push_str("SELECT m.account_id, m.folder, m.uid, m.subject, m.from_addr, m.date, m.flags, m.has_attachments, m.size FROM messages m JOIN messages_fts fts ON m.id = fts.rowid ");
+        sql.push_str("SELECT m.account_id, m.folder, m.uid, m.subject, m.from_addr, m.date, m.flags, m.has_attachments, m.size, snippet(messages_fts, -1, '<b>', '</b>', '...', 64) AS preview FROM messages m JOIN messages_fts fts ON m.id = fts.rowid ");
         // Security Join if not Admin
         if auth_user.role != "Admin" {
             sql.push_str(" JOIN user_accounts ua ON m.account_id = ua.account_id ");
@@ -195,13 +195,13 @@ pub async fn search_messages(
         // Sanitize/Prepare FTS query. For now, wrap in quotes to treat as primitive search or use raw.
         // FTS5 standard syntax: space is AND.
         let raw_q = qs.q.as_ref().unwrap();
-        // Simple sanitization: remove " to prevent syntax breaking for now? 
-        // Or just let SQLite handle it? Let's wrap matches in double quotes for phrase or strict token matching logic?
-        // Let's pass raw_q string.
-        args.push(raw_q.clone());
+        // Simple sanitization: remove " to prevent syntax breaking for now
+        let safe_q = raw_q.replace("\"", "");
+        // Wrap in double quotes to do phrase search and avoid FTS syntax errors
+        args.push(format!("\"{}\"", safe_q));
     } else {
         // Standard Path
-        sql.push_str("SELECT m.account_id, m.folder, m.uid, m.subject, m.from_addr, m.date, m.flags, m.has_attachments, m.size FROM messages m ");
+        sql.push_str("SELECT m.account_id, m.folder, m.uid, m.subject, m.from_addr, m.date, m.flags, m.has_attachments, m.size, NULL AS preview FROM messages m ");
         if auth_user.role != "Admin" {
             sql.push_str(" JOIN user_accounts ua ON m.account_id = ua.account_id ");
         }

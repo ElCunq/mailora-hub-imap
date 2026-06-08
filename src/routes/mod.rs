@@ -132,6 +132,7 @@ struct SendResp {
 }
 
 async fn send_action(
+    auth: Option<crate::rbac::AuthUser>,
     State(pool): State<sqlx::SqlitePool>,
     AxumJson(req): AxumJson<SendReq>
 ) -> impl IntoResponse {
@@ -158,7 +159,17 @@ async fn send_action(
         &req.subject,
         &req.body
     ).await {
-        Ok(_) => AxumJson(serde_json::json!({"ok": true, "message": "Email queued"})).into_response(),
+        Ok(_) => {
+            let user_id = auth.map(|a| a.id);
+            crate::rbac::log_event(
+                &pool,
+                user_id,
+                Some(&req.accountId),
+                "SEND_QUEUED",
+                &format!("Queued email to: {}", req.to)
+            ).await;
+            AxumJson(serde_json::json!({"ok": true, "message": "Email queued"})).into_response()
+        },
         Err(e) => AxumJson(serde_json::json!({"ok": false, "error": e})).into_response(),
     }
 }

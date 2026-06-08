@@ -191,11 +191,11 @@ pub async fn sync_folder_messages_with_session(
                 .collect::<Vec<_>>()
                 .join(",");
 
-            // Fetch headers only (BODY.PEEK[HEADER]) to optimize speed and reduce bandwidth by 99.9%
+            // Fetch headers (RFC822.HEADER) to reliably populate fetch.header() without marking \Seen
             let messages = with_timeout(
                 session.uid_fetch(
                     &uid_set,
-                    "(UID FLAGS INTERNALDATE RFC822.SIZE BODY.PEEK[HEADER])",
+                    "(UID FLAGS INTERNALDATE RFC822.SIZE RFC822.HEADER)",
                 ),
                 "IMAP UID FETCH",
             )
@@ -297,7 +297,9 @@ async fn save_message_to_db(
     // We requested `BODY.PEEK[]` (full body). So we can just parse that!
     // The previous code requested `ENVELOPE` AND `BODY.PEEK[]`.
     
-    let full_body = fetch.body().unwrap_or(b"");
+    let header_bytes = fetch.header().unwrap_or(b"");
+    let body_bytes = fetch.body().unwrap_or(b"");
+    let full_body = if !header_bytes.is_empty() { header_bytes } else { body_bytes };
     
     let mut subject = String::new();
     let mut from = String::new();

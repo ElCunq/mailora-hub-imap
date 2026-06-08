@@ -9,6 +9,26 @@ use crate::models::user::User;
 use crate::rbac::AdminUser;
 use serde::{Deserialize, Serialize};
 
+#[derive(Serialize)]
+pub struct EventLog {
+    pub id: i64,
+    pub user_id: Option<i64>,
+    pub account_id: Option<String>,
+    pub action: String,
+    pub details: Option<String>,
+    pub ip_address: Option<String>,
+    pub created_at: String,
+}
+
+#[derive(Serialize)]
+pub struct AdminStats {
+    pub total_emails: i64,
+    pub total_users: i64,
+    pub spam_blocked: i64,
+    pub error_count: i64,
+    pub recent_logs: Vec<EventLog>,
+}
+
 #[derive(Deserialize)]
 pub struct UpdateRoleReq {
     pub role: String,
@@ -98,9 +118,64 @@ async fn list_user_accounts(
         }
 }
 
+async fn delete_user(
+    _admin: AdminUser,
+    State(pool): State<sqlx::SqlitePool>,
+    Path(user_id): Path<i64>,
+) -> impl IntoResponse {
+    // Also delete from user_accounts to maintain consistency
+    let mut tx = match pool.begin().await {
+        Ok(tx) => tx,
+        Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": format!("Tx begin failed: {}", e)}))).into_response(),
+    };
+
+    let _ = sqlx::query("DELETE FROM user_accounts WHERE user_id = ?")
+        .bind(user_id)
+        .execute(&mut *tx)
+        .await;
+
+    match sqlx::query("DELETE FROM users WHERE id = ?")
+        .bind(user_id)
+        .execute(&mut *tx)
+        .await {
+            Ok(_) => {
+                let _ = tx.commit().await;
+                StatusCode::OK.into_response()
+            },
+            Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": e.to_string()}))).into_response(),
+        }
+}
+
+async fn get_admin_stats(
+    _admin: AdminUser,
+    State(pool): State<sqlx::SqlitePool>,
+) -> impl IntoResponse {
+    let total_emails: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM messages").fetch_one(&pool).await.unwrap_or(0);
+    let total_users: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM users").fetch_one(&pool).await.unwrap_or(0);
+    let spam_blocked: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM messages WHERE folder = 'Spam'").fetch_one(&pool).await.unwrap_or(0);
+    let error_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM event_logs WHERE action LIKE '%ERROR%' OR details LIKE '%error%'").fetch_one(&pool).await.unwrap_or(0);
+
+    let recent_logs: Vec<EventLog> = sqlx::query_as!(
+        EventLog,
+        "SELECT id, user_id, account_id, action, details, ip_address, CAST(created_at AS TEXT) as created_at FROM event_logs ORDER BY created_at DESC LIMIT 50"
+    ).fetch_all(&pool).await.unwrap_or_default();
+
+    let stats = AdminStats {
+        total_emails,
+        total_users,
+        spam_blocked,
+        error_count,
+        recent_logs,
+    };
+
+    (StatusCode::OK, Json(stats)).into_response()
+}
+
 pub fn router() -> Router<sqlx::SqlitePool> {
     Router::new()
+        .route("/admin/stats", get(get_admin_stats))
         .route("/admin/users", get(list_users))
+        .route("/admin/users/:user_id", delete(delete_user))
         .route("/admin/users/:user_id/role", patch(update_user_role))
         .route("/admin/users/:user_id/accounts", get(list_user_accounts).post(assign_account))
         .route("/admin/users/:user_id/accounts/:account_id", delete(unassign_account))

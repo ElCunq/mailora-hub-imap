@@ -36,21 +36,30 @@ pub async fn unified_inbox(
 ) -> Result<Json<UnifiedInboxResponse>, StatusCode> {
     let limit = q.limit.unwrap_or(100).min(500) as i64;
     let offset = q.offset.unwrap_or(0) as i64;
-    let folder = q.folder.unwrap_or_else(|| "INBOX".to_string());
+    let folder_orig = q.folder.unwrap_or_else(|| "INBOX".to_string());
+    let folder_str = folder_orig.to_lowercase();
+    let folder_cond = match folder_str.as_str() {
+        "inbox" => "LOWER(m.folder) = 'inbox'".to_string(),
+        "sent" => "(LOWER(m.folder) LIKE '%sent%' OR LOWER(m.folder) LIKE '%gönderilmiş%' OR LOWER(m.folder) LIKE '%g&apy%')".to_string(),
+        "drafts" => "(LOWER(m.folder) LIKE '%draft%' OR LOWER(m.folder) LIKE '%taslak%')".to_string(),
+        "spam" => "(LOWER(m.folder) LIKE '%spam%' OR LOWER(m.folder) LIKE '%junk%')".to_string(),
+        "trash" => "(LOWER(m.folder) LIKE '%trash%' OR LOWER(m.folder) LIKE '%bin%' OR LOWER(m.folder) LIKE '%çöp%' OR LOWER(m.folder) LIKE '%&amc%')".to_string(),
+        _ => format!("m.folder = '{}'", folder_orig.replace("'", "''")),
+    };
+
     let unread_filter = if q.unread_only.unwrap_or(false) { "AND (m.flags NOT LIKE '%\\Seen%')" } else { "" };
     
     // Admin sees all, Member sees only assigned
-    let snooze_filter = "AND (snoozed_until IS NULL OR snoozed_until <= datetime('now'))";
+    let snooze_filter = "AND (m.snoozed_until IS NULL OR m.snoozed_until <= datetime('now'))";
 
     let messages = if auth_user.role == "Admin" {
-        let unread_filter_adm = if q.unread_only.unwrap_or(false) { "AND (flags NOT LIKE '%\\Seen%')" } else { "" };
+        let unread_filter_adm = if q.unread_only.unwrap_or(false) { "AND (m.flags NOT LIKE '%\\Seen%')" } else { "" };
         let sql = format!(
-            "SELECT account_id, folder, uid, message_id, subject, from_addr, to_addr, date, flags, size \
-             FROM messages WHERE folder = ? {} {} ORDER BY date DESC LIMIT ? OFFSET ?",
-            unread_filter_adm, snooze_filter
+            "SELECT m.account_id, m.folder, m.uid, m.message_id, m.subject, m.from_addr, m.to_addr, m.date, m.flags, m.size \
+             FROM messages m WHERE {} {} {} ORDER BY m.date DESC LIMIT ? OFFSET ?",
+            folder_cond, unread_filter_adm, snooze_filter
         );
         sqlx::query_as::<_, UnifiedMessage>(&sql)
-            .bind(folder)
             .bind(limit)
             .bind(offset)
             .fetch_all(&pool)
@@ -60,11 +69,10 @@ pub async fn unified_inbox(
             "SELECT m.account_id, m.folder, m.uid, m.message_id, m.subject, m.from_addr, m.to_addr, m.date, m.flags, m.size \
              FROM messages m \
              JOIN user_accounts ua ON m.account_id = ua.account_id \
-             WHERE m.folder = ? AND ua.user_id = ? {} {} ORDER BY m.date DESC LIMIT ? OFFSET ?",
-            unread_filter, snooze_filter
+             WHERE {} AND ua.user_id = ? {} {} ORDER BY m.date DESC LIMIT ? OFFSET ?",
+            folder_cond, unread_filter, snooze_filter
         );
         sqlx::query_as::<_, UnifiedMessage>(&sql)
-            .bind(folder)
             .bind(auth_user.id)
             .bind(limit)
             .bind(offset)

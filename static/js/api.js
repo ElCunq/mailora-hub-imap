@@ -296,7 +296,7 @@ export async function searchMessages(query, opts = {}) {
         from: fixText(m.from_addr || ''),
         email: m.from_addr || '',
         subject: fixText(m.subject || ''),
-        preview: fixText(m.subject || ''),
+        preview: m.preview || fixText(m.subject || ''),
         date: m.date || new Date().toISOString(),
         read: (m.flags || '').includes('\\Seen'),
         hasAttachment: !!m.has_attachments,

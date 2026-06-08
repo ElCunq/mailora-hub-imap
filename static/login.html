@@ -132,7 +132,7 @@
     </div>
     <script>
         // Already logged in?
-        if (localStorage.getItem('auth_token')) { window.location.href = '/'; }
+        if (localStorage.getItem('auth_token')) { window.location.href = '/static/index.html'; }
 
         document.getElementById('loginForm').addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -152,7 +152,7 @@
                     localStorage.setItem('auth_token', data.token);
                     localStorage.setItem('auth_user', data.username);
                     localStorage.setItem('auth_role', data.role);
-                    window.location.href = '/';
+                    window.location.href = '/static/index.html';
                 } else {
                     err.textContent = data.error || 'Giriş başarısız';
                 }

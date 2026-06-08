@@ -56,11 +56,11 @@
                         title="Uygulamalar">▦</button>
                     <!-- Apps Dropdown -->
                     <div id="app-launcher" class="apps-dropdown">
-                        <a href="index.html" class="app-icon">
+                        <a href="/static/index.html" class="app-icon">
                             <span class="app-icon-img">✉️</span>
                             <span class="app-icon-label">E-posta</span>
                         </a>
-                        <a href="calendar.html" class="app-icon">
+                        <a href="/static/calendar.html" class="app-icon">
                             <span class="app-icon-img">📅</span>
                             <span class="app-icon-label">Takvim</span>
                         </a>
@@ -68,7 +68,7 @@
                             <span class="app-icon-img">📊</span>
                             <span class="app-icon-label">Tablo</span>
                         </a>
-                        <a href="admin.html" class="app-icon">
+                        <a href="/static/admin.html" class="app-icon">
                             <span class="app-icon-img">🛡️</span>
                             <span class="app-icon-label">Admin</span>
                         </a>
@@ -138,6 +138,7 @@
                 <button class="modal-close" onclick="mailora.closeCompose()">✕</button>
             </div>
             <div class="modal-body">
+                <select id="compose-from" class="compose-input" style="background:var(--bg-primary);"></select>
                 <input type="text" id="compose-to" class="compose-input" placeholder="Kime">
                 <input type="text" id="compose-subject" class="compose-input" placeholder="Konu">
                 <textarea id="compose-body" class="compose-textarea" placeholder="Mesajınız..."></textarea>

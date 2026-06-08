@@ -4,7 +4,7 @@ import { dataSource } from './data-source.js';
 import { mountSidebar } from './components/sidebar.js';
 import { mountMessageList } from './components/message-list.js';
 import { mountPreview } from './components/message-preview.js';
-import { mountCompose, handleFileInput, sendEmail, closeCompose } from './components/compose-modal.js';
+import { mountCompose, handleFileInput, sendEmail, closeCompose } from './components/compose-modal.js?v=2';
 import { mountAnalytics } from './components/analytics.js';
 import { toggleFocus } from './features/focus.js';
 
@@ -93,7 +93,11 @@ async function handleSync() {
 init();
 
 // Global event bindings
+let searchTimeout;
 window.mailora = {
+    logout: () => { localStorage.removeItem('auth_token'); window.location.href = '/static/login.html'; },
+    selectFolder: (f) => store.dispatch({ type: ACTION.SELECT_FOLDER, payload: f }),
+    selectAccount: (id) => store.dispatch({ type: ACTION.SELECT_ACCOUNT, payload: id }),
     compose: () => store.dispatch({ type: ACTION.TOGGLE_COMPOSE }),
     closeCompose,
     sendEmail,
@@ -101,7 +105,23 @@ window.mailora = {
     toggleAnalytics: () => store.dispatch({ type: ACTION.TOGGLE_ANALYTICS }),
     toggleTheme: () => store.dispatch({ type: ACTION.TOGGLE_THEME }),
     toggleFocus,
-    search: (q) => store.dispatch({ type: ACTION.SET_SEARCH, payload: q }),
+    search: (q) => {
+        store.dispatch({ type: ACTION.SET_SEARCH, payload: q });
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(async () => {
+            if (q.trim().length > 0) {
+                try {
+                    const s = store.getState();
+                    const results = await api.searchMessages(q.trim(), { accountId: s.selectedAccountId, folder: s.selectedFolder });
+                    store.dispatch({ type: ACTION.SET_SEARCH_RESULTS, payload: results });
+                } catch (e) {
+                    console.error('Search failed:', e);
+                }
+            } else {
+                store.dispatch({ type: ACTION.SET_SEARCH_RESULTS, payload: null });
+            }
+        }, 300);
+    },
     sync: handleSync,
 };
 

@@ -210,7 +210,7 @@
         </form>
 
         <div class="login-link" style="margin-top: 24px; border-top: 1px solid var(--border); padding-top: 16px;">
-            <a href="/index.html">&larr; Uygulamaya Dön</a>
+            <a href="/static/index.html">&larr; Uygulamaya Dön</a>
         </div>
     </div>
 
@@ -319,7 +319,7 @@
                     status.textContent = "✅ Hesap başarıyla eklendi! Gelen kutusuna dönülüyor...";
                     status.style.color = "var(--accent-green)";
                     setTimeout(() => {
-                        window.location.href = '/index.html';
+                        window.location.href = '/static/index.html';
                     }, 1500);
                 } else {
                     throw new Error(j.error || j.message || "Bağlantı esnasında hata oluştu.");

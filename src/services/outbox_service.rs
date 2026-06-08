@@ -134,6 +134,14 @@ async fn send_via_smtp(account: &Account, to: &str, subject: &str, body: &str) -
         .subject(subject)
         .body(body.to_string())?;
 
-    mailer.send(email).await?;
-    Ok(())
+    let mailer_result = tokio::time::timeout(std::time::Duration::from_secs(15), mailer.send(email)).await;
+    match mailer_result {
+        Ok(result) => {
+            result?;
+            Ok(())
+        }
+        Err(_) => {
+            Err(anyhow::anyhow!("SMTP connection timed out after 15 seconds"))
+        }
+    }
 }

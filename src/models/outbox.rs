@@ -10,6 +10,6 @@ pub struct OutboxEmail {
     pub status: String,
     pub retries: i32,
     pub last_error: Option<String>,
-    pub created_at: i64, // using i64 for timestamp (strftime %s)
-    pub updated_at: i64,
+    pub created_at: String,
+    pub updated_at: String,
 }
