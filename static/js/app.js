@@ -39,35 +39,47 @@ async function init() {
 // Watch store changes to reload data
 let lastAcc = null;
 let lastFold = null;
+let fetchGeneration = 0;
+
 store.subscribe('selectedAccountId', async (accId) => {
     if (!accId || accId === lastAcc) return;
     lastAcc = accId;
+    
+    const currentGen = ++fetchGeneration;
+    
+    // Always reset to INBOX when switching accounts
+    store.dispatch({ type: ACTION.SELECT_FOLDER, payload: 'INBOX' });
+    lastFold = 'INBOX'; 
+
     if (accId === 'unified') {
         store.dispatch({ type: ACTION.SET_FOLDERS, payload: ['INBOX', 'Sent', 'Drafts', 'Trash', 'Spam', 'Outbox'] });
-        const msgs = await dataSource.getUnifiedInbox(store.getState().selectedFolder);
-        store.dispatch({ type: ACTION.SET_MESSAGES, payload: msgs });
+        const msgs = await dataSource.getUnifiedInbox('INBOX');
+        if (currentGen === fetchGeneration) store.dispatch({ type: ACTION.SET_MESSAGES, payload: msgs });
     } else {
         const folders = await dataSource.getFolders(accId);
         if (!folders.includes('Outbox')) {
             folders.push('Outbox');
         }
-        store.dispatch({ type: ACTION.SET_FOLDERS, payload: folders });
-        const msgs = await dataSource.getMessages(accId, store.getState().selectedFolder);
-        store.dispatch({ type: ACTION.SET_MESSAGES, payload: msgs });
+        if (currentGen === fetchGeneration) store.dispatch({ type: ACTION.SET_FOLDERS, payload: folders });
+        const msgs = await dataSource.getMessages(accId, 'INBOX');
+        if (currentGen === fetchGeneration) store.dispatch({ type: ACTION.SET_MESSAGES, payload: msgs });
     }
 });
 
 store.subscribe('selectedFolder', async (folder) => {
     if (!folder || folder === lastFold) return;
     lastFold = folder;
+    
+    const currentGen = ++fetchGeneration;
     const accId = store.getState().selectedAccountId;
+    
     if (accId) {
         if (accId === 'unified') {
             const msgs = await dataSource.getUnifiedInbox(folder);
-            store.dispatch({ type: ACTION.SET_MESSAGES, payload: msgs });
+            if (currentGen === fetchGeneration) store.dispatch({ type: ACTION.SET_MESSAGES, payload: msgs });
         } else {
             const msgs = await dataSource.getMessages(accId, folder);
-            store.dispatch({ type: ACTION.SET_MESSAGES, payload: msgs });
+            if (currentGen === fetchGeneration) store.dispatch({ type: ACTION.SET_MESSAGES, payload: msgs });
         }
     }
 });

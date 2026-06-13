@@ -236,6 +236,23 @@ pub async fn sync_folder_messages_with_session(
         duration_ms, new_count, updated_count, deleted_count
     );
 
+
+    // === BACKGROUND PREFETCH ===
+    // Spawns a background task to fetch full bodies for the 20 most recent emails
+    let prefetch_pool = pool.clone();
+    let prefetch_account = account.clone();
+    let prefetch_folder = folder.to_string();
+    tokio::spawn(async move {
+        if let Err(e) = crate::services::message_body_service::prefetch_recent_bodies(
+            &prefetch_account, 
+            &prefetch_folder, 
+            20, 
+            &prefetch_pool
+        ).await {
+            tracing::error!("Prefetch error for {}/{}: {}", prefetch_account.email, prefetch_folder, e);
+        }
+    });
+
     Ok(SyncStats {
         account_id: account.id.clone(),
         folder: folder.to_string(),
