@@ -541,9 +541,19 @@
         let saveTimeout = null;
 
         async function initData() {
-            const token = localStorage.getItem('mailora-token') || '';
+            const token = localStorage.getItem('auth_token') || '';
+            if (!token) {
+                alert("Oturum süreniz dolmuş veya giriş yapmamışsınız. Ana sayfaya yönlendiriliyorsunuz.");
+                window.location.href = '/';
+                return;
+            }
             try {
                 const res = await fetch('/sheets', { headers: { 'Authorization': `Bearer ${token}` } });
+                if (res.status === 401) {
+                    alert("Oturum süreniz dolmuş veya yetkisiz erişim. Ana sayfaya yönlendiriliyorsunuz.");
+                    window.location.href = '/';
+                    return;
+                }
                 const listData = await res.json();
                 
                 if (listData.ok && listData.data && listData.data.length > 0) {
@@ -563,7 +573,7 @@
         }
 
         async function loadFile(id) {
-            const token = localStorage.getItem('mailora-token') || '';
+            const token = localStorage.getItem('auth_token') || '';
             activeFileId = id;
             localStorage.setItem('mailora-active-sheet', activeFileId);
             
@@ -581,10 +591,15 @@
                     renderTabs();
                     renderTable();
                     updateStatus();
+                    updateStatus();
+                } else {
+                    createEmptyDataView();
+                    renderTable();
                 }
             } catch (e) {
                 console.error("Failed to load file", e);
                 createEmptyDataView();
+                renderTable();
             }
         }
 
@@ -612,7 +627,7 @@
                 shared_with: "[]"
             };
             
-            const token = localStorage.getItem('mailora-token') || '';
+            const token = localStorage.getItem('auth_token') || '';
             await fetch('/sheets', {
                 method: 'POST',
                 headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -634,12 +649,50 @@
             for (const f of filesList) {
                 const div = document.createElement('div');
                 div.className = 'sheet-file' + (f.id === activeFileId ? ' active' : '');
+                div.style.display = 'flex';
+                div.style.justifyContent = 'space-between';
+                div.style.alignItems = 'center';
+                
                 const icon = f.is_owner ? '📊' : '🔗'; 
-                div.innerHTML = `<span class="sheet-file-icon">${icon}</span> ${f.name} <span class="sheet-file-date"></span>`;
+                let inner = `<div style="flex:1;"><span class="sheet-file-icon">${icon}</span> ${f.name}</div>`;
+                if(f.is_owner) {
+                    inner += `<span title="Tabloyu Sil" style="cursor:pointer; font-size:14px; padding:0 5px;" onclick="deleteFile(event, '${f.id}')">🗑️</span>`;
+                }
+                div.innerHTML = inner;
                 div.onclick = () => {
                     saveToStorageImmediately().then(() => loadFile(f.id));
                 };
                 container.appendChild(div);
+            }
+        }
+
+        async function deleteFile(e, id) {
+            e.stopPropagation();
+            if(!confirm("Bu tabloyu tamamen silmek istediğinize emin misiniz?")) return;
+            const token = localStorage.getItem('auth_token') || '';
+            try {
+                const res = await fetch(`/sheets/${id}`, {
+                    method: 'DELETE',
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const d = await res.json();
+                if(d.ok) {
+                    filesList = filesList.filter(f => f.id !== id);
+                    if(activeFileId === id) {
+                        if(filesList.length > 0) {
+                            await loadFile(filesList[0].id);
+                        } else {
+                            await createNewFile("Tablo 1");
+                        }
+                    } else {
+                        renderSidebarFiles();
+                    }
+                } else {
+                    alert("Silinemedi: " + d.error);
+                }
+            } catch(err) {
+                console.error(err);
+                alert("Hata oluştu.");
             }
         }
 
@@ -649,8 +702,25 @@
             for(let i=0; i<sheets.length; i++) {
                 const btn = document.createElement('button');
                 btn.className = 'sheet-tab' + (i === activeSheet ? ' active' : '');
-                btn.textContent = `📊 Sayfa ${i + 1}`;
-                btn.onclick = function() { switchSheet(i, this); };
+                btn.style.display = 'inline-flex';
+                btn.style.alignItems = 'center';
+                btn.style.gap = '8px';
+                
+                const spanName = document.createElement('span');
+                spanName.textContent = `📊 Sayfa ${i + 1}`;
+                spanName.onclick = function() { switchSheet(i, this); };
+                btn.appendChild(spanName);
+                
+                const spanDel = document.createElement('span');
+                spanDel.textContent = '✕';
+                spanDel.style.fontSize = '10px';
+                spanDel.style.cursor = 'pointer';
+                spanDel.style.opacity = '0.5';
+                spanDel.onmouseover = () => spanDel.style.opacity = '1';
+                spanDel.onmouseout = () => spanDel.style.opacity = '0.5';
+                spanDel.onclick = (e) => deleteSheet(e, i);
+                
+                btn.appendChild(spanDel);
                 tabs.appendChild(btn);
             }
             const addBtn = document.createElement('button');
@@ -659,6 +729,24 @@
             addBtn.title = 'Yeni Sayfa (Sekme)';
             addBtn.onclick = addSheet;
             tabs.appendChild(addBtn);
+        }
+
+        async function deleteSheet(e, index) {
+            e.stopPropagation();
+            if(sheets.length <= 1) {
+                alert("Son sayfayı silemezsiniz!");
+                return;
+            }
+            if(!confirm(`Sayfa ${index+1}'i silmek istediğinize emin misiniz? Tüm içeriği gidecektir.`)) return;
+            
+            sheets.splice(index, 1);
+            if(activeSheet >= index && activeSheet > 0) {
+                activeSheet--;
+            }
+            data = sheets[activeSheet] || createEmptyDataViewArray();
+            renderTabs();
+            renderTable();
+            debouncedSave();
         }
 
 
@@ -900,7 +988,7 @@
             const file = filesList.find(f => f.id === activeFileId);
             if (!file) return;
 
-            const token = localStorage.getItem('mailora-token') || '';
+            const token = localStorage.getItem('auth_token') || '';
             const payload = {
                 id: activeFileId,
                 owner_id: null,
@@ -954,7 +1042,7 @@
             radios.forEach(r => r.checked = (r.value === shareType));
             toggleUserList(shareType === 'SPECIFIC');
 
-            const token = localStorage.getItem('mailora-token') || '';
+            const token = localStorage.getItem('auth_token') || '';
             try {
                 const res = await fetch('/sheets/users', { headers: { 'Authorization': `Bearer ${token}` } });
                 const udata = await res.json();
