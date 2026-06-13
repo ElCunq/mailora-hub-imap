@@ -22,22 +22,36 @@ pub async fn fetch_message_body(account: &Account, uid: u32, folder: Option<&str
 
     // Cache lookup (skip if force_refresh)
     if !force_refresh {
-        if let Ok(row_opt) = sqlx::query("SELECT body, html_body, subject, from_addr, date, flags FROM message_bodies WHERE account_id=? AND folder=? AND uid=?")
+        match sqlx::query("SELECT body, html_body, subject, from_addr, date, flags FROM message_bodies WHERE account_id=? AND folder=? AND uid=?")
             .bind(&account.id)
             .bind(folder)
             .bind(uid as i64)
             .fetch_optional(pool)
             .await {
-            if let Some(row) = row_opt {
-                if let (Ok(body), Ok(html_body_opt)) = (row.try_get::<String,_>("body"), row.try_get::<Option<String>,_>("html_body")) {
-                    let subject: String = row.try_get::<Option<String>,_>("subject").ok().flatten().unwrap_or_default();
-                    let from: String = row.try_get::<Option<String>,_>("from_addr").ok().flatten().unwrap_or_default();
-                    let date: Option<String> = row.try_get::<Option<String>,_>("date").ok().flatten();
-                    let flags_json: String = row.try_get::<Option<String>,_>("flags").ok().flatten().unwrap_or_default();
-                    let flags: Vec<String> = serde_json::from_str(&flags_json).unwrap_or_default();
-                    return Ok(MessageBody { uid, folder: folder.to_string(), subject, from, date, flags, plain_text: body.clone(), html_text: html_body_opt, raw_size: body.len() });
+            Ok(Some(row)) => {
+                tracing::info!("Cache HIT for UID {}", uid);
+                match (row.try_get::<String,_>("body"), row.try_get::<Option<String>,_>("html_body")) {
+                    (Ok(body), Ok(html_body_opt)) => {
+                        let subject: String = row.try_get::<Option<String>,_>("subject").ok().flatten().unwrap_or_default();
+                        let from: String = row.try_get::<Option<String>,_>("from_addr").ok().flatten().unwrap_or_default();
+                        let date: Option<String> = row.try_get::<Option<String>,_>("date").ok().flatten();
+                        let flags_json: String = row.try_get::<Option<String>,_>("flags").ok().flatten().unwrap_or_default();
+                        let flags: Vec<String> = serde_json::from_str(&flags_json).unwrap_or_default();
+                        return Ok(MessageBody { uid, folder: folder.to_string(), subject, from, date, flags, plain_text: body.clone(), html_text: html_body_opt, raw_size: body.len() });
+                    }
+                    (Err(e1), _) => tracing::warn!("Cache parse error body: {:?}", e1),
+                    (_, Err(e2)) => tracing::warn!("Cache parse error html_body: {:?}", e2),
                 }
             }
+            Ok(None) => {
+                tracing::info!("Cache MISS for UID {}", uid);
+                tracing::info!(
+                    "Fetching body for message {} from account: {}",
+                    uid,
+                    account.email
+                );
+            }
+            Err(e) => tracing::error!("Cache DB error: {:?}", e),
         }
     }
 
@@ -52,7 +66,7 @@ pub async fn fetch_message_body(account: &Account, uid: u32, folder: Option<&str
     // Backend sanitization was stripping essential email struct/styles causing blank screens.
     // if let Some(html) = html_opt.as_ref() { ... }
     // Best-effort cache write (ignore errors e.g., when table missing)
-    let _ = sqlx::query("INSERT OR REPLACE INTO message_bodies (account_id, folder, uid, body, html_body, subject, from_addr, date, flags) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
+    match sqlx::query("INSERT OR REPLACE INTO message_bodies (account_id, folder, uid, body, html_body, subject, from_addr, date, flags) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
         .bind(&account.id)
         .bind(folder)
         .bind(uid as i64)
@@ -61,9 +75,12 @@ pub async fn fetch_message_body(account: &Account, uid: u32, folder: Option<&str
         .bind(&fetched.subject)
         .bind(&fetched.from)
         .bind(&fetched.date)
-        .bind(serde_json::to_string(&fetched.flags).unwrap_or_else(|_| "[]".into()))
+        .bind("[]")
         .execute(pool)
-        .await;
+        .await {
+            Ok(_) => tracing::info!("Inserted body cache for UID {}", uid),
+            Err(e) => tracing::error!("Failed to insert body cache for UID {}: {:?}", uid, e),
+        }
 
     Ok(MessageBody { uid, folder: folder.to_string(), subject: fetched.subject, from: fetched.from, date: fetched.date, flags: fetched.flags, plain_text: body_text.clone(), html_text: html_opt, raw_size: body_text.len() })
 }

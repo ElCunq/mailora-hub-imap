@@ -1,5 +1,7 @@
 // Mailora v2 — Message List Component (diff-based render)
 import { store, ACTION, MSG_STATE } from '../store.js';
+import { CONFIG } from '../config.js';
+import { dataSource } from '../data-source.js';
 const el = id => document.getElementById(id);
 let _prevIds = [];
 
@@ -128,9 +130,78 @@ function render() {
                 dataSource.updateFlags(msg.accountId, msg.folder, msg.uid, { flagged: !msg.important });
             }
             else if (a === 'snooze') {
-                const until = Date.now() + 3600000;
-                store.dispatch({ type: ACTION.SNOOZE_MESSAGE, payload: { id, until } });
-                dataSource.snoozeMessage(msg.accountId, msg.folder, msg.uid, new Date(until).toISOString());
+                document.querySelectorAll('.snooze-dropdown').forEach(e => e.remove());
+
+                const dd = document.createElement('div');
+                dd.className = 'snooze-dropdown';
+                dd.style.position = 'absolute';
+                dd.style.background = 'var(--bg-primary)';
+                dd.style.border = '1px solid var(--border)';
+                dd.style.borderRadius = '8px';
+                dd.style.padding = '8px 0';
+                dd.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
+                dd.style.zIndex = '1000';
+                dd.style.minWidth = '150px';
+                
+                const rect = act.getBoundingClientRect();
+                dd.style.top = (rect.bottom + window.scrollY + 5) + 'px';
+                dd.style.left = (rect.left + window.scrollX - 50) + 'px';
+
+                CONFIG.snoozeOptions.forEach(opt => {
+                    const btn = document.createElement('div');
+                    btn.innerText = opt.label;
+                    btn.style.padding = '8px 16px';
+                    btn.style.cursor = 'pointer';
+                    btn.style.fontSize = '13px';
+                    btn.onmouseover = () => btn.style.background = 'var(--bg-secondary)';
+                    btn.onmouseout = () => btn.style.background = 'transparent';
+                    btn.onclick = (ev) => {
+                        ev.stopPropagation();
+                        dd.remove();
+                        const until = Date.now() + opt.ms;
+                        store.dispatch({ type: ACTION.SNOOZE_MESSAGE, payload: { id, until } });
+                        dataSource.snoozeMessage(msg.accountId, msg.folder, msg.uid, new Date(until).toISOString());
+                    };
+                    dd.appendChild(btn);
+                });
+
+                const customBtn = document.createElement('div');
+                customBtn.innerHTML = 'Özel Tarih Seç... <input type="datetime-local" style="width:100%; margin-top:6px; display:none; background:var(--bg-secondary); border:1px solid var(--border); color:var(--text-primary); border-radius:4px; padding:4px;">';
+                customBtn.style.padding = '8px 16px';
+                customBtn.style.cursor = 'pointer';
+                customBtn.style.fontSize = '13px';
+                customBtn.style.borderTop = '1px solid var(--border)';
+                
+                const inp = customBtn.querySelector('input');
+                customBtn.onclick = (ev) => {
+                    ev.stopPropagation();
+                    if(inp.style.display === 'none') {
+                        inp.style.display = 'block';
+                        inp.focus();
+                        inp.showPicker && inp.showPicker();
+                    }
+                };
+                inp.onchange = (ev) => {
+                    ev.stopPropagation();
+                    const d = new Date(inp.value);
+                    if(isNaN(d.getTime())) return;
+                    dd.remove();
+                    store.dispatch({ type: ACTION.SNOOZE_MESSAGE, payload: { id, until: d.getTime() } });
+                    dataSource.snoozeMessage(msg.accountId, msg.folder, msg.uid, d.toISOString());
+                };
+                dd.appendChild(customBtn);
+
+                document.body.appendChild(dd);
+                
+                setTimeout(() => {
+                    const closeFn = (ev) => {
+                        if (!dd.contains(ev.target)) {
+                            dd.remove();
+                            document.removeEventListener('click', closeFn);
+                        }
+                    };
+                    document.addEventListener('click', closeFn);
+                }, 10);
             }
             else if (a === 'delete') {
                 if (confirm('Silmek istediğinize emin misiniz?')) {

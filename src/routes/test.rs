@@ -290,12 +290,6 @@ pub async fn fetch_message_body(
             )
         })?;
 
-    tracing::info!(
-        "Fetching body for message {} from account: {}",
-        uid,
-        account.email
-    );
-
     let folder = query.folder.as_deref();
     let body = message_body_service::fetch_message_body(&account, uid, folder, &pool, query.force_refresh.unwrap_or(false))
         .await

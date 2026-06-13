@@ -29,6 +29,7 @@ pub mod snooze;
 pub mod contacts;
 pub mod calendar;
 pub mod outbox;
+pub mod sheets;
 
 #[derive(Deserialize)]
 #[allow(non_snake_case)]
@@ -183,6 +184,7 @@ where
         .route("/", get(root_page))
         .route("/app", get(app_page))
         .nest_service("/static", ServeDir::new("static"))
+        .nest("/sheets", sheets::router())
         .route("/login", post(login))
         .route("/diff", get(diff::diff_handler))
         .route("/body", get(diff::body_handler))

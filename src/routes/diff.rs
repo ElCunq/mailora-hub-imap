@@ -401,27 +401,7 @@ pub async fn attachments_handler(
     .await
     .map_err(|e| (StatusCode::BAD_GATEWAY, e.to_string()))?;
 
-    // If none found, try a lighter BODYSTRUCTURE-based probe then scan other folders
-    let mut found_folder = req_folder.to_string();
-    if atts.is_empty() {
-        // quick probe: try INBOX BODYSTRUCTURE to detect parts even if raw fetch is large-blocked
-        // fall back to scanning other folders
-        let folders = list_all_folders_excluding_spam(&creds).await?;
-        for f in folders.iter() {
-            if f == req_folder { continue; }
-            match crate::imap::sync::list_attachments(
-                &creds.host,
-                creds.port,
-                &creds.email,
-                &creds.password,
-                f,
-                q.uid,
-            ).await {
-                Ok(v) if !v.is_empty() => { atts = v; found_folder = f.clone(); break; }
-                _ => {}
-            }
-        }
-    }
+    let found_folder = req_folder.to_string();
 
     // Persist to DB: resolve message_id then replace attachments, using the found folder
     if !atts.is_empty() {
