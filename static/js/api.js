@@ -213,7 +213,7 @@ export async function getUnifiedInbox(folder, limit) {
 }
 
 // ─── Single Message Body ─────────────────────────────────────────────
-export async function getMessage(accountId, uid, folder) {
+export async function getMessage(accountId, uid, folder, signal) {
     if (folder === 'Outbox') {
         const r = await apiFetch(`/outbox/${uid}`);
         const body = await r.json();
@@ -226,7 +226,7 @@ export async function getMessage(accountId, uid, folder) {
         };
     }
     const resolvedFolder = await resolveFolderName(accountId, folder || 'Inbox');
-    const r = await apiFetch(`/test/body/${encodeURIComponent(accountId)}/${uid}?folder=${encodeURIComponent(resolvedFolder)}`);
+    const r = await apiFetch(`/test/body/${encodeURIComponent(accountId)}/${uid}?folder=${encodeURIComponent(resolvedFolder)}`, { signal });
     const body = await r.json();
     return {
         subject: fixText(body.subject || ''),

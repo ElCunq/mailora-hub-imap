@@ -3,11 +3,19 @@ import { store, ACTION } from '../store.js';
 import { CONFIG } from '../config.js';
 import { dataSource } from '../data-source.js';
 const el = id => document.getElementById(id);
+let currentRenderId = 0;
+let currentAbortController = null;
 export function mountPreview() {
     store.subscribe('selectedMessageId', render);
     store.subscribe('messages', render);
 }
 async function render() {
+    const renderId = ++currentRenderId;
+    if (currentAbortController) {
+        currentAbortController.abort();
+    }
+    currentAbortController = new AbortController();
+    const signal = currentAbortController.signal;
     const c = el('preview-pane');
     if (!c) return;
     const s = store.getState();
@@ -29,8 +37,10 @@ async function render() {
             };
             attData = [];
         } else {
-            bodyData = await dataSource.getMessage(msg.accountId, msg.uid, msg.folder);
+                        bodyData = await dataSource.getMessage(msg.accountId, msg.uid, msg.folder, signal);
+            if (renderId !== currentRenderId) return;
             attData = await dataSource.getAttachments(msg.accountId, msg.uid, msg.folder);
+            if (renderId !== currentRenderId) return;
 
             // Okundu olarak işaretle
             if (!msg.read) {
@@ -152,6 +162,10 @@ async function render() {
         // Save plain_text for AI tools
         msg.raw_body = bodyData.plain_text;
     } catch (err) {
+        if (err.name === 'AbortError') {
+            console.log('Fetch aborted for older email click');
+            return;
+        }
         c.innerHTML = `<div class="empty-state"><div style="color:var(--accent-red)">Hata: ${err.message}</div></div>`;
         return;
     }
