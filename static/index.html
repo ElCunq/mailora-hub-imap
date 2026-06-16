@@ -109,8 +109,24 @@
             </script>
             <div class="section-label">Hesaplar</div>
             <div id="account-list"></div>
-            <div class="section-label">Klasörler</div>
+            <div class="section-label" id="folder-toggle" style="cursor: pointer; display: flex; justify-content: space-between; align-items: center;" onclick="toggleFolders()">
+                <span>Klasörler</span>
+                <span id="folder-toggle-icon" style="transition: transform 0.2s;">▼</span>
+            </div>
             <div id="folder-list"></div>
+            <script>
+                function toggleFolders() {
+                    const list = document.getElementById('folder-list');
+                    const icon = document.getElementById('folder-toggle-icon');
+                    if (list.style.display === 'none') {
+                        list.style.display = 'block';
+                        icon.style.transform = 'rotate(0deg)';
+                    } else {
+                        list.style.display = 'none';
+                        icon.style.transform = 'rotate(-90deg)';
+                    }
+                }
+            </script>
         </aside>
 
         <!-- Message List -->
