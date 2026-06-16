@@ -124,7 +124,7 @@ window.mailora = {
             if (q.trim().length > 0) {
                 try {
                     const s = store.getState();
-                    const results = await api.searchMessages(q.trim(), { accountId: s.selectedAccountId, folder: s.selectedFolder });
+                    const results = await dataSource.searchMessages(q.trim(), { accountId: s.selectedAccountId, folder: s.selectedFolder });
                     store.dispatch({ type: ACTION.SET_SEARCH_RESULTS, payload: results });
                 } catch (e) {
                     console.error('Search failed:', e);

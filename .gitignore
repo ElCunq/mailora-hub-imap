@@ -30,3 +30,10 @@ Thumbs.db
 
 .env
 Temp/
+
+# Python & AI Models
+__pycache__/
+*.pyc
+venv/
+MailoraPro/Modeller/
+MailoraPro/test_translate.py

@@ -28,7 +28,20 @@ export async function getUnifiedInbox(folder, limit) {
     if (folder) msgs = msgs.filter(m => m.folder === folder);
     return msgs.slice(0, limit || 200);
 }
-export async function getMessage(id) { return mockMessages.find(m => m.id === id) || null; }
+export async function getMessage(accountId, uid, folder, signal) {
+    const msg = mockMessages.find(m => m.id === `${accountId}_${uid}`) || mockMessages.find(m => m.accountId === accountId) || mockMessages[0];
+    return { subject: msg?.subject || '', from: msg?.from || '', html_body: '', plain_text: msg?.body?.replace(/<[^>]*>/g, '') || msg?.preview || '', date: msg?.date || '' };
+}
+export async function getAttachments(accountId, uid, folder) { return []; }
+export function getAttachmentDownloadUrl(accountId, uid, partId, folder) { return '#'; }
+export async function updateFlags(accountId, folder, uid, flags) { return { ok: true }; }
+export async function syncAccount(accountId) { return { ok: true }; }
+export async function snoozeMessage(accountId, folder, uid, until) { return { ok: true }; }
+export async function unsnoozeMessage(accountId, folder, uid) { return { ok: true }; }
+export async function searchMessages(query, opts = {}) {
+    const q = query.toLowerCase();
+    return mockMessages.filter(m => m.subject?.toLowerCase().includes(q) || m.from?.toLowerCase().includes(q) || m.preview?.toLowerCase().includes(q));
+}
 export async function sendMessage(data) { return { success: true, id: 'sent_' + Date.now() }; }
 export async function login(u, p) { return { token: 'demo_token', username: u, role: 'Admin' }; }
 export async function register(u, p) { return { success: true }; }
