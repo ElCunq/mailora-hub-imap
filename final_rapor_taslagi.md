@@ -88,15 +88,15 @@ Lokal Yapay Zeka çalıştırmanın getirdiği en büyük donanımsal kısıt, d
 Bu bölümde proje sürecinde yararlanılan yapay zeka (YZ) araçları, kullanım amaçları ve çıktıların nasıl işlendiği şeffaf biçimde beyan edilmektedir.
 
 #### 3.1.a Kullanılan YZ Araçları
-- **ChatGPT / Claude:** Rust dilindeki borrow-checker (bellek yönetimi) hatalarının tespiti, asenkron IMAP/SMTP ağ katmanı yapılarının tasarlanması ve rapor içerisindeki metinsel düzenlemelerin yapılması.
-- **Google DeepMind Antigravity (Kod Asistanı):** Veritabanı şema kurgularının (SQLite) analiz edilmesi, Vanilla JS arayüz bileşenlerindeki hataların ayıklanması, kod optimizasyonları ve RBAC entegrasyonu süreçlerinde asistanlık.
+- **Gemini / Claude:** Rust dilindeki borrow-checker (bellek yönetimi) hatalarının tespiti, asenkron IMAP/SMTP ağ katmanı yapılarının tasarlanması ve rapor içerisindeki metinsel düzenlemelerin yapılması.
+- **Google Antigravity (Kod Asistanı):** Veritabanı şema kurgularının (SQLite) analiz edilmesi, Vanilla JS arayüz bileşenlerindeki hataların ayıklanması, kod optimizasyonları ve RBAC entegrasyonu süreçlerinde asistanlık.
 
 #### 3.1.b Kullanım Amacı ve Kapsamı
-- **Kod Geliştirme:** Yapay zeka, uçtan uca uygulama akışında Rust mimarisinin derleme sürelerini hızlandırmak, SQLx veritabanı sorgularını optimize etmek ve asenkron ağ işlemlerindeki darboğazları (Thread bloklanmaları) gidermek amacıyla kullanıldı.
+- **Kod Yazımı (Uygulama Değil, Amelelik):** YZ araçları hiçbir aşamada projenin ana mimarisini veya iş mantığını kendi başına kurmamıştır. Sistemin tasarımı, veritabanı ilişkileri ve genel kontrol mekanizmaları tamamen proje ekibi tarafından planlanmıştır. Yapay zeka, yalnızca ekibin tasarladığı bu mimarinin kod satırlarına dökülmesi ve derleme (borrow-checker) hatalarının hızlıca çözülmesi aşamasında "yazıcı (typist)" olarak kullanılmıştır.
 - **Hata Ayıklama:** Özellikle eski e-posta sunucularından gelen sorunlu karakter setlerinin (Mojibake) ayrıştırılması aşamasında algoritma desteği alındı.
 
 #### 3.1.c Çıktıların Doğrulanması ve Düzenlenmesi
-Proje geliştirme sürecimizde, uygulamanın akıllı yeteneklerini (e-posta özetleme, duygu analizi) oluşturmak amacıyla Python tabanlı açık kaynaklı NLP modelleri projeye manuel olarak entegre edilmiştir. Kod üretimi için kullanılan YZ asistanlarından (ChatGPT, Claude, vb.) alınan her türlü asenkron Rust mimarisi çıktısı, uygulamanın bellek güvenliği (memory safety) standartlarına ve SQLite ilişkisel veritabanı kısıtlamalarına uygunluk açısından denetlenerek projeye dahil edilmiştir. 
+Proje geliştirme sürecimizde, uygulamanın akıllı yeteneklerini (e-posta özetleme, duygu analizi) oluşturmak amacıyla Python tabanlı açık kaynaklı NLP modelleri projeye manuel olarak entegre edilmiştir. Kod üretimi için kullanılan YZ asistanlarından (Gemini, Claude, vb.) alınan her türlü asenkron Rust mimarisi çıktısı, uygulamanın bellek güvenliği (memory safety) standartlarına ve SQLite ilişkisel veritabanı kısıtlamalarına uygunluk açısından denetlenerek projeye dahil edilmiştir. 
 
 #### 3.1.d YZ Çıktıları Ekip Üyeleri Tarafından Nasıl İncelendi ve Test Edildi?
 YZ tarafından üretilen kod blokları ve mimari öneriler doğrudan ana projeye (main branch) aktarılmamıştır. Üretilen her çıktı;
@@ -108,11 +108,11 @@ YZ tarafından üretilen kod blokları ve mimari öneriler doğrudan ana projeye
 - **Gmail UID Gecikmesi Hatası:** YZ, gönderilen iletilerin doğrudan "Sent" klasöründe anında bulunabileceğini varsayan basit bir kod üretmiş, ancak Gmail'in senkronizasyon gecikmesi nedeniyle sistem UID bulamayarak çökmüştür. *Düzeltme:* YZ'nin basit senaryosu reddedilerek, yerine 60 saniyelik "Backoff-Retry" (Geri Çekilme ve Deneme) kuyruk algoritması manuel olarak yazılmış ve entegre edilmiştir.
 
 #### 3.1.e YZ Çıktısının Doğrudan Kullanılıp Kullanılmadığı Yoksa Uyarlanıp Uyarlanmadığı
-Yapay zeka çıktıları, özellikle angarya (boilerplate) kodların yazımı ve tekrarlayan CSS/HTML yapılarının kurgulanması gibi işlemlerde doğrudan kullanılmıştır. Ancak;
+Yapay zeka çıktıları, yalnızca ekibin kurguladığı sistematiği koda dökmek ve angarya (boilerplate) CSS/HTML yapılarını oluşturmak için kullanılmıştır. Projenin ana omurgası ve kontrolü tamamen geliştirici ekibin elindedir. Özellikle;
 - IMAP/SMTP doğrudan bağlantı noktaları ve asenkron soket yönetimi,
 - Vanilla JS ile yazılan "Tablolar" modülünün ızgara, formül algoritmaları ve Takvim kurgusu,
 - Rol Tabanlı Erişim (RBAC) panelinin güvenlik kısıtlamaları,
-tamamen proje ekibi tarafından uyarlanmış ve manuel olarak yeniden yapılandırılmıştır. YZ, geliştirmeyi hızlandıran bir mentor (Pair Programmer) olarak konumlandırılmıştır.
+tamamen proje ekibi tarafından manuel olarak yapılandırılmış ve YZ çıktıları bu katı kurallara uymak zorunda bırakılmıştır. YZ, mimar değil yalnızca geliştirmeyi hızlandıran bir asistan olarak konumlandırılmıştır.
 
 #### 3.1.f Etik Beyan ve Sorumluluk Notu
 Bu raporda yer alan tüm çalışmalar, yukarıda belirtilen YZ araçlarının yardımıyla kısmen desteklenmiş olmakla birlikte; nihai kararlar, değerlendirmeler ve sorumluluk tamamen grup üyelerine aittir. YZ araçlarından elde edilen çıktılar doğrulanmış, gerektiğinde düzeltilmiş ve projeye bilinçli biçimde entegre edilmiştir. Akademik dürüstlük ilkelerine uyulmuş; YZ kullanımı gizlenmemiş ve şeffaf biçimde beyan edilmiştir.
