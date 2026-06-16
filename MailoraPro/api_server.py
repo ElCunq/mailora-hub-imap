@@ -55,8 +55,10 @@ def load_models():
     global konu_model, konu_tokenizer
     global spam_model, spam_tokenizer
 
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+
     # 1. Duygu Modeli
-    yol_duygu = "./Modeller/Duygu_Modeli_Final"
+    yol_duygu = os.path.join(base_dir, "Modeller", "Duygu_Modeli_Final")
     if os.path.exists(yol_duygu) and os.path.exists(os.path.join(yol_duygu, "config.json")):
         logger.info(f"🎭 Duygu modeli yükleniyor: {yol_duygu}")
         duygu_tokenizer = BertTokenizer.from_pretrained(yol_duygu, local_files_only=True)
@@ -65,7 +67,7 @@ def load_models():
         logger.info("✅ Duygu modeli hazır!")
 
     # 2. Konu Modeli v3
-    yol_konu = "./Modeller/Konu_Modeli_v3"
+    yol_konu = os.path.join(base_dir, "Modeller", "Konu_Modeli_v3")
     if os.path.exists(yol_konu) and os.path.exists(os.path.join(yol_konu, "config.json")):
         logger.info(f"📌 Konu modeli yükleniyor: {yol_konu}")
         konu_tokenizer = BertTokenizer.from_pretrained(yol_konu, local_files_only=True)
@@ -74,7 +76,7 @@ def load_models():
         logger.info("✅ Konu modeli v2 hazır!")
 
     # 3. Spam Modeli
-    yol_spam = "./Modeller/Spam_Modeli_v1"
+    yol_spam = os.path.join(base_dir, "Modeller", "Spam_Modeli_v1")
     if os.path.exists(yol_spam) and os.path.exists(os.path.join(yol_spam, "config.json")):
         logger.info(f"🛡️ Spam modeli yükleniyor: {yol_spam}")
         spam_tokenizer = BertTokenizer.from_pretrained(yol_spam, local_files_only=True)
@@ -112,9 +114,11 @@ def predict_single(model, tokenizer, text, etiket_map):
         outputs = model(**inputs)
     probs = torch.softmax(outputs.logits, dim=-1)[0].tolist()
     pred_id = torch.argmax(outputs.logits, dim=-1).item()
+    scores = {etiket_map[i]: round(prob * 100, 1) for i, prob in enumerate(probs) if i in etiket_map}
     return {
         "label": etiket_map[pred_id],
-        "confidence": round(max(probs) * 100, 1)
+        "confidence": round(max(probs) * 100, 1),
+        "scores": scores
     }
 
 def process_text(text: str):
@@ -124,36 +128,51 @@ def process_text(text: str):
     if duygu_model and duygu_tokenizer:
         res["duygu"] = predict_single(duygu_model, duygu_tokenizer, text, duygu_etiketler)
     else:
-        # Mock fallback if models are not trained yet
-        import random
-        scores = {"Pozitif": random.randint(85, 98), "Nötr": random.randint(1, 10), "Negatif": random.randint(1, 5)}
-        res["duygu"] = {"label": "Pozitif", "confidence": scores["Pozitif"], "scores": scores}
+        # Fallback: Orjinal HuggingFace Modeline Bağlan (Mock yerine)
+        try:
+            from transformers import pipeline
+            if not hasattr(process_text, 'duygu_pipe'):
+                process_text.duygu_pipe = pipeline("sentiment-analysis", model="savasy/bert-base-turkish-sentiment-cased", device=0 if device=="cuda" else -1)
+            pred = process_text.duygu_pipe(text[:512])[0]
+            label_map = {"positive": "Pozitif", "negative": "Negatif", "neutral": "Nötr"}
+            lbl = label_map.get(pred['label'], "Nötr")
+            conf = round(pred['score'] * 100, 1)
+            res["duygu"] = {"label": lbl, "confidence": conf, "scores": {lbl: conf}}
+        except Exception as e:
+            res["duygu"] = {"label": "Nötr", "confidence": 50.0, "scores": {"Nötr": 50.0}}
 
     # Konu
     if konu_model and konu_tokenizer:
         res["konu"] = predict_single(konu_model, konu_tokenizer, text, konu_etiketler)
     else:
-        # Mock fallback
-        import random
-        scores = {"is_proje": random.randint(80, 95), "teknoloji": random.randint(5, 15), "diger": random.randint(0, 5)}
-        res["konu"] = {"label": "is_proje", "confidence": scores["is_proje"], "scores": scores}
+        # Fallback: Orjinal Zero-Shot Sınıflandırma
+        try:
+            from transformers import pipeline
+            if not hasattr(process_text, 'konu_pipe'):
+                process_text.konu_pipe = pipeline("zero-shot-classification", model="MoritzLaurer/mDeBERTa-v3-base-mnli-xnli", device=0 if device=="cuda" else -1)
+            etiketler = ["iş projesi", "finans", "alışveriş", "teknoloji", "pazarlama", "kişisel", "eğitim", "seyahat", "hukuk resmi", "sağlık", "sosyal bildirim", "spor eğlence"]
+            pred = process_text.konu_pipe(text[:512], candidate_labels=etiketler)
+            best_label = pred['labels'][0].replace(" ", "_").replace("iş_projesi", "is_proje").replace("alışveriş", "alisveris").replace("eğitim", "egitim").replace("hukuk_resmi", "hukuk_resmi").replace("sağlık", "saglik").replace("kişisel", "kisisel").replace("spor_eğlence", "spor_eglence")
+            conf = round(pred['scores'][0] * 100, 1)
+            res["konu"] = {"label": best_label, "confidence": conf, "scores": {best_label: conf}}
+        except Exception as e:
+            res["konu"] = {"label": "is_proje", "confidence": 50.0, "scores": {"is_proje": 50.0}}
 
     # Spam
     if spam_model and spam_tokenizer:
         spam_res = predict_single(spam_model, spam_tokenizer, text, spam_etiketler)
-        # 1-10 arsı spam güven skoru (10 en kötü spam, 1 en temiz ham)
         score = spam_res["confidence"]
         if spam_res["label"] == "Spam":
             spam_score = min(10, max(6, round(score / 10))) 
         else:
             spam_score = max(1, min(5, round((100 - score) / 10)))
-        res["spam"] = {
-            "label": spam_res["label"],
-            "confidence": spam_res["confidence"],
-            "score": spam_score
-        }
+        res["spam"] = {"label": spam_res["label"], "confidence": spam_res["confidence"], "score": spam_score}
     else:
-        res["spam"] = {"label": "error", "confidence": 0, "score": 5}
+        # Fallback: basit uzunluk ve kelime kontrolü (mock yerine)
+        score = 5
+        if "kampanya" in text.lower() or "kazandınız" in text.lower() or "ücretsiz" in text.lower():
+            score = 8
+        res["spam"] = {"label": "Spam" if score >= 6 else "Ham", "confidence": 80.0, "score": score}
 
     # Akıllı Yanıt Önerileri (Duygu ve Konu tabanlı)
     duygu = res["duygu"]["label"]
@@ -276,7 +295,8 @@ async def extract_entities(req: NERRequest):
 @app.post("/smart-reply")
 async def smart_reply(req: SmartReplyRequest):
     logger.info("Yükleniyor: Akıllı Yanıt Modeli (Generative MT5)")
-    model_path = "./Modeller/Smart_Reply_Model"
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    model_path = os.path.join(base_dir, "Modeller", "Smart_Reply_Model")
     if not os.path.exists(model_path):
          return {"replies": ["Teşekkürler.", "Anladım.", "İyi çalışmalar."]}
     

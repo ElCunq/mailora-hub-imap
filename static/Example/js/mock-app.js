@@ -9,7 +9,7 @@ const mockData = [
                <p>Could you please review these changes and share your feedback by Friday?</p>
                <p>Best regards,<br><strong>Sarah Connor</strong><br>Director of Partnerships</p>`,
         pinned: true, important: true, read: false,
-        aiTopic: 'İş', aiIcon: '💼', aiSpam: null,
+        
         hasAttachment: true
     },
     {
@@ -18,7 +18,7 @@ const mockData = [
         preview: 'Merhaba ekip, son çeyreğe ait finansal raporları ve proje analizlerini ekte bulabilirsiniz. Toplantıda görüşmek üzere...',
         body: `<p>Merhaba ekip,</p><p>Son çeyreğe ait finansal raporları ve proje durum analizlerini ekteki tabloda bulabilirsiniz.</p><p>Özellikle <strong>Rust ve Axum</strong> mimarisine geçiş sürecindeki performans kazanımlarımız oldukça tatmin edici görünüyor. IMAP senkronizasyon sürelerinde %40 oranında bir iyileşme raporlanmış durumda. Bunun yanında yeni geliştirilen <strong>RBAC</strong> sisteminin güvenlik analiz sonuçları da oldukça başarılı.</p><p>Detayları yarınki haftalık toplantıda konuşacağız.</p><p>Kolay gelsin,</p><p><strong>Ahmet Yılmaz</strong><br>Danışman</p>`,
         pinned: false, important: true, read: true,
-        aiTopic: 'Eğitim', aiIcon: '🎓', aiSpam: null,
+        
         hasAttachment: true
     },
     {
@@ -27,7 +27,7 @@ const mockData = [
         preview: 'Ekim ayına ait fatura kesimleri tamamlanmıştır. Lütfen ekteki dosyadan kontrollerinizi sağlayın.',
         body: `<p>Ekim ayına ait tüm departman faturalarının kesim işlemleri tamamlanmıştır. Hata olmaması adına ekteki raporu incelemenizi rica ederiz.</p>`,
         pinned: false, important: false, read: true,
-        aiTopic: 'Finans', aiIcon: '💰', aiSpam: null,
+        
         hasAttachment: true
     },
     {
@@ -45,7 +45,7 @@ const mockData = [
             <br><button style="padding:10px 20px; background:var(--accent-blue); color:white; border:none; border-radius:5px; margin-top:15px; cursor:pointer;">Sürüm Notlarını Oku</button>
         </div>`,
         pinned: true, important: false, read: false,
-        aiTopic: 'Teknoloji', aiIcon: '💻', aiSpam: null,
+        
         hasAttachment: false
     },
     {
@@ -54,7 +54,7 @@ const mockData = [
         preview: 'Sana özel hazırladığımız Haftalık Keşif listesi yayında. Hemen dinlemeye başla.',
         body: `<p>Sana özel hazırladığımız yepyeni şarkılardan oluşan Haftalık Keşif listesi yayında!</p>`,
         pinned: false, important: false, read: true,
-        aiTopic: 'Eğlence', aiIcon: '🎧', aiSpam: null,
+        
         hasAttachment: false
     },
     {
@@ -66,7 +66,7 @@ const mockData = [
             <pre style="background:var(--bg-tertiary); padding:10px; border-radius:4px; border:1px solid var(--border);"><code>cargo run --release\nsqlite3 database.db < schema.sql</code></pre>
             <p>Daha fazla bilgi için Wiki'ye göz atın.</p>`,
         pinned: false, important: false, read: true,
-        aiTopic: null, aiIcon: null, aiSpam: {score: 0, text: 'Güvenli', color: '#10b981'},
+        
         hasAttachment: false
     },
     {
@@ -75,7 +75,7 @@ const mockData = [
         preview: 'Yeni ofis malzemeleri listesi ektedir. Lütfen onaylayın.',
         body: `<p>Merhaba,</p><p>İhtiyaç duyulan malzemeler listesi ektedir. Onayınızdan sonra sipariş geçilecektir.</p>`,
         pinned: false, important: false, read: true,
-        aiTopic: 'Alışveriş', aiIcon: '🛒', aiSpam: null,
+        
         hasAttachment: true
     },
     {
@@ -84,7 +84,7 @@ const mockData = [
         preview: 'Değerli öğrenciler, vize sınavımız haftaya perşembe saat 14:00\'te yapılacaktır. Sınavda ilk 4 haftanın konularından...',
         body: `<p>Değerli öğrenciler,</p><p>Vize sınavımız haftaya perşembe saat 14:00'te online platform üzerinden yapılacaktır. Sınavda ilk 4 haftanın konularından sorumlu olacaksınız.</p><p>Başarılar dilerim.</p>`,
         pinned: false, important: true, read: false,
-        aiTopic: 'Eğitim', aiIcon: '🎓', aiSpam: null,
+        
         hasAttachment: false
     },
     {
@@ -93,7 +93,7 @@ const mockData = [
         preview: 'Dünkü toplantıda aldığımız kararlar ve RBAC yetkilendirme modülünün son durumu hakkında kısa bir özet geçiyorum...',
         body: `<p>Toplantı Özeti:</p><ul><li>RBAC modülü admin paneline entegre edildi.</li><li>Müşteri geri bildirimleri değerlendirildi.</li><li>UI güncellemeleri tamamlandı.</li></ul>`,
         pinned: false, important: false, read: true,
-        aiTopic: 'İş', aiIcon: '💼', aiSpam: null,
+        
         hasAttachment: false
     },
     {
@@ -106,7 +106,7 @@ const mockData = [
             <button style="padding:5px 10px; background:var(--bg-tertiary); border:1px solid var(--border); border-radius:3px; cursor:pointer; color:var(--text-primary);">View PR</button>
         </div>`,
         pinned: false, important: false, read: true,
-        aiTopic: 'Teknoloji', aiIcon: '💻', aiSpam: null,
+        
         hasAttachment: false
     },
     {
@@ -115,7 +115,7 @@ const mockData = [
         preview: 'Siparişiniz MNG kargoya teslim edilmiştir. Kargo takip numarası ile sürecini izleyebilirsiniz.',
         body: `<p>Siparişiniz başarıyla kargoya verilmiştir.</p><p>Takip No: MNG-12345678</p>`,
         pinned: false, important: false, read: true,
-        aiTopic: 'Alışveriş', aiIcon: '🛒', aiSpam: null,
+        
         hasAttachment: false
     },
     {
@@ -124,7 +124,7 @@ const mockData = [
         preview: 'Proje X için bugün yaptığımız görüşmenin notlarını paylaşıyorum. Müşteri arayüz tasarımını beğendi ancak...',
         body: `<p>Proje X Görüşme Notları:</p><p>Müşteri arayüz tasarımını çok beğendi. Ancak "Tablolar" kısmında bazı ek özellikler talep ediyorlar. İlgili eklentileri haftaya kadar hazırlamamız gerekiyor.</p>`,
         pinned: false, important: true, read: true,
-        aiTopic: 'İş', aiIcon: '💼', aiSpam: null,
+        
         hasAttachment: false
     },
     {
@@ -133,7 +133,7 @@ const mockData = [
         preview: 'Click here to claim your free lifetime cloud server instance today. No credit card required! Don\'t miss out on this...',
         body: `<h2 style="color:red">CONGRATULATIONS!</h2><p>You have been selected to win a free cloud server. <a href="#">Click here to claim</a>.</p>`,
         pinned: false, important: false, read: true,
-        aiTopic: null, aiIcon: null, aiSpam: {score: 9, text: 'Spam Riski', color: '#ef4444'},
+        
         hasAttachment: false
     },
     {
@@ -142,7 +142,7 @@ const mockData = [
         preview: 'Gönderdiğiniz son tasarımları inceledim. Login sayfası çok güzel olmuş ancak tablo kısmında revizyon gerekiyor.',
         body: `<p>Selamlar,</p><p>Son gönderdiğiniz tasarımları inceledim. Login sayfası çok güzel olmuş ancak tablo kısmında revizyon gerekiyor. Lütfen yarınki toplantıya kadar güncellemeleri tamamlayın.</p>`,
         pinned: false, important: false, read: true,
-        aiTopic: 'İş', aiIcon: '💼', aiSpam: null,
+        
         hasAttachment: false
     },
     {
@@ -151,7 +151,7 @@ const mockData = [
         preview: 'PostgreSQL geçiş planını bu haftasonu başlatmayı düşünüyorum. Aşağıdaki adımları...',
         body: `<p>PostgreSQL geçiş planını bu haftasonu başlatmayı düşünüyorum. Aşağıdaki adımları takip edeceğiz:</p><ul><li>Yedekleme</li><li>Downtime duyurusu</li><li>Migrasyon scripti...</li></ul>`,
         pinned: false, important: false, read: true,
-        aiTopic: 'Teknoloji', aiIcon: '💻', aiSpam: null,
+        
         hasAttachment: false
     },
     {
@@ -160,7 +160,7 @@ const mockData = [
         preview: 'Hurry up! The discount ends in 5 minutes.',
         body: `<p>Buy now or regret later!</p>`,
         pinned: false, important: false, read: true,
-        aiTopic: null, aiIcon: null, aiSpam: {score: 8, text: 'Şüpheli', color: '#ef4444'},
+        
         hasAttachment: false
     }
 ];
@@ -219,6 +219,42 @@ window.toggleFolder = function() {
 };
 
 const AI_API = 'http://localhost:5000';
+
+async function autoAnalyzeMockMessages() {
+    const unanalyzed = mockData.filter(m => !m.aiAnalyzed);
+    if (!unanalyzed.length) return;
+
+    try {
+        const res = await fetch(`${AI_API}/analyze-batch`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ messages: unanalyzed.map(m => ({ id: m.id.toString(), text: m.body.replace(/<[^>]*>?/gm, '') || m.preview || '' })) })
+        });
+
+        if (res.ok) {
+            const data = await res.json();
+            for (const m of unanalyzed) {
+                const analysis = data[m.id.toString()];
+                if (analysis) {
+                    m.aiAnalyzed = true;
+                    m.aiTopic = analysis.konu?.label;
+                    m.aiSpam = analysis.spam;
+                    
+                    const konuIconMap = {
+                        is_proje: '💼', finans: '💰', alisveris: '🛒', teknoloji: '💻',
+                        pazarlama: '📢', kisisel: '👤', egitim: '🎓', seyahat: '✈️',
+                        hukuk_resmi: '⚖️', saglik: '🏥', sosyal_bildirim: '🔔', spor_eglence: '⚽'
+                    };
+                    m.aiIcon = konuIconMap[m.aiTopic] || '📌';
+                }
+            }
+            renderList();
+        }
+    } catch (err) {
+        console.warn("AI Batch Analysis failed:", err);
+    }
+}
+
 
 window.showAI = async function() {
     const box = document.getElementById('ai-summary');
@@ -340,8 +376,9 @@ window.showTranslate = async function() {
     }
 
     try {
-        // Pro hesabı kullanıyorsanız 'api-free.deepl.com' yerine 'api.deepl.com' yazın.
-        const res = await fetch('https://api-free.deepl.com/v2/translate', {
+        // DeepL API, tarayıcıdan (frontend) gelen doğrudan istekleri CORS politikası gereği engeller.
+        // Bu yüzden araya bir CORS Proxy (corsproxy.io) ekliyoruz.
+        const res = await fetch('https://corsproxy.io/?https://api-free.deepl.com/v2/translate', {
             method: 'POST',
             headers: { 
                 'Authorization': `DeepL-Auth-Key ${DEEPL_API_KEY}`,
@@ -448,6 +485,8 @@ function renderPreview() {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
+    setTimeout(autoAnalyzeMockMessages, 1000);
+
     window.selectAccount = function(accName) {
         state.selectedAccount = accName;
         document.querySelectorAll('.account-item').forEach(el => el.classList.remove('active'));

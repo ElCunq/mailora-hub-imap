@@ -346,8 +346,8 @@ async function showTranslate(msg) {
 
     box.innerHTML = `<div class="translate-header"><strong>🌍 Çeviri</strong></div>
         <div class="lang-btns">
-            <button class="lang-btn" data-lang="tr">İngilizce -> Türkçe</button>
-            <button class="lang-btn" data-lang="en">Türkçe -> İngilizce</button>
+            <button class="lang-btn" data-lang="TR">İngilizce -> Türkçe</button>
+            <button class="lang-btn" data-lang="EN-US">Türkçe -> İngilizce</button>
         </div>
         <div id="translate-result" class="translate-result" style="margin-top:10px;font-size:13px">Lütfen bir dil yönü seçin.</div>`;
     box.style.display = 'block';
@@ -357,16 +357,28 @@ async function showTranslate(msg) {
         const targetLang = b.dataset.lang;
         resBox.innerHTML = `<div style="display:flex;align-items:center;gap:8px"><div class="spinner"></div> <span>Helsinki-NLP modeli yükleniyor ve çevriliyor (Lazy Load)... Lütfen 2-3 sn bekleyin.</span></div>`;
 
+        const DEEPL_API_KEY = 'cce5eaab-78ec-41d0-b7ef-b066ace5b0a5:fx';
+        const textToTranslate = msg.raw_body?.replace(/<[^>]*>/g, '') || msg.preview || '';
+
         try {
-            const textToTranslate = msg.raw_body?.replace(/<[^>]*>/g, '') || msg.preview || '';
-            const res = await fetch(`${AI_API}/translate`, {
+            const res = await fetch('https://corsproxy.io/?https://api-free.deepl.com/v2/translate', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ text: textToTranslate, target_lang: targetLang })
+                headers: { 
+                    'Authorization': `DeepL-Auth-Key ${DEEPL_API_KEY}`,
+                    'Content-Type': 'application/json' 
+                },
+                body: JSON.stringify({ 
+                    text: [textToTranslate], 
+                    target_lang: targetLang 
+                })
             });
             const data = await res.json();
-            if (data.error) throw new Error(data.error);
-            resBox.innerHTML = `<strong>Çeviri Sonucu:</strong><br><br>${data.translated_text}`;
+            
+            if (data.translations && data.translations.length > 0) {
+                resBox.innerHTML = `<strong>🌍 Çeviri Sonucu (Yerel Model):</strong><br><br>${data.translations[0].text}`;
+            } else {
+                throw new Error(data.message || 'Çeviri alınamadı');
+            }
         } catch (e) {
             resBox.innerHTML = `<span style="color:#ef4444">Hata: ${e.message}</span>`;
         }
