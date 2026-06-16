@@ -91,8 +91,8 @@ Projenin geliştirme sürecinde etik ve şeffaf bir yapay zeka politikası izlen
 
 ### 3.2 Proje Ekibinin Takım Yapısı ve İş Bölümü
 Proje, iki kişilik çevik (agile) bir takım yapısıyla yürütülmüştür:
-- **Cenk Orfa (Takım Kaptanı):** Backend (Rust/Axum) sistem mimarisi, IMAP/SMTP asenkron ağ katmanı yönetimi, SQLite veritabanı şema kurgusu ve proje veri senkronizasyonu dahil olmak üzere arka plan ve veritabanına dair tüm altyapı kodlamaları.
-- **Emirhan Yavuz:** Frontend arayüz tasarımı, Vanilla JS etkileşimleri, "Tablolar" ve "Takvim" modüllerinin inşası, RBAC paneli entegrasyonu ve Python yapay zeka model (AI) entegrasyonu.
+- **Cenk Orfa (Takım Kaptanı):** Backend (Rust/Axum) sistem mimarisi, IMAP/SMTP asenkron ağ katmanı yönetimi, SQLite veritabanı şema kurgusu, RBAC (Rol Tabanlı Erişim) yetkilendirme mimarisi ve proje veri senkronizasyonu dahil olmak üzere arka plan ve veritabanına dair tüm altyapı kodlamaları.
+- **Emirhan Yavuz:** Frontend arayüz tasarımı, Vanilla JS etkileşimleri, "Tablolar" ve "Takvim" modüllerinin inşası ve Python yapay zeka model (AI) entegrasyonu.
 
 ### 3.3 Sistem Tasarımı ve Kullanılan Teknolojiler
 Mailora'nın teknik altyapısı, güvenliği ve hızı odağına alan "Yerel Öncelikli" (Local-First) bir mimariye sahiptir:
