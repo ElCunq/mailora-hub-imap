@@ -85,9 +85,40 @@ Lokal Yapay Zeka çalıştırmanın getirdiği en büyük donanımsal kısıt, d
 ## 3. GELİŞTİRME SÜRECİ VE MİMARİ
 
 ### 3.1 Yapay Zeka (YZ) Araçlarının Kullanımı
-Projenin geliştirme sürecinde etik ve şeffaf bir yapay zeka politikası izlenmiştir:
-- **Kod Geliştirme:** Rust mimarisindeki derleme (borrow-checker) hatalarının çözümü ve arayüz bileşenlerinin (Örn: Tablolar ızgara sistemi) prototiplenmesi süreçlerinde yapay zeka kod asistanlarından mentörlük alınmış ve kodlar projeye özelleştirilerek entegre edilmiştir.
-- **Proje Altyapısı Olarak YZ:** Sistemin temel özelliklerinden biri olan yerel metin özetleme, çeviri ve duygu analizi işlemleri için Naive Bayes, SVM algoritmaları ve açık kaynaklı HuggingFace modelleri projeye manuel olarak yerleştirilmiştir.
+Bu bölümde proje sürecinde yararlanılan yapay zeka (YZ) araçları, kullanım amaçları ve çıktıların nasıl işlendiği şeffaf biçimde beyan edilmektedir.
+
+#### 3.1.a Kullanılan YZ Araçları
+- **ChatGPT / Claude:** Rust dilindeki borrow-checker (bellek yönetimi) hatalarının tespiti, asenkron IMAP/SMTP ağ katmanı yapılarının tasarlanması ve rapor içerisindeki metinsel düzenlemelerin yapılması.
+- **Google DeepMind Antigravity (Kod Asistanı):** Veritabanı şema kurgularının (SQLite) analiz edilmesi, Vanilla JS arayüz bileşenlerindeki hataların ayıklanması, kod optimizasyonları ve RBAC entegrasyonu süreçlerinde asistanlık.
+
+#### 3.1.b Kullanım Amacı ve Kapsamı
+- **Kod Geliştirme:** Yapay zeka, uçtan uca uygulama akışında Rust mimarisinin derleme sürelerini hızlandırmak, SQLx veritabanı sorgularını optimize etmek ve asenkron ağ işlemlerindeki darboğazları (Thread bloklanmaları) gidermek amacıyla kullanıldı.
+- **Hata Ayıklama:** Özellikle eski e-posta sunucularından gelen sorunlu karakter setlerinin (Mojibake) ayrıştırılması aşamasında algoritma desteği alındı.
+
+#### 3.1.c Çıktıların Doğrulanması ve Düzenlenmesi
+Proje geliştirme sürecimizde, uygulamanın akıllı yeteneklerini (e-posta özetleme, duygu analizi) oluşturmak amacıyla Python tabanlı açık kaynaklı NLP modelleri projeye manuel olarak entegre edilmiştir. Kod üretimi için kullanılan YZ asistanlarından (ChatGPT, Claude, vb.) alınan her türlü asenkron Rust mimarisi çıktısı, uygulamanın bellek güvenliği (memory safety) standartlarına ve SQLite ilişkisel veritabanı kısıtlamalarına uygunluk açısından denetlenerek projeye dahil edilmiştir. 
+
+#### 3.1.d YZ Çıktıları Ekip Üyeleri Tarafından Nasıl İncelendi ve Test Edildi?
+YZ tarafından üretilen kod blokları ve mimari öneriler doğrudan ana projeye (main branch) aktarılmamıştır. Üretilen her çıktı;
+1. **Mimari Uygunluk Kontrolü:** Uygulamanın benimsediği "Local-First" ve "Güvenli Rust" (Safe Rust) standartlarına uyup uymadığı gözden geçirilmiştir. 
+2. **Korumalı Alan Testleri:** Ağ kopması durumlarında asenkron Tokio thread'lerinin kilitlenip kilitlenmediği "Devre Kesici (Circuit Breaker)" ile yerel ortamda test edilmiş, IMAP UID senkronizasyon eşleşmeleri loglanarak manuel doğrulanmıştır.
+3. **Güvenlik İncelemesi:** YZ'nin ürettiği kodlardaki SQL sorguları (Injection risklerine karşı) denetlenmiş, yetkilendirme (RBAC) mimarisinde açık olmaması için baştan yapılandırılmıştır.
+
+**Hatalı veya Uygunsuz Bulunan Çıktılara Örnekler:**
+- **Gmail UID Gecikmesi Hatası:** YZ, gönderilen iletilerin doğrudan "Sent" klasöründe anında bulunabileceğini varsayan basit bir kod üretmiş, ancak Gmail'in senkronizasyon gecikmesi nedeniyle sistem UID bulamayarak çökmüştür. *Düzeltme:* YZ'nin basit senaryosu reddedilerek, yerine 60 saniyelik "Backoff-Retry" (Geri Çekilme ve Deneme) kuyruk algoritması manuel olarak yazılmış ve entegre edilmiştir.
+
+#### 3.1.e YZ Çıktısının Doğrudan Kullanılıp Kullanılmadığı Yoksa Uyarlanıp Uyarlanmadığı
+Yapay zeka çıktıları, özellikle angarya (boilerplate) kodların yazımı ve tekrarlayan CSS/HTML yapılarının kurgulanması gibi işlemlerde doğrudan kullanılmıştır. Ancak;
+- IMAP/SMTP doğrudan bağlantı noktaları ve asenkron soket yönetimi,
+- Vanilla JS ile yazılan "Tablolar" modülünün ızgara, formül algoritmaları ve Takvim kurgusu,
+- Rol Tabanlı Erişim (RBAC) panelinin güvenlik kısıtlamaları,
+tamamen proje ekibi tarafından uyarlanmış ve manuel olarak yeniden yapılandırılmıştır. YZ, geliştirmeyi hızlandıran bir mentor (Pair Programmer) olarak konumlandırılmıştır.
+
+#### 3.1.f Etik Beyan ve Sorumluluk Notu
+Bu raporda yer alan tüm çalışmalar, yukarıda belirtilen YZ araçlarının yardımıyla kısmen desteklenmiş olmakla birlikte; nihai kararlar, değerlendirmeler ve sorumluluk tamamen grup üyelerine aittir. YZ araçlarından elde edilen çıktılar doğrulanmış, gerektiğinde düzeltilmiş ve projeye bilinçli biçimde entegre edilmiştir. Akademik dürüstlük ilkelerine uyulmuş; YZ kullanımı gizlenmemiş ve şeffaf biçimde beyan edilmiştir.
+Grup Üyelerinin Onayı:
+1. Cenk Orfa - Tarih: ............. - İmza: .............
+2. Emirhan Yavuz - Tarih: ............. - İmza: .............
 
 ### 3.2 Proje Ekibinin Takım Yapısı ve İş Bölümü
 Proje, iki kişilik çevik (agile) bir takım yapısıyla yürütülmüştür:
