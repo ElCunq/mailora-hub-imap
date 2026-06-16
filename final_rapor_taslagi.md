@@ -117,9 +117,9 @@ Sistemin kararlılığı farklı entegrasyon testleriyle doğrulanmıştır:
 - **Ağ Kopması (Circuit Breaker):** İnternet aniden koptuğunda asenkron Tokio thread'lerinin donmasını engellemek için tasarlanan "Devre Kesici" sistemi test edilmiş; kilitlenmeden hata logu oluşturma başarısı gözlenmiştir.
 
 ### 4.2 Sonuçlar ve Tartışma
-Elde edilen sonuçlar, "bulut şirketlerine veri sızdırmadan çalışan yapay zeka destekli yerel iletişim istemcisi" vizyonunun pratikte uygulanabilir olduğunu açıkça ortaya koymuştur. Mailora, IMAP sunucularından çektiği verileri internete ihtiyaç duymadan (sadece localhost üzerinde) özetleyebilmiş ve analiz edebilmiştir. Rust programlama dilinin seçimi, ağ yoğunluğu yaşandığı durumlarda düşük sistem tüketimi vaadini yerine getirmiştir.
+Elde edilen sonuçlar, "bulut şirketlerine veri sızdırmadan çalışan yapay zeka destekli yerel iletişim istemcisi" vizyonunun pratikte uygulanabilir olduğunu açıkça ortaya koymuştur. Mailora, IMAP sunucularından çektiği verileri internete ihtiyaç duymadan (sadece localhost üzerinde) özetleyebilmiş ve analiz edebilmiştir. Rust programlama dilinin seçimi, ağ yoğunluğu yaşandığı durumlarda düşük sistem tüketimi vaadini yerine getirmiştir. Ayrıca proje dahilinde SQLite FTS5 modülü devreye alınarak binlerce veri içinde saliselerle Full-Text arama yapılabilmiş ve ağ kesintilerine karşı e-postaları bekletip tekrar gönderen "Kalıcı Kuyruk (Outbox)" sistemi başarıyla entegre edilmiştir.
 
-Gelecek çalışmalar (vizyon) kapsamında; SQLite FTS5 modülü aracılığıyla binlerce veri içinde saliselerle arama (Full-Text Search) yapabilen motorun devreye alınması, ağ kesintilerine karşı mailleri bekletip tekrar gönderen "Kalıcı Kuyruk (Outbox)" sisteminin olgunlaştırılması ve AI modellerinin C/C++ tabanlı GGUF formatına küçültülerek çok daha düşük donanımlı eski ofis bilgisayarlarında da sorunsuz çalıştırılabilmesi planlanmaktadır.
+Gelecek çalışmalar (vizyon) kapsamında; projede kullanılan yüksek boyutlu AI modellerinin C/C++ tabanlı GGUF formatına küçültülerek çok daha düşük donanımlı eski ofis bilgisayarlarında da sorunsuz çalıştırılabilmesi ve donanım bağımlılığının en aza indirilmesi planlanmaktadır.
 
 ---
 
