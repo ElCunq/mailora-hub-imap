@@ -6,7 +6,7 @@
     <title>Mailora — Takvim</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="css/premium.css">
+    <link rel="stylesheet" href="../css/premium.css">
     <style>
         /* Calendar Layout Override */
         .app { grid-template-columns: 260px 1fr; }
@@ -113,17 +113,44 @@
             </div>
             <div class="header-actions">
                 <button class="compose-btn" onclick="openEventModal()">📅 Yeni Etkinlik</button>
+                <div style="position:relative;">
+                    <button class="icon-btn" onclick="document.getElementById('app-launcher').classList.toggle('open')" title="Uygulamalar">▦</button>
+                    <!-- Apps Dropdown -->
+                    <div id="app-launcher" class="apps-dropdown">
+                        <a href="/static/Example/index.html" class="app-icon">
+                            <span class="app-icon-img">✉️</span>
+                            <span class="app-icon-label">E-posta</span>
+                        </a>
+                        <a href="/static/Example/calendar.html" class="app-icon">
+                            <span class="app-icon-img">📅</span>
+                            <span class="app-icon-label">Takvim</span>
+                        </a>
+                        <a href="/static/Example/sheets.html" class="app-icon">
+                            <span class="app-icon-img">📊</span>
+                            <span class="app-icon-label">Tablo</span>
+                        </a>
+                        <a href="/static/Example/admin.html" class="app-icon">
+                            <span class="app-icon-img">🛡️</span>
+                            <span class="app-icon-label">Admin</span>
+                        </a>
+                    </div>
+                </div>
                 <button class="icon-btn" id="theme-btn" onclick="toggleTheme()" title="Tema">🌙</button>
             </div>
         </header>
 
         <!-- Sidebar -->
         <aside class="sidebar">
-            <div class="section-label">Navigasyon</div>
-            <a href="/static/index.html" class="nav-link">📥 Inbox</a>
-            <a href="/static/calendar.html" class="nav-link active">📅 Takvim</a>
-            <a href="/static/sheets.html" class="nav-link">📊 Tablo</a>
-            <a href="/static/admin.html" class="nav-link">🛡️ Admin Panel</a>
+            <div class="user-profile" style="background:var(--bg-tertiary); margin:-10px -10px 15px -10px; padding:15px; border-bottom:1px solid var(--border);">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                    <div style="font-weight:600; color:var(--text-primary); font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">Ali Yılmaz</div>
+                    <button style="background:none; border:none; color:var(--accent-red); cursor:pointer; font-size:12px; font-weight:600;">Çıkış</button>
+                </div>
+                <div style="display:flex; gap:8px;">
+                    <button style="display:none; flex:1; padding:6px; background:rgba(16,185,129,0.15); border:1px solid rgba(16,185,129,0.3); border-radius:6px; color:#10b981; font-size:11px; font-weight:600; cursor:pointer;">+ Hesap</button>
+                    <button style="flex:1; padding:6px; background:rgba(59,130,246,0.15); border:1px solid rgba(59,130,246,0.3); border-radius:6px; color:var(--accent-blue); font-size:11px; font-weight:600; cursor:pointer;">🔄 Sync</button>
+                </div>
+            </div>
 
             <div id="mini-calendar"></div>
 
@@ -215,14 +242,31 @@
         if (events.length === 0) {
             const today = new Date();
             const y = today.getFullYear(), m = today.getMonth();
-            events = [
-                { id: 1, title: 'Sprint Planlama', date: `${y}-${String(m+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`, start: '10:00', end: '11:30', color: 'blue', location: 'Zoom', desc: 'Q2 sprint planlama toplantısı' },
-                { id: 2, title: 'Tasarım Review', date: `${y}-${String(m+1).padStart(2,'0')}-${String(today.getDate()+2).padStart(2,'0')}`, start: '14:00', end: '15:00', color: 'purple', location: 'Ofis', desc: '' },
-                { id: 3, title: 'Doktor Randevusu', date: `${y}-${String(m+1).padStart(2,'0')}-${String(today.getDate()+5).padStart(2,'0')}`, start: '09:00', end: '10:00', color: 'red', location: 'Hastane', desc: '' },
-                { id: 4, title: 'Müşteri Demo', date: `${y}-${String(m+1).padStart(2,'0')}-${String(today.getDate()+1).padStart(2,'0')}`, start: '16:00', end: '17:00', color: 'green', location: 'Google Meet', desc: 'Yeni dashboard demosu' },
-                { id: 5, title: 'Doğum Günü Partisi 🎂', date: `${y}-${String(m+1).padStart(2,'0')}-${String(Math.min(today.getDate()+7,28)).padStart(2,'0')}`, start: '19:00', end: '23:00', color: 'orange', location: 'Ev', desc: '' },
-                { id: 6, title: 'AI Model Eğitimi', date: `${y}-${String(m+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`, start: '14:00', end: '16:00', color: 'purple', location: 'MailoraPro Lab', desc: 'Konu modeli v4 eğitimi' },
-            ];
+            const colors = ['blue', 'purple', 'red', 'green', 'orange'];
+            const locs = ['Zoom', 'Ofis', 'Hastane', 'Google Meet', 'Ev', 'MailoraPro Lab'];
+            const titles = ['Sprint Planlama', 'Tasarım Review', 'Doktor Randevusu', 'Müşteri Demo', 'Doğum Günü Partisi 🎂', 'AI Model Eğitimi', 'Ekip Yemeği', 'Birebir Görüşme', 'Kod İnceleme'];
+            
+            for(let offset = -2; offset <= 2; offset++) {
+                const targetM = (m + offset + 12) % 12;
+                const targetY = y + Math.floor((m + offset) / 12);
+                for(let i=0; i<5; i++) {
+                    const day = Math.floor(Math.random() * 25) + 1;
+                    const c = colors[Math.floor(Math.random()*colors.length)];
+                    const t = titles[Math.floor(Math.random()*titles.length)];
+                    const l = locs[Math.floor(Math.random()*locs.length)];
+                    const h = Math.floor(Math.random()*9) + 9;
+                    events.push({
+                        id: Date.now() + Math.random(),
+                        title: t,
+                        date: `${targetY}-${String(targetM+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`,
+                        start: `${String(h).padStart(2,'0')}:00`,
+                        end: `${String(h+1).padStart(2,'0')}:00`,
+                        color: c,
+                        location: l,
+                        desc: ''
+                    });
+                }
+            }
             localStorage.setItem('mailora-events', JSON.stringify(events));
         }
 

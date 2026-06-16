@@ -50,6 +50,16 @@
 
         <!-- Sidebar -->
         <aside class="sidebar">
+            <div class="user-profile" style="background:var(--bg-tertiary); margin:-10px -10px 15px -10px; padding:15px; border-bottom:1px solid var(--border);">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                    <div style="font-weight:600; color:var(--text-primary); font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">Ali Yılmaz</div>
+                    <button style="background:none; border:none; color:var(--accent-red); cursor:pointer; font-size:12px; font-weight:600;">Çıkış</button>
+                </div>
+                <div style="display:flex; gap:8px;">
+                    <button style="display:none; flex:1; padding:6px; background:rgba(16,185,129,0.15); border:1px solid rgba(16,185,129,0.3); border-radius:6px; color:#10b981; font-size:11px; font-weight:600; cursor:pointer;">+ Hesap</button>
+                    <button style="flex:1; padding:6px; background:rgba(59,130,246,0.15); border:1px solid rgba(59,130,246,0.3); border-radius:6px; color:var(--accent-blue); font-size:11px; font-weight:600; cursor:pointer;">🔄 Sync</button>
+                </div>
+            </div>
             <div class="section-label">Hesaplar</div>
             <div id="account-list"></div>
             <div class="section-label">Klasörler</div>

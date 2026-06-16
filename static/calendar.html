@@ -599,19 +599,41 @@
             <div class="header-actions">
                 <button class="compose-btn" onclick="triggerCalDavSync()" style="background:var(--bg-tertiary); border:1px solid var(--border); color:var(--text-primary); margin-right:8px;">🔄 Şimdi Eşitle</button>
                 <button class="compose-btn" onclick="openEventModal()">📅 Yeni Etkinlik</button>
+                <div style="position:relative;">
+                    <button class="icon-btn" onclick="document.getElementById('app-launcher').classList.toggle('open')" title="Uygulamalar">▦</button>
+                    <!-- Apps Dropdown -->
+                    <div id="app-launcher" class="apps-dropdown">
+                        <a href="/static/index.html" class="app-icon">
+                            <span class="app-icon-img">✉️</span>
+                            <span class="app-icon-label">E-posta</span>
+                        </a>
+                        <a href="/static/calendar.html" class="app-icon">
+                            <span class="app-icon-img">📅</span>
+                            <span class="app-icon-label">Takvim</span>
+                        </a>
+                        <a href="/static/sheets.html" class="app-icon">
+                            <span class="app-icon-img">📊</span>
+                            <span class="app-icon-label">Tablo</span>
+                        </a>
+                        <a href="/static/admin.html" class="app-icon">
+                            <span class="app-icon-img">🛡️</span>
+                            <span class="app-icon-label">Admin</span>
+                        </a>
+                    </div>
+                </div>
                 <button class="icon-btn" id="theme-btn" onclick="toggleTheme()" title="Tema">🌙</button>
             </div>
         </header>
 
         <!-- Sidebar -->
         <aside class="sidebar">
-            <div class="section-label">Navigasyon</div>
-            <a href="/static/index.html" class="nav-link">📥 Inbox</a>
-            <a href="/static/calendar.html" class="nav-link active">📅 Takvim</a>
-            <a href="/static/calendar_demo.html" class="nav-link" style="color:var(--accent-purple)">🪄 Takvim (Mock)</a>
-            <a href="/static/sheets.html" class="nav-link">📊 Tablo</a>
-            <a href="/static/admin.html" class="nav-link">🛡️ Admin Panel</a>
-            <a href="/static/admin_demo.html" class="nav-link" style="color:var(--accent-purple)">🧪 Admin (Mock)</a>
+            
+            
+            
+            
+            
+            
+            
 
             <div id="mini-calendar"></div>
 

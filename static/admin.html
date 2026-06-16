@@ -668,8 +668,7 @@
                 <button class="compose-btn" onclick="exportReport()">📊 Rapor İndir</button>
                 <button class="icon-btn" onclick="refreshLogs()" title="Yenile">🔄</button>
                 <div style="position:relative;">
-                    <button class="icon-btn" onclick="document.getElementById('app-launcher').classList.toggle('open')"
-                        title="Uygulamalar">▦</button>
+                    <button class="icon-btn" onclick="document.getElementById('app-launcher').classList.toggle('open')" title="Uygulamalar">▦</button>
                     <!-- Apps Dropdown -->
                     <div id="app-launcher" class="apps-dropdown">
                         <a href="/static/index.html" class="app-icon">
@@ -688,14 +687,6 @@
                             <span class="app-icon-img">🛡️</span>
                             <span class="app-icon-label">Admin</span>
                         </a>
-                        <a href="/static/admin_demo.html" class="app-icon">
-                            <span class="app-icon-img">🧪</span>
-                            <span class="app-icon-label">Admin (Mock)</span>
-                        </a>
-                        <a href="#" class="app-icon" onclick="alert('Ayarlar Yapım Aşamasında')">
-                            <span class="app-icon-img">⚙️</span>
-                            <span class="app-icon-label">Ayarlar</span>
-                        </a>
                     </div>
                 </div>
                 <button class="icon-btn" id="theme-btn" onclick="toggleTheme()" title="Tema">🌙</button>
@@ -713,7 +704,6 @@
                 <div class="admin-menu-item" onclick="showSection('users')">👥 Kullanıcılar</div>
                 <div class="admin-menu-item" onclick="showSection('accounts')">🔑 Hesaplar</div>
                 <div class="admin-menu-item" onclick="showSection('ai')">🤖 AI Raporları</div>
-                <div class="admin-menu-item" onclick="showSection('security')">🔒 Güvenlik</div>
             </div>
 
             <div class="section-label" style="margin-top:20px">Sistem Durumu</div>
