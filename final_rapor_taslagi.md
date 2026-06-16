@@ -12,10 +12,10 @@
 (Bu bölüm kelime işlemci programında otomatik oluşturulacaktır)
 
 **Resim Listesi**
-1. Resim 1: Kullanıcı Giriş ve Hesap Ekleme Ekranı
-2. Resim 2: Birleşik Gelen Kutusu (Unified Inbox) ve Temel E-posta Arayüzü
-3. Resim 3: Yapay Zeka (AI) Özetleme ve Akıllı Cevap Analizi Ekranı
-4. Resim 4: Performans, Duygu Analizi Grafikleri ve Yönetici (Admin) Paneli
+1.	Resim 1: Birleşik Gelen Kutusu (Inbox) ve Temel E-posta Arayüzü
+2.	Resim 2: Yapay Zeka Destekli E-posta Özetleme ve Duygu Analizi Ekranı
+3.	Resim 3: Entegre Tablolar (Sheets) Modülü
+4.	Resim 4: Admin Paneli, Sistem Performans
 
 **Kısaltma Listesi**
 - **IMAP:** Internet Message Access Protocol
