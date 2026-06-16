@@ -7,14 +7,14 @@
     <meta name="description" content="Mailora - Akıllı e-posta yönetim platformu. Çoklu hesap, AI özet, çeviri, zamanlama ve daha fazlası.">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="css/premium.css">
+    <link rel="stylesheet" href="../css/premium.css">
 </head>
 <body>
     <div class="app">
         <!-- Header -->
         <header class="header">
             <div class="logo">
-                <div class="logo-icon">✉</div>
+                <img src="/static/logo.png" style="height:28px; width:auto; object-fit:contain; background:transparent; border-radius:6px; margin-right:8px;">
                 <span class="logo-text">Mailora</span>
             </div>
             <input type="text" id="search" class="search-box" placeholder="🔍 Ara... (/ tuşu)" oninput="mailora.search(this.value)">
@@ -22,17 +22,34 @@
                 <button class="compose-btn" onclick="mailora.compose()">✏️ Yeni E-posta</button>
                 <button class="icon-btn" id="focus-btn" onclick="mailora.toggleFocus()" title="Focus Mode">🎯</button>
                 <button class="icon-btn" onclick="mailora.toggleAnalytics()" title="Analytics">📊</button>
-                <button class="icon-btn" id="theme-btn" onclick="mailora.toggleTheme()" title="Tema">🌙</button>
+                <div style="position:relative;">
+                    <button class="icon-btn" onclick="document.getElementById('app-launcher').classList.toggle('open')" title="Uygulamalar">▦</button>
+                    <!-- Apps Dropdown -->
+                    <div id="app-launcher" class="apps-dropdown">
+                        <a href="/static/Example/index.html" class="app-icon">
+                            <span class="app-icon-img">✉️</span>
+                            <span class="app-icon-label">E-posta</span>
+                        </a>
+                        <a href="/static/Example/calendar.html" class="app-icon">
+                            <span class="app-icon-img">📅</span>
+                            <span class="app-icon-label">Takvim</span>
+                        </a>
+                        <a href="/static/Example/sheets.html" class="app-icon">
+                            <span class="app-icon-img">📊</span>
+                            <span class="app-icon-label">Tablo</span>
+                        </a>
+                        <a href="/static/Example/admin.html" class="app-icon">
+                            <span class="app-icon-img">🛡️</span>
+                            <span class="app-icon-label">Admin</span>
+                        </a>
+                    </div>
+                </div>
+                <button class="icon-btn" id="theme-btn" onclick="document.body.dataset.theme = document.body.dataset.theme === 'dark' ? 'light' : 'dark'" title="Tema">🌙</button>
             </div>
         </header>
 
         <!-- Sidebar -->
         <aside class="sidebar">
-            <div class="section-label">Navigasyon</div>
-            <a href="/static/index.html" style="padding:10px 12px;border-radius:10px;display:flex;align-items:center;gap:10px;font-size:13px;color:var(--accent-blue);background:rgba(59,130,246,0.15);font-weight:500;text-decoration:none;margin-bottom:2px">📥 Inbox</a>
-            <a href="/static/calendar.html" style="padding:10px 12px;border-radius:10px;display:flex;align-items:center;gap:10px;font-size:13px;color:var(--text-secondary);text-decoration:none;margin-bottom:2px">📅 Takvim</a>
-            <a href="/static/sheets.html" style="padding:10px 12px;border-radius:10px;display:flex;align-items:center;gap:10px;font-size:13px;color:var(--text-secondary);text-decoration:none;margin-bottom:2px">📊 Tablo</a>
-            <a href="/static/admin.html" style="padding:10px 12px;border-radius:10px;display:flex;align-items:center;gap:10px;font-size:13px;color:var(--text-secondary);text-decoration:none;margin-bottom:2px">🛡️ Admin Panel</a>
             <div class="section-label">Hesaplar</div>
             <div id="account-list"></div>
             <div class="section-label">Klasörler</div>
@@ -100,6 +117,6 @@
         <div class="stat-card"><div class="stat-label" style="margin-bottom:8px">En Çok Yazışılan</div><div id="stat-top" style="font-size:13px"></div></div>
     </div>
 
-    <script type="module" src="js/app.js"></script>
+    <script src="js/mock-app.js"></script>
 </body>
 </html>

@@ -109,7 +109,7 @@ async fn login(Json(payload): Json<LoginReq>) -> impl IntoResponse {
 }
 
 async fn root_page() -> impl IntoResponse {
-    Html(include_str!("../../static/index.html"))
+    axum::response::Redirect::permanent("/static/index.html")
 }
 
 async fn app_page() -> impl IntoResponse {
