@@ -9,7 +9,7 @@ const mockData = [
                <p>Could you please review these changes and share your feedback by Friday?</p>
                <p>Best regards,<br><strong>Sarah Connor</strong><br>Director of Partnerships</p>`,
         pinned: true, important: true, read: false,
-        
+
         hasAttachment: true
     },
     {
@@ -18,7 +18,7 @@ const mockData = [
         preview: 'Merhaba ekip, son çeyreğe ait finansal raporları ve proje analizlerini ekte bulabilirsiniz. Toplantıda görüşmek üzere...',
         body: `<p>Merhaba ekip,</p><p>Son çeyreğe ait finansal raporları ve proje durum analizlerini ekteki tabloda bulabilirsiniz.</p><p>Özellikle <strong>Rust ve Axum</strong> mimarisine geçiş sürecindeki performans kazanımlarımız oldukça tatmin edici görünüyor. IMAP senkronizasyon sürelerinde %40 oranında bir iyileşme raporlanmış durumda. Bunun yanında yeni geliştirilen <strong>RBAC</strong> sisteminin güvenlik analiz sonuçları da oldukça başarılı.</p><p>Detayları yarınki haftalık toplantıda konuşacağız.</p><p>Kolay gelsin,</p><p><strong>Ahmet Yılmaz</strong><br>Danışman</p>`,
         pinned: false, important: true, read: true,
-        
+
         hasAttachment: true
     },
     {
@@ -27,7 +27,7 @@ const mockData = [
         preview: 'Ekim ayına ait fatura kesimleri tamamlanmıştır. Lütfen ekteki dosyadan kontrollerinizi sağlayın.',
         body: `<p>Ekim ayına ait tüm departman faturalarının kesim işlemleri tamamlanmıştır. Hata olmaması adına ekteki raporu incelemenizi rica ederiz.</p>`,
         pinned: false, important: false, read: true,
-        
+
         hasAttachment: true
     },
     {
@@ -45,7 +45,7 @@ const mockData = [
             <br><button style="padding:10px 20px; background:var(--accent-blue); color:white; border:none; border-radius:5px; margin-top:15px; cursor:pointer;">Sürüm Notlarını Oku</button>
         </div>`,
         pinned: true, important: false, read: false,
-        
+
         hasAttachment: false
     },
     {
@@ -54,7 +54,7 @@ const mockData = [
         preview: 'Sana özel hazırladığımız Haftalık Keşif listesi yayında. Hemen dinlemeye başla.',
         body: `<p>Sana özel hazırladığımız yepyeni şarkılardan oluşan Haftalık Keşif listesi yayında!</p>`,
         pinned: false, important: false, read: true,
-        
+
         hasAttachment: false
     },
     {
@@ -66,7 +66,7 @@ const mockData = [
             <pre style="background:var(--bg-tertiary); padding:10px; border-radius:4px; border:1px solid var(--border);"><code>cargo run --release\nsqlite3 database.db < schema.sql</code></pre>
             <p>Daha fazla bilgi için Wiki'ye göz atın.</p>`,
         pinned: false, important: false, read: true,
-        
+
         hasAttachment: false
     },
     {
@@ -75,7 +75,7 @@ const mockData = [
         preview: 'Yeni ofis malzemeleri listesi ektedir. Lütfen onaylayın.',
         body: `<p>Merhaba,</p><p>İhtiyaç duyulan malzemeler listesi ektedir. Onayınızdan sonra sipariş geçilecektir.</p>`,
         pinned: false, important: false, read: true,
-        
+
         hasAttachment: true
     },
     {
@@ -84,7 +84,7 @@ const mockData = [
         preview: 'Değerli öğrenciler, vize sınavımız haftaya perşembe saat 14:00\'te yapılacaktır. Sınavda ilk 4 haftanın konularından...',
         body: `<p>Değerli öğrenciler,</p><p>Vize sınavımız haftaya perşembe saat 14:00'te online platform üzerinden yapılacaktır. Sınavda ilk 4 haftanın konularından sorumlu olacaksınız.</p><p>Başarılar dilerim.</p>`,
         pinned: false, important: true, read: false,
-        
+
         hasAttachment: false
     },
     {
@@ -93,7 +93,7 @@ const mockData = [
         preview: 'Dünkü toplantıda aldığımız kararlar ve RBAC yetkilendirme modülünün son durumu hakkında kısa bir özet geçiyorum...',
         body: `<p>Toplantı Özeti:</p><ul><li>RBAC modülü admin paneline entegre edildi.</li><li>Müşteri geri bildirimleri değerlendirildi.</li><li>UI güncellemeleri tamamlandı.</li></ul>`,
         pinned: false, important: false, read: true,
-        
+
         hasAttachment: false
     },
     {
@@ -106,7 +106,7 @@ const mockData = [
             <button style="padding:5px 10px; background:var(--bg-tertiary); border:1px solid var(--border); border-radius:3px; cursor:pointer; color:var(--text-primary);">View PR</button>
         </div>`,
         pinned: false, important: false, read: true,
-        
+
         hasAttachment: false
     },
     {
@@ -115,7 +115,7 @@ const mockData = [
         preview: 'Siparişiniz MNG kargoya teslim edilmiştir. Kargo takip numarası ile sürecini izleyebilirsiniz.',
         body: `<p>Siparişiniz başarıyla kargoya verilmiştir.</p><p>Takip No: MNG-12345678</p>`,
         pinned: false, important: false, read: true,
-        
+
         hasAttachment: false
     },
     {
@@ -124,7 +124,7 @@ const mockData = [
         preview: 'Proje X için bugün yaptığımız görüşmenin notlarını paylaşıyorum. Müşteri arayüz tasarımını beğendi ancak...',
         body: `<p>Proje X Görüşme Notları:</p><p>Müşteri arayüz tasarımını çok beğendi. Ancak "Tablolar" kısmında bazı ek özellikler talep ediyorlar. İlgili eklentileri haftaya kadar hazırlamamız gerekiyor.</p>`,
         pinned: false, important: true, read: true,
-        
+
         hasAttachment: false
     },
     {
@@ -133,7 +133,7 @@ const mockData = [
         preview: 'Click here to claim your free lifetime cloud server instance today. No credit card required! Don\'t miss out on this...',
         body: `<h2 style="color:red">CONGRATULATIONS!</h2><p>You have been selected to win a free cloud server. <a href="#">Click here to claim</a>.</p>`,
         pinned: false, important: false, read: true,
-        
+
         hasAttachment: false
     },
     {
@@ -142,7 +142,7 @@ const mockData = [
         preview: 'Gönderdiğiniz son tasarımları inceledim. Login sayfası çok güzel olmuş ancak tablo kısmında revizyon gerekiyor.',
         body: `<p>Selamlar,</p><p>Son gönderdiğiniz tasarımları inceledim. Login sayfası çok güzel olmuş ancak tablo kısmında revizyon gerekiyor. Lütfen yarınki toplantıya kadar güncellemeleri tamamlayın.</p>`,
         pinned: false, important: false, read: true,
-        
+
         hasAttachment: false
     },
     {
@@ -151,7 +151,7 @@ const mockData = [
         preview: 'PostgreSQL geçiş planını bu haftasonu başlatmayı düşünüyorum. Aşağıdaki adımları...',
         body: `<p>PostgreSQL geçiş planını bu haftasonu başlatmayı düşünüyorum. Aşağıdaki adımları takip edeceğiz:</p><ul><li>Yedekleme</li><li>Downtime duyurusu</li><li>Migrasyon scripti...</li></ul>`,
         pinned: false, important: false, read: true,
-        
+
         hasAttachment: false
     },
     {
@@ -160,7 +160,7 @@ const mockData = [
         preview: 'Hurry up! The discount ends in 5 minutes.',
         body: `<p>Buy now or regret later!</p>`,
         pinned: false, important: false, read: true,
-        
+
         hasAttachment: false
     }
 ];
@@ -175,37 +175,37 @@ let state = {
     searchQuery: ''
 };
 
-window.togglePin = function(id) {
+window.togglePin = function (id) {
     const msg = mockData.find(m => m.id === id);
-    if(msg) msg.pinned = !msg.pinned;
+    if (msg) msg.pinned = !msg.pinned;
     renderList();
 };
 
-window.toggleImportant = function(id) {
+window.toggleImportant = function (id) {
     const msg = mockData.find(m => m.id === id);
-    if(msg) msg.important = !msg.important;
+    if (msg) msg.important = !msg.important;
     renderList();
 };
 
-window.deleteMsg = function(id) {
+window.deleteMsg = function (id) {
     const idx = mockData.findIndex(m => m.id === id);
-    if(idx > -1) {
+    if (idx > -1) {
         mockData.splice(idx, 1);
-        if(state.selectedMessageId === id && mockData.length > 0) state.selectedMessageId = mockData[0].id;
+        if (state.selectedMessageId === id && mockData.length > 0) state.selectedMessageId = mockData[0].id;
         renderList();
         renderPreview();
     }
 };
 
-window.selectMsg = function(id) {
+window.selectMsg = function (id) {
     state.selectedMessageId = id;
     const msg = mockData.find(m => m.id === id);
-    if(msg && !msg.read) msg.read = true;
+    if (msg && !msg.read) msg.read = true;
     renderList();
     renderPreview();
 };
 
-window.toggleFolder = function() {
+window.toggleFolder = function () {
     state.folderCollapsed = !state.folderCollapsed;
     const fl = document.getElementById('folder-list');
     const icon = document.getElementById('folder-toggle-icon');
@@ -239,7 +239,7 @@ async function autoAnalyzeMockMessages() {
                     m.aiAnalyzed = true;
                     m.aiTopic = analysis.konu?.label;
                     m.aiSpam = analysis.spam;
-                    
+
                     const konuIconMap = {
                         is_proje: '💼', finans: '💰', alisveris: '🛒', teknoloji: '💻',
                         pazarlama: '📢', kisisel: '👤', egitim: '🎓', seyahat: '✈️',
@@ -256,18 +256,18 @@ async function autoAnalyzeMockMessages() {
 }
 
 
-window.showAI = async function() {
+window.showAI = async function () {
     const box = document.getElementById('ai-summary');
     if (!box) return;
     if (box.style.display !== 'none') { box.style.display = 'none'; return; }
     box.style.display = 'block';
-    
-    if(!document.getElementById('mock-style')) {
+
+    if (!document.getElementById('mock-style')) {
         document.head.insertAdjacentHTML('beforeend', '<style id="mock-style">@keyframes spin { 100% { transform: rotate(360deg); } }</style>');
     }
-    
+
     box.innerHTML = `<div style="display:flex;align-items:center;gap:8px"><div class="spinner" style="width:14px;height:14px;border:2px solid var(--accent-blue);border-top-color:transparent;border-radius:50%;animation:spin 1s linear infinite"></div> <span style="font-size:13px;">MailoraPro Modelleri metni analiz ediyor...</span></div>`;
-    
+
     const m = mockData.find(x => x.id === state.selectedMessageId);
     const textToAnalyze = m ? m.body.replace(/<[^>]*>?/gm, '') : '';
 
@@ -278,7 +278,7 @@ window.showAI = async function() {
             body: JSON.stringify({ text: textToAnalyze })
         });
         const data = await res.json();
-        
+
         const duyguRenk = { 'Pozitif': '#10b981', 'Nötr': '#f59e0b', 'Negatif': '#ef4444' };
         const konuIcon = {
             is_proje: '💼', finans: '💰', alisveris: '🛒', teknoloji: '💻',
@@ -340,7 +340,7 @@ window.showAI = async function() {
             });
             const sumData = await sumRes.json();
             document.getElementById('ai-mock-summary-content').innerHTML = sumData.error ? '<span style="color:red">Hata: ' + sumData.error + '</span>' : sumData.summary;
-        } catch(err) {
+        } catch (err) {
             document.getElementById('ai-mock-summary-content').innerHTML = '<span style="color:red">Özet alınamadı.</span>';
         }
 
@@ -349,18 +349,18 @@ window.showAI = async function() {
     }
 };
 
-window.showTranslate = async function() {
+window.showTranslate = async function () {
     const box = document.getElementById('translate-box');
     if (!box) return;
-    
-    if (box.style.display === 'block' && !box.innerHTML.includes('spinner')) { 
-        box.style.display = 'none'; 
-        return; 
+
+    if (box.style.display === 'block' && !box.innerHTML.includes('spinner')) {
+        box.style.display = 'none';
+        return;
     }
-    
+
     box.style.display = 'block';
     box.innerHTML = `<div style="display:flex;align-items:center;gap:8px"><div class="spinner" style="width:14px;height:14px;border:2px solid var(--accent-blue);border-top-color:transparent;border-radius:50%;animation:spin 1s linear infinite"></div> <span style="font-size:13px;">Helsinki-NLP modeli çeviriyor...</span></div>`;
-    
+
     const m = mockData.find(x => x.id === state.selectedMessageId);
     const textToTranslate = m ? m.body.replace(/<[^>]*>?/gm, '') : '';
 
@@ -376,23 +376,22 @@ window.showTranslate = async function() {
     }
 
     try {
-        // DeepL API, tarayıcıdan (frontend) gelen doğrudan istekleri CORS politikası gereği engeller.
-        // Bu yüzden araya bir CORS Proxy (corsproxy.io) ekliyoruz.
-        const res = await fetch('https://corsproxy.io/?https://api-free.deepl.com/v2/translate', {
+        // DeepL API'ye doğrudan istek atıyoruz (Sunum ortamında CORS sorun çıkarmıyorsa)
+        const res = await fetch('https://api-free.deepl.com/v2/translate', {
             method: 'POST',
-            headers: { 
+            headers: {
                 'Authorization': `DeepL-Auth-Key ${DEEPL_API_KEY}`,
-                'Content-Type': 'application/json' 
+                'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ 
-                text: [textToTranslate], 
-                target_lang: targetLang 
+            body: JSON.stringify({
+                text: [textToTranslate],
+                target_lang: targetLang
             })
         });
         const data = await res.json();
-        
+
         if (data.translations && data.translations.length > 0) {
-            box.innerHTML = `<strong style="font-size:13px;">🌍 Çeviri Sonucu (Yerel Model):</strong><br><br><div style="font-size:13px;">${data.translations[0].text}</div>`;
+            box.innerHTML = `<strong style="font-size:13px;">🌍 Çeviri Sonucu (Helsinki-NLP):</strong><br><br><div style="font-size:13px;">${data.translations[0].text}</div>`;
         } else {
             box.innerHTML = `<span style="color:var(--accent-red)">Hata: ${data.message || 'Çeviri alınamadı'}</span>`;
         }
@@ -403,10 +402,10 @@ window.showTranslate = async function() {
 
 function renderList() {
     let filteredData = mockData;
-    
+
     // Filter by folder first
     filteredData = filteredData.filter(m => m.folder === state.selectedFolder);
-    
+
     if (state.selectedAccount) {
         filteredData = filteredData.filter(m => m.accName === state.selectedAccount);
     }
@@ -421,11 +420,11 @@ function renderList() {
     const html = filteredData.map(m => {
         const badges = [];
         badges.push(`<span class="badge" style="background:${m.accColor}20;color:${m.accColor};border:1px solid ${m.accColor}50">${m.accName}</span>`);
-        if(m.pinned) badges.push('<span class="badge pin">📌</span>');
-        if(m.important) badges.push('<span class="badge important">⭐</span>');
-        if(m.hasAttachment) badges.push('<span class="badge attachment">📎</span>');
-        if(m.aiTopic) badges.push(`<span class="badge ai-topic" style="background:var(--bg-tertiary);color:var(--text-primary)">${m.aiIcon} ${m.aiTopic}</span>`);
-        if(m.aiSpam) badges.push(`<span class="badge ai-safe" style="background:${m.aiSpam.color}30;color:${m.aiSpam.color}">🛡️ ${m.aiSpam.score}/10 ${m.aiSpam.text}</span>`);
+        if (m.pinned) badges.push('<span class="badge pin">📌</span>');
+        if (m.important) badges.push('<span class="badge important">⭐</span>');
+        if (m.hasAttachment) badges.push('<span class="badge attachment">📎</span>');
+        if (m.aiTopic) badges.push(`<span class="badge ai-topic" style="background:var(--bg-tertiary);color:var(--text-primary)">${m.aiIcon} ${m.aiTopic}</span>`);
+        if (m.aiSpam) badges.push(`<span class="badge ai-safe" style="background:${m.aiSpam.color}30;color:${m.aiSpam.color}">🛡️ ${m.aiSpam.score}/10 ${m.aiSpam.text}</span>`);
 
         return `<div class="msg-row ${state.selectedMessageId === m.id ? 'selected' : ''} ${!m.read ? 'unread' : ''}" onclick="selectMsg(${m.id})">
             <div class="msg-sender">${m.sender} ${badges.join('')}</div>
@@ -435,7 +434,15 @@ function renderList() {
             <div class="msg-actions">
                 <button class="act-btn" onclick="event.stopPropagation(); togglePin(${m.id})">${m.pinned ? '📌' : '📍'}</button>
                 <button class="act-btn" onclick="event.stopPropagation(); toggleImportant(${m.id})">${m.important ? '⭐' : '☆'}</button>
-                <button class="act-btn" onclick="event.stopPropagation()">⏰</button>
+                <div style="position:relative; display:inline-block;" class="mock-dropdown">
+                    <button class="act-btn" onclick="event.stopPropagation(); this.nextElementSibling.style.display = this.nextElementSibling.style.display==='block' ? 'none' : 'block'">⏰</button>
+                    <div style="display:none; position:absolute; top:100%; right:0; background:var(--bg-secondary); border:1px solid var(--border); border-radius:4px; box-shadow:0 4px 12px rgba(0,0,0,0.5); z-index:100; min-width:140px; padding:4px 0; margin-top:4px; text-align:left;">
+                        <div style="padding:8px 12px; cursor:pointer; font-size:13px; color:var(--text-primary);" onmouseover="this.style.background='rgba(59,130,246,0.1)'" onmouseout="this.style.background='transparent'" onclick="event.stopPropagation(); snoozeMsg('${m.id}', '1 saat')">1 saat sonra</div>
+                        <div style="padding:8px 12px; cursor:pointer; font-size:13px; color:var(--text-primary);" onmouseover="this.style.background='rgba(59,130,246,0.1)'" onmouseout="this.style.background='transparent'" onclick="event.stopPropagation(); snoozeMsg('${m.id}', '4 saat')">4 saat sonra</div>
+                        <div style="padding:8px 12px; cursor:pointer; font-size:13px; color:var(--text-primary);" onmouseover="this.style.background='rgba(59,130,246,0.1)'" onmouseout="this.style.background='transparent'" onclick="event.stopPropagation(); snoozeMsg('${m.id}', 'Yarın')">Yarın</div>
+                        <div style="padding:8px 12px; cursor:pointer; font-size:13px; color:var(--text-primary);" onmouseover="this.style.background='rgba(59,130,246,0.1)'" onmouseout="this.style.background='transparent'" onclick="event.stopPropagation(); snoozeMsg('${m.id}', 'Gelecek hafta')">Gelecek hafta</div>
+                    </div>
+                </div>
                 <button class="act-btn" onclick="event.stopPropagation(); deleteMsg(${m.id})">🗑️</button>
             </div>
         </div>`;
@@ -445,7 +452,7 @@ function renderList() {
 
 function renderPreview() {
     const m = mockData.find(x => x.id === state.selectedMessageId);
-    if(!m) {
+    if (!m) {
         document.getElementById('preview-pane').innerHTML = '<div class="empty-state"><div class="empty-icon">📭</div><div>Seçili e-posta yok</div></div>';
         return;
     }
@@ -475,6 +482,22 @@ function renderPreview() {
                     <div class="preview-to">Kime: <strong>Tüm Ekip</strong> &lt;info@company.com&gt;</div>
                 </div>
                 <div class="preview-time">${m.time}</div>
+                <div class="preview-actions" style="display:flex; gap:6px; align-items:center; margin-left:auto;">
+                    <button class="tool-btn" onclick="mockReply('${m.id}')" title="Yanıtla" style="padding:6px 10px; background:var(--bg-tertiary); border:1px solid var(--border); border-radius:4px; cursor:pointer; color:var(--text-primary); font-size:13px;">↩️ Yanıtla</button>
+                    <button class="tool-btn" onclick="mockForward('${m.id}')" title="İlet" style="padding:6px 10px; background:var(--bg-tertiary); border:1px solid var(--border); border-radius:4px; cursor:pointer; color:var(--text-primary); font-size:13px;">➡️ İlet</button>
+                    <div style="position:relative; display:inline-block;" class="mock-dropdown">
+                        <button class="tool-btn" onclick="this.nextElementSibling.style.display = this.nextElementSibling.style.display==='block' ? 'none' : 'block'" title="Ertele" style="padding:6px 10px; background:var(--bg-tertiary); border:1px solid var(--border); border-radius:4px; cursor:pointer; color:var(--text-primary); font-size:13px;">⏱️ Ertele</button>
+                        <div style="display:none; position:absolute; top:100%; right:0; background:var(--bg-secondary); border:1px solid var(--border); border-radius:4px; box-shadow:0 4px 12px rgba(0,0,0,0.5); z-index:100; min-width:140px; padding:4px 0; margin-top:4px; text-align:left;">
+                            <div style="padding:8px 12px; cursor:pointer; font-size:13px; color:var(--text-primary);" onmouseover="this.style.background='rgba(59,130,246,0.1)'" onmouseout="this.style.background='transparent'" onclick="snoozeMsg('${m.id}', '1 saat')">1 saat sonra</div>
+                            <div style="padding:8px 12px; cursor:pointer; font-size:13px; color:var(--text-primary);" onmouseover="this.style.background='rgba(59,130,246,0.1)'" onmouseout="this.style.background='transparent'" onclick="snoozeMsg('${m.id}', '4 saat')">4 saat sonra</div>
+                            <div style="padding:8px 12px; cursor:pointer; font-size:13px; color:var(--text-primary);" onmouseover="this.style.background='rgba(59,130,246,0.1)'" onmouseout="this.style.background='transparent'" onclick="snoozeMsg('${m.id}', 'Yarın')">Yarın</div>
+                            <div style="padding:8px 12px; cursor:pointer; font-size:13px; color:var(--text-primary);" onmouseover="this.style.background='rgba(59,130,246,0.1)'" onmouseout="this.style.background='transparent'" onclick="snoozeMsg('${m.id}', 'Gelecek hafta')">Gelecek hafta</div>
+                        </div>
+                    </div>
+                    <button class="tool-btn" onclick="togglePin('${m.id}')" title="Sabitle" style="padding:6px 10px; background:var(--bg-tertiary); border:1px solid var(--border); border-radius:4px; cursor:pointer; color:var(--text-primary); font-size:13px;">${m.pinned ? '📍' : '📌'}</button>
+                    <button class="tool-btn" onclick="toggleImportant('${m.id}')" title="Önemli" style="padding:6px 10px; background:var(--bg-tertiary); border:1px solid var(--border); border-radius:4px; cursor:pointer; color:var(--text-primary); font-size:13px;">${m.important ? '⭐' : '☆'}</button>
+                    <button class="tool-btn" onclick="deleteMsg('${m.id}')" title="Sil" style="padding:6px 10px; background:var(--bg-tertiary); border:1px solid var(--border); border-radius:4px; cursor:pointer; color:var(--text-primary); font-size:13px;">🗑️</button>
+                </div>
             </div>
         </div>
         <div class="preview-body" style="padding: 20px; font-size: 14px; line-height: 1.6; color: var(--text-primary);">
@@ -487,24 +510,24 @@ function renderPreview() {
 document.addEventListener("DOMContentLoaded", () => {
     setTimeout(autoAnalyzeMockMessages, 1000);
 
-    window.selectAccount = function(accName) {
+    window.selectAccount = function (accName) {
         state.selectedAccount = accName;
         document.querySelectorAll('.account-item').forEach(el => el.classList.remove('active'));
-        
+
         let titleSuffix = '';
-        if(state.selectedFolder === 'inbox') titleSuffix = 'Inbox';
-        else if(state.selectedFolder === 'sent') titleSuffix = 'Sent';
-        else if(state.selectedFolder === 'drafts') titleSuffix = 'Drafts';
-        else if(state.selectedFolder === 'spam') titleSuffix = 'Spam';
-        else if(state.selectedFolder === 'trash') titleSuffix = 'Trash';
+        if (state.selectedFolder === 'inbox') titleSuffix = 'Inbox';
+        else if (state.selectedFolder === 'sent') titleSuffix = 'Sent';
+        else if (state.selectedFolder === 'drafts') titleSuffix = 'Drafts';
+        else if (state.selectedFolder === 'spam') titleSuffix = 'Spam';
+        else if (state.selectedFolder === 'trash') titleSuffix = 'Trash';
 
         if (accName === null) {
             document.querySelectorAll('.account-item')[0].classList.add('active');
             document.getElementById('list-title').textContent = 'Unified ' + titleSuffix;
         } else {
             const items = document.querySelectorAll('.account-item');
-            for(let i=1; i<items.length; i++) {
-                if(items[i].textContent.includes(accName)) { items[i].classList.add('active'); break; }
+            for (let i = 1; i < items.length; i++) {
+                if (items[i].textContent.includes(accName)) { items[i].classList.add('active'); break; }
             }
             document.getElementById('list-title').textContent = accName + ' ' + titleSuffix;
         }
@@ -512,13 +535,13 @@ document.addEventListener("DOMContentLoaded", () => {
         renderPreview();
     };
 
-    window.selectFolder = function(folderName, element) {
+    window.selectFolder = function (folderName, element) {
         state.selectedFolder = folderName;
         document.querySelectorAll('.folder-item').forEach(el => el.classList.remove('active'));
-        if(element) element.classList.add('active');
-        
+        if (element) element.classList.add('active');
+
         state.selectedMessageId = null;
-        
+
         selectAccount(state.selectedAccount); // Re-trigger title change and render
     };
 
@@ -557,11 +580,22 @@ document.addEventListener("DOMContentLoaded", () => {
 
     renderList();
     renderPreview();
-    
+
     // Wire up dummy analytics and focus functions used in index.html
     window.mailora = {
         search: (val) => { state.searchQuery = val; renderList(); },
-        compose: () => { document.getElementById('compose-modal').style.display = 'flex'; },
+        compose: (data = null) => { 
+            document.getElementById('compose-modal').style.display = 'flex'; 
+            if (data) {
+                if(document.getElementById('compose-to')) document.getElementById('compose-to').value = data.to || '';
+                if(document.getElementById('compose-subject')) document.getElementById('compose-subject').value = data.subject || '';
+                if(document.getElementById('compose-body')) document.getElementById('compose-body').value = data.body || '';
+            } else {
+                if(document.getElementById('compose-to')) document.getElementById('compose-to').value = '';
+                if(document.getElementById('compose-subject')) document.getElementById('compose-subject').value = '';
+                if(document.getElementById('compose-body')) document.getElementById('compose-body').value = '';
+            }
+        },
         closeCompose: () => { document.getElementById('compose-modal').style.display = 'none'; },
         handleFileInput: () => { alert("Dosya ekleme simülasyonu"); },
         sendEmail: () => { alert("E-posta gönderildi!"); document.getElementById('compose-modal').style.display = 'none'; },
@@ -574,7 +608,7 @@ document.addEventListener("DOMContentLoaded", () => {
             const drawer = document.getElementById('analytics-drawer');
             if (drawer) {
                 state.analyticsOpen = !state.analyticsOpen;
-                if(state.analyticsOpen) {
+                if (state.analyticsOpen) {
                     drawer.classList.add('open');
                     document.getElementById('stat-total').textContent = mockData.length * 42;
                     document.getElementById('stat-sent').textContent = 14;
@@ -584,6 +618,38 @@ document.addEventListener("DOMContentLoaded", () => {
                 } else {
                     drawer.classList.remove('open');
                 }
+            }
+        }
+    };
+    
+    window.mockReply = function(id) {
+        const msg = mockData.find(m => m.id == id);
+        if(!msg) return;
+        const stripHtml = (html) => { const t = document.createElement("DIV"); t.innerHTML = html || ""; return t.textContent || t.innerText || ""; };
+        const subj = msg.subject.startsWith('Re:') ? msg.subject : `Re: ${msg.subject}`;
+        const body = `\n\n> ${msg.sender} yazdı:\n> ${stripHtml(msg.body).replace(/\n/g, '\n> ')}`;
+        window.mailora.compose({ to: msg.email, subject: subj, body });
+    };
+
+    window.mockForward = function(id) {
+        const msg = mockData.find(m => m.id == id);
+        if(!msg) return;
+        const stripHtml = (html) => { const t = document.createElement("DIV"); t.innerHTML = html || ""; return t.textContent || t.innerText || ""; };
+        const subj = msg.subject.startsWith('Fwd:') ? msg.subject : `Fwd: ${msg.subject}`;
+        const body = `\n\n> İletilen mesaj:\n> Kimden: ${msg.sender} <${msg.email}>\n> Konu: ${msg.subject}\n>\n> ${stripHtml(msg.body).replace(/\n/g, '\n> ')}`;
+        window.mailora.compose({ to: '', subject: subj, body });
+    };
+
+    window.snoozeMsg = function(id, duration) {
+        const msg = mockData.find(m => m.id == id);
+        if (msg) {
+            alert(`"${msg.subject}" başlıklı e-posta ${duration} süreliğine ertelendi.`);
+            const idx = mockData.findIndex(m => m.id == id);
+            if (idx > -1) {
+                mockData.splice(idx, 1);
+                if (state.selectedMessageId == id && mockData.length > 0) state.selectedMessageId = mockData[0].id;
+                renderList();
+                renderPreview();
             }
         }
     };

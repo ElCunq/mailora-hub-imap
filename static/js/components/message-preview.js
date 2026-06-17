@@ -221,7 +221,22 @@ async function render() {
         el('btn-ai')?.addEventListener('click', () => showAI(msg));
         el('btn-translate')?.addEventListener('click', () => showTranslate(msg));
         el('btn-unsub')?.addEventListener('click', () => unsubNewsletter(msg));
-        el('btn-reply')?.addEventListener('click', () => { store.dispatch({ type: ACTION.TOGGLE_COMPOSE }); });
+        const stripHtml = (html) => {
+            const tmp = document.createElement("DIV");
+            tmp.innerHTML = html || "";
+            return tmp.textContent || tmp.innerText || "";
+        };
+
+        el('btn-reply')?.addEventListener('click', () => { 
+            const subj = msg.subject.startsWith('Re:') ? msg.subject : `Re: ${msg.subject}`;
+            const body = `\n\n> ${msg.from} yazdı:\n> ${stripHtml(msg.body).replace(/\n/g, '\n> ')}`;
+            store.dispatch({ type: ACTION.TOGGLE_COMPOSE, payload: { to: msg.from, subject: subj, body } }); 
+        });
+        el('btn-forward')?.addEventListener('click', () => { 
+            const subj = msg.subject.startsWith('Fwd:') ? msg.subject : `Fwd: ${msg.subject}`;
+            const body = `\n\n> İletilen mesaj:\n> Kimden: ${msg.from}\n> Konu: ${msg.subject}\n>\n> ${stripHtml(msg.body).replace(/\n/g, '\n> ')}`;
+            store.dispatch({ type: ACTION.TOGGLE_COMPOSE, payload: { to: '', subject: subj, body } }); 
+        });
 
         // Fetch Generative MT5 Smart Replies
         fetch(`${AI_API}/smart-reply`, {

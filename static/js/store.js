@@ -27,14 +27,30 @@ function transition(msg, target, p={}) {
     else { msg.pinned = false; msg.snoozed = false; msg.snoozeUntil = null; }
 }
 function norm(m) { return {...m, pinned:m.pinned||false, snoozed:m.snoozed||false, snoozeUntil:m.snoozeUntil||null, important:m.important||false, read:m.read||false, isNewsletter:m.isNewsletter||false}; }
+function getPinned() { try { return JSON.parse(localStorage.getItem('mailora-pinned')) || []; } catch(e){return [];} }
+function savePinned(arr) { localStorage.setItem('mailora-pinned', JSON.stringify(arr)); }
+
 function reducer(s, a) {
     const n = {...s};
     switch(a.type) {
         case ACTION.SET_ACCOUNTS: n.accounts=a.payload; if(!n.selectedAccountId&&a.payload.length) n.selectedAccountId=a.payload[0].id; break;
-        case ACTION.SET_MESSAGES: n.messages=a.payload.map(norm); break;
+        case ACTION.SET_MESSAGES: 
+            const pinned = getPinned();
+            n.messages=a.payload.map(m => {
+                const normM = norm(m);
+                if (pinned.includes(m.id)) transition(normM, MSG_STATE.PINNED);
+                return normM;
+            }); 
+            break;
         case ACTION.SET_FOLDERS: n.folders=a.payload; break;
-        case ACTION.PIN_MESSAGE: n.messages=n.messages.map(m=>{if(m.id!==a.payload)return m;const c={...m};transition(c,MSG_STATE.PINNED);return c;}); break;
-        case ACTION.UNPIN_MESSAGE: n.messages=n.messages.map(m=>m.id===a.payload?{...m,pinned:false}:m); break;
+        case ACTION.PIN_MESSAGE: 
+            n.messages=n.messages.map(m=>{if(m.id!==a.payload)return m;const c={...m};transition(c,MSG_STATE.PINNED);return c;}); 
+            const p = getPinned(); if(!p.includes(a.payload)){ p.push(a.payload); savePinned(p); }
+            break;
+        case ACTION.UNPIN_MESSAGE: 
+            n.messages=n.messages.map(m=>m.id===a.payload?{...m,pinned:false}:m); 
+            savePinned(getPinned().filter(id => id !== a.payload));
+            break;
         case ACTION.SNOOZE_MESSAGE: n.messages=n.messages.map(m=>{if(m.id!==a.payload.id)return m;const c={...m};transition(c,MSG_STATE.SNOOZED,{until:a.payload.until});return c;}); break;
         case ACTION.UNSNOOZE_MESSAGE: n.messages=n.messages.map(m=>m.id===a.payload?{...m,snoozed:false,snoozeUntil:null}:m); break;
         case ACTION.MARK_IMPORTANT: n.messages=n.messages.map(m=>m.id===a.payload?{...m,important:!m.important}:m); break;
@@ -47,7 +63,7 @@ function reducer(s, a) {
         case ACTION.SET_SEARCH_RESULTS: n.searchResults=a.payload; break;
         case ACTION.TOGGLE_FOCUS: n.focusMode=!n.focusMode; break;
         case ACTION.TOGGLE_THEME: n.theme=n.theme==='dark'?'light':'dark'; localStorage.setItem('mailora-theme',n.theme); document.documentElement.setAttribute('data-theme',n.theme); break;
-        case ACTION.TOGGLE_COMPOSE: n.composeOpen=!n.composeOpen; if(!n.composeOpen) n.attachments=[]; break;
+        case ACTION.TOGGLE_COMPOSE: n.composeOpen=!n.composeOpen; if(!n.composeOpen) { n.attachments=[]; n.composeData=null; } else { n.composeData=a.payload||null; } break;
         case ACTION.TOGGLE_ANALYTICS: n.analyticsOpen=!n.analyticsOpen; break;
         case ACTION.ADD_ATTACHMENT: n.attachments=[...n.attachments,a.payload]; break;
         case ACTION.REMOVE_ATTACHMENT: n.attachments=n.attachments.filter((_,i)=>i!==a.payload); break;

@@ -27,6 +27,11 @@ function render(open) {
                 fromSelect.disabled = false;
             }
         }
+        if (s.composeData) {
+            if (el('compose-to')) el('compose-to').value = s.composeData.to || '';
+            if (el('compose-subject')) el('compose-subject').value = s.composeData.subject || '';
+            if (el('compose-body')) el('compose-body').value = s.composeData.body || '';
+        }
     }
 }
 function initDropzone() {

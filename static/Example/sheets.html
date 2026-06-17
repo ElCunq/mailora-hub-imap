@@ -80,6 +80,7 @@
             </div>
             <input type="text" class="search-box" placeholder="🔍 Hücre veya veri ara..." id="sheet-search" oninput="searchCells(this.value)">
             <div class="header-actions">
+                <button class="compose-btn" onclick="openShareModal()" style="background:#10b981; color:#fff; border:none; margin-right:5px;">👥 Paylaş</button>
                 <button class="compose-btn" onclick="addSheet()">📄 Yeni Sayfa</button>
                 <button class="icon-btn" onclick="document.getElementById('csv-upload').click()" title="CSV Yükle">📤</button>
                 <input type="file" id="csv-upload" accept=".csv" style="display:none" onchange="importCSV(event)">
@@ -670,6 +671,52 @@
         initData();
         renderTable();
         updateStatus();
+
+        // Share Modal Functions
+        function openShareModal() { document.getElementById('share-modal').style.display = 'flex'; }
+        function closeShareModal() { document.getElementById('share-modal').style.display = 'none'; }
+        function confirmShare() {
+            const select = document.getElementById('share-accounts');
+            const selected = Array.from(select.selectedOptions).map(opt => opt.text);
+            if(selected.length === 0) { alert('Lütfen en az bir hesap seçin.'); return; }
+            alert('"' + currentFile + '" tablosu başarıyla paylaşıldı:\\n' + selected.join('\\n'));
+            closeShareModal();
+        }
     </script>
+
+    <!-- Share Modal -->
+    <div id="share-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:2000; justify-content:center; align-items:center;">
+        <div style="background:var(--bg-secondary); border:1px solid var(--border); border-radius:12px; padding:24px; width:400px; max-width:90%; box-shadow:0 10px 30px rgba(0,0,0,0.5);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+                <h3 style="margin:0; font-size:16px; color:var(--text-primary);">Tabloyu Paylaş</h3>
+                <button onclick="closeShareModal()" style="background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:16px;">✕</button>
+            </div>
+            <p style="font-size:13px; color:var(--text-secondary); margin-bottom:16px;">Bu tabloyu diğer departman veya hesaplarla paylaşın.</p>
+            
+            <div style="margin-bottom:16px;">
+                <label style="display:block; font-size:12px; color:var(--text-muted); margin-bottom:8px;">Erişim İzni Verilecek Hesaplar:</label>
+                <select id="share-accounts" multiple style="width:100%; padding:8px; background:var(--bg-tertiary); border:1px solid var(--border); border-radius:6px; color:var(--text-primary); font-size:13px; height:80px; font-family:inherit;">
+                    <option value="Admin">Admin (Tüm Yetkiler)</option>
+                    <option value="Dev">Yazılım Ekibi</option>
+                    <option value="Finance">Finans Departmanı</option>
+                    <option value="Personal">Kişisel Hesaplar</option>
+                </select>
+                <p style="font-size:11px; color:var(--text-muted); margin-top:4px;">Ctrl/Cmd tuşuna basılı tutarak birden fazla hesap seçebilirsiniz.</p>
+            </div>
+
+            <div style="margin-bottom:20px;">
+                <label style="display:block; font-size:12px; color:var(--text-muted); margin-bottom:8px;">Görüntüleme Yetkisi:</label>
+                <select id="share-permission" style="width:100%; padding:8px; background:var(--bg-tertiary); border:1px solid var(--border); border-radius:6px; color:var(--text-primary); font-size:13px; font-family:inherit;">
+                    <option value="view">Sadece Görüntüleyebilir</option>
+                    <option value="edit">Düzenleyebilir</option>
+                </select>
+            </div>
+
+            <div style="display:flex; justify-content:flex-end; gap:8px;">
+                <button onclick="closeShareModal()" style="padding:8px 16px; background:var(--bg-tertiary); border:1px solid var(--border); border-radius:6px; color:var(--text-primary); cursor:pointer; font-size:13px;">İptal</button>
+                <button onclick="confirmShare()" style="padding:8px 16px; background:var(--accent-blue); border:none; border-radius:6px; color:#fff; cursor:pointer; font-size:13px; font-weight:600;">Paylaş</button>
+            </div>
+        </div>
+    </div>
 </body>
 </html>

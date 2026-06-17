@@ -18,10 +18,14 @@ async fn register(
             "username": user.username,
             "role": user.role
         }))).into_response(),
-        Err(e) => (StatusCode::BAD_REQUEST, Json(serde_json::json!({
-            "ok": false,
-            "error": e.to_string()
-        }))).into_response(),
+        Err(e) => {
+            let err_str = e.to_string();
+            let msg = if err_str.contains("UNIQUE constraint") { "Bu kullanıcı adı zaten alınmış." } else { &err_str };
+            (StatusCode::BAD_REQUEST, Json(serde_json::json!({
+                "ok": false,
+                "error": msg
+            }))).into_response()
+        }
     }
 }
 
