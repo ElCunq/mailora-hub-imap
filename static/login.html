@@ -152,6 +152,7 @@
                     localStorage.setItem('auth_token', data.token);
                     localStorage.setItem('auth_user', data.username);
                     localStorage.setItem('auth_role', data.role);
+                    localStorage.setItem('mailora-mode', 'live');
                     window.location.href = '/static/index.html';
                 } else {
                     err.textContent = data.error || 'Giriş başarısız';

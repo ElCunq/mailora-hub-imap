@@ -366,42 +366,10 @@ async function showTranslate(msg) {
                 body: JSON.stringify({ text: textToTranslate, target_lang: targetLang })
             });
             const data = await res.json();
-            
-            if (data.translated_text && !data.error) {
-                resBox.innerHTML = `<strong>🌍 Çeviri Sonucu (Yerel Helsinki-NLP Model):</strong><br><br>${data.translated_text}`;
-                return;
-            }
-            // Yerel model başarısız olursa DeepL'e geç
-            throw new Error(data.error || 'Yerel model yanıt vermedi');
-        } catch (localErr) {
-            console.warn('Yerel çeviri başarısız, DeepL deneniyor...', localErr);
-            resBox.innerHTML = `<div style="display:flex;align-items:center;gap:8px"><div class="spinner"></div> <span>Yerel model başarısız, DeepL deneniyor...</span></div>`;
-        }
-
-        // 2. Fallback: DeepL API
-        const DEEPL_API_KEY = 'cce5eaab-78ec-41d0-b7ef-b066ace5b0a5:fx';
-        const deeplLang = targetLang === 'tr' ? 'TR' : 'EN-US';
-        try {
-            const res = await fetch('https://corsproxy.io/?https://api-free.deepl.com/v2/translate', {
-                method: 'POST',
-                headers: { 
-                    'Authorization': `DeepL-Auth-Key ${DEEPL_API_KEY}`,
-                    'Content-Type': 'application/json' 
-                },
-                body: JSON.stringify({ 
-                    text: [textToTranslate], 
-                    target_lang: deeplLang 
-                })
-            });
-            const data = await res.json();
-            
-            if (data.translations && data.translations.length > 0) {
-                resBox.innerHTML = `<strong>🌍 Çeviri Sonucu (DeepL):</strong><br><br>${data.translations[0].text}`;
-            } else {
-                throw new Error(data.message || 'Çeviri alınamadı');
-            }
+            if (data.error) throw new Error(data.error);
+            resBox.innerHTML = `<strong>Çeviri Sonucu (Yerel Helsinki-NLP Model):</strong><br><br>${data.translated_text}`;
         } catch (e) {
-            resBox.innerHTML = `<span style="color:#ef4444">Çeviri Hatası: Hem yerel model hem de DeepL başarısız oldu.<br>AI API sunucusunun çalıştığından emin olun: <code>cd MailoraPro && python api_server.py</code></span>`;
+            resBox.innerHTML = `<span style="color:#ef4444">Hata: ${e.message}</span>`;
         }
     });
 }

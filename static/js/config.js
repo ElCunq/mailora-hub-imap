@@ -6,7 +6,7 @@ if (queryMode === 'demo' || queryMode === 'live') {
 }
 
 export const CONFIG = {
-    mode: localStorage.getItem('mailora-mode') || 'demo',
+    mode: localStorage.getItem('mailora-mode') || 'live',
     apiBase: '',
     maxFileSize: 10 * 1024 * 1024,
     maxAttachments: 10,
