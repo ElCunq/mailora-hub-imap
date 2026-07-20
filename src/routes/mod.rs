@@ -1,4 +1,3 @@
-pub mod jmap_proxy;
 use crate::persist;
 use crate::services::diff_service::AccountCreds;
 use crate::services::diff_service::ACCOUNTS; // add account store
@@ -13,23 +12,18 @@ use serde::Deserialize; // correct import from crate root
 use tower_http::services::ServeDir;
 
 pub mod auth;
-pub mod discovery;
 pub mod admin;
 pub mod accounts;
 pub mod debug;
 pub mod diff;
 pub mod idle;
-pub mod oauth;
 pub mod sync;
 pub mod test;
 pub mod unified;
 pub mod flags;
 pub mod settings;
 pub mod snooze;
-pub mod contacts;
-pub mod calendar;
 pub mod outbox;
-pub mod sheets;
 
 #[derive(Deserialize)]
 #[allow(non_snake_case)]
@@ -184,7 +178,6 @@ where
         .route("/", get(root_page))
         .route("/app", get(app_page))
         .nest_service("/static", ServeDir::new("static"))
-        .nest("/sheets", sheets::router())
         .route("/login", post(login))
         .route("/diff", get(diff::diff_handler))
         .route("/body", get(diff::body_handler))
@@ -233,21 +226,4 @@ where
         .route("/outbox", get(outbox::list_outbox))
         .route("/outbox/:id", get(outbox::get_outbox).delete(outbox::delete_outbox))
         .route("/outbox/:id/retry", post(outbox::retry_outbox))
-        // ─── Contacts (PIM v1.6) ─────────────────────────────────────────────
-        .route("/contacts", get(contacts::list_contacts).post(contacts::create_contact))
-        .route("/contacts/suggest", get(contacts::suggest_contacts))
-        .route("/contacts/groups", get(contacts::list_groups).post(contacts::create_group))
-        .route("/contacts/import", post(contacts::import_contacts))
-        .route("/contacts/export", get(contacts::export_contacts))
-        .route("/contacts/:id", get(contacts::get_contact).put(contacts::update_contact).delete(contacts::delete_contact))
-        .route("/contacts/:id/groups/:group_id", post(contacts::add_to_group).delete(contacts::remove_from_group))
-        .route("/contacts/conflicts", get(contacts::list_conflicts))
-        .route("/contacts/conflicts/:id/resolve", post(contacts::resolve_conflict))
-        .route("/contacts/duplicates", get(contacts::list_duplicates))
-        .route("/contacts/duplicates/merge", post(contacts::merge_duplicates))
-        .route("/sync/carddav/:account_id", post(contacts::sync_carddav))
-        // ─── Calendar (PIM v1.7) ─────────────────────────────────────────────
-        .nest("/calendar", calendar::router().with_state(pool.clone()))
-        // ─── PIM Auto-Discovery Fallback ─────────────────────────────────────
-        .route("/.well-known/carddav", get(|| async { axum::response::Redirect::permanent("/static/contacts.html") }))
 }

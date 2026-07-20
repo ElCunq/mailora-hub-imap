@@ -1,20 +1,19 @@
-// filepath: /mailora-hub-imap/mailora-hub-imap/tests/integration_events.rs
-use crate::main;
-use axum::http::StatusCode;
-use axum::Router;
-use hyper::Body;
-use tower::ServiceExt; // for `app.oneshot()` // assuming main.rs contains the setup for the app
+use axum::{body::Body, http::{Request, StatusCode}, routing::get, Router};
+use std::sync::Arc;
+use tower::ServiceExt;
 
 #[tokio::test]
-async fn test_events_endpoint() {
-    let app = Router::new().nest("/events", main::app()); // Adjust this line based on your app structure
+async fn test_idle_status_endpoint() {
+    let idle_manager = Arc::new(mailora_hub_imap::services::idle_watcher_service::IdleWatcherManager::new());
+    let app = Router::new()
+        .route("/idle/status", get(mailora_hub_imap::routes::idle::idle_status))
+        .with_state(idle_manager.clone());
 
-    // Test a GET request to /events
     let response = app
         .oneshot(
             Request::builder()
                 .method("GET")
-                .uri("/events")
+                .uri("/idle/status")
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -22,6 +21,4 @@ async fn test_events_endpoint() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::OK);
-
-    // Additional assertions can be added here based on expected response
 }

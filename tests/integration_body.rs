@@ -1,24 +1,27 @@
-// filepath: /mailora-hub-imap/mailora-hub-imap/tests/integration_body.rs
-use crate::app;
-use axum::{http::StatusCode, routing::get, Router};
-use hyper::Body;
-use tower::ServiceExt; // for `app.oneshot()` // assuming you have a module that sets up your app
+use axum::{body::Body, http::{Request, StatusCode}, Router};
+use tower::ServiceExt;
 
 #[tokio::test]
-async fn test_body_endpoint() {
-    let app = Router::new().route("/body", get(app::body_handler)); // replace with your actual handler
+async fn test_body_endpoint_not_found_account() {
+    let pool = sqlx::sqlite::SqlitePoolOptions::new()
+        .connect("sqlite::memory:")
+        .await
+        .unwrap();
+
+    let app = Router::new()
+        .merge(mailora_hub_imap::routes::routes(&pool))
+        .with_state(pool.clone());
 
     let response = app
         .oneshot(
-            http::Request::builder()
+            Request::builder()
                 .method("GET")
-                .uri("/body")
+                .uri("/body?accountId=nonexistent&uid=1")
                 .body(Body::empty())
                 .unwrap(),
         )
         .await
         .unwrap();
 
-    assert_eq!(response.status(), StatusCode::OK);
-    // Add more assertions based on expected response
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
 }

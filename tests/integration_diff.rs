@@ -1,23 +1,27 @@
-// filepath: /mailora-hub-imap/mailora-hub-imap/tests/integration_diff.rs
-use crate::main;
-use axum::{routing::get, Router};
-use hyper::Body;
-use tower::ServiceExt; // for `app.oneshot()` // assuming main.rs sets up the app
+use axum::{body::Body, http::{Request, StatusCode}, Router};
+use tower::ServiceExt;
 
 #[tokio::test]
-async fn test_diff_endpoint() {
-    let app = Router::new().route("/diff", get(main::diff_handler)); // replace with actual handler
+async fn test_diff_endpoint_missing_account() {
+    let pool = sqlx::sqlite::SqlitePoolOptions::new()
+        .connect("sqlite::memory:")
+        .await
+        .unwrap();
+
+    let app = Router::new()
+        .merge(mailora_hub_imap::routes::routes(&pool))
+        .with_state(pool.clone());
 
     let response = app
         .oneshot(
-            hyper::Request::builder()
+            Request::builder()
                 .method("GET")
-                .uri("/diff")
+                .uri("/diff?accountId=nonexistent")
                 .body(Body::empty())
                 .unwrap(),
         )
         .await
         .unwrap();
 
-    assert_eq!(response.status(), 200); // adjust based on expected status
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
 }

@@ -7,9 +7,7 @@ use tracing_subscriber::EnvFilter;
 mod db;
 mod imap;
 mod models;
-mod oauth;
 mod persist;
-mod pim;
 mod rbac;
 mod routes;
 mod services;
@@ -19,7 +17,6 @@ mod smtp;
 struct AppState {
     pool: sqlx::SqlitePool,
     idle_manager: Arc<services::idle_watcher_service::IdleWatcherManager>,
-    oauth_manager: Arc<oauth::OAuthManager>,
 }
 
 impl axum::extract::FromRef<AppState> for sqlx::SqlitePool {
@@ -34,11 +31,7 @@ impl axum::extract::FromRef<AppState> for Arc<services::idle_watcher_service::Id
     }
 }
 
-impl axum::extract::FromRef<AppState> for Arc<oauth::OAuthManager> {
-    fn from_ref(state: &AppState) -> Self {
-        state.oauth_manager.clone()
-    }
-}
+
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -89,13 +82,9 @@ async fn main() -> Result<()> {
         // Create idle watcher manager
         let idle_manager = Arc::new(services::idle_watcher_service::IdleWatcherManager::new());
 
-        // Create OAuth manager
-        let oauth_manager = Arc::new(oauth::OAuthManager::new());
-
         let state = AppState {
             pool: pool.clone(),
             idle_manager: idle_manager.clone(),
-            oauth_manager: oauth_manager.clone(),
         };
 
         // Start background scheduler
@@ -185,20 +174,12 @@ async fn main() -> Result<()> {
             .route("/idle/status", get(routes::idle::idle_status))
             .route("/idle/events", get(routes::idle::idle_events_stream));
 
-        let oauth_routes = Router::new()
-            .route("/oauth/start", get(routes::oauth::start_oauth))
-            .route("/oauth/callback", get(routes::oauth::oauth_callback))
-            .route("/oauth/setup-guide", get(routes::oauth::oauth_setup_guide))
-            .with_state(oauth_manager.clone());
-
         let app = Router::new()
             .route("/healthz", get(|| async { "ok" }))
             .merge(routes::routes(&pool))
             .merge(routes::auth::router().with_state(state.pool.clone()))
             .merge(routes::admin::router().with_state(state.pool.clone()))
-            .merge(routes::discovery::router())
             .merge(idle_routes)
-            .merge(oauth_routes)
             // App state
             .with_state(state.clone());
 

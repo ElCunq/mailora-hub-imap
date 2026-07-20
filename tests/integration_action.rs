@@ -1,24 +1,41 @@
-// filepath: /mailora-hub-imap/mailora-hub-imap/tests/integration_action.rs
-use axum::{http::StatusCode, Router};
-use hyper::Body;
-use mailora_hub_imap::main;
-use tower::ServiceExt; // for `app.oneshot()` // assuming main.rs contains the app setup
+use axum::{body::Body, http::{Request, StatusCode}, routing::get, Router};
+use tower::ServiceExt;
 
 #[tokio::test]
-async fn test_action_send() {
-    let app = Router::new().nest("/", main().await);
+async fn test_healthz_and_folders() {
+    let pool = sqlx::sqlite::SqlitePoolOptions::new()
+        .connect("sqlite::memory:")
+        .await
+        .unwrap();
 
-    let response = app
+    let app = Router::new()
+        .route("/healthz", get(|| async { "ok" }))
+        .merge(mailora_hub_imap::routes::routes(&pool))
+        .with_state(pool.clone());
+
+    let response = app.clone()
         .oneshot(
-            http::Request::builder()
-                .method("POST")
-                .uri("/action")
-                .body(Body::from("test payload"))
+            Request::builder()
+                .method("GET")
+                .uri("/healthz")
+                .body(Body::empty())
                 .unwrap(),
         )
         .await
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::OK);
-    // Additional assertions can be added based on expected behavior
+
+    let response_folders = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/folders?accountId=nonexistent")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response_folders.status(), StatusCode::NOT_FOUND);
 }
