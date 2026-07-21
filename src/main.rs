@@ -95,7 +95,10 @@ async fn main() -> Result<()> {
             idle_manager: idle_manager.clone(),
         };
 
-        // Start background scheduler
+        // Auto-seed Mailcow instance from env vars if not yet configured
+        crate::services::scheduler::seed_mailcow_instance_from_env(&pool).await;
+
+        // Start background scheduler (Mailcow discovery every 30s)
         crate::services::scheduler::start(pool.clone());
 
         // Start background maintenance service
