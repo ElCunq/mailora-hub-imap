@@ -203,6 +203,43 @@
             color: var(--text-primary);
             word-break: break-all;
         }
+        .inline-cred-form {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .inline-cred-input {
+            background: var(--bg-primary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text-primary);
+            font-family: inherit;
+            font-size: 12px;
+            padding: 5px 10px;
+            width: 160px;
+            transition: border-color 0.2s;
+        }
+        .inline-cred-input:focus {
+            outline: none;
+            border-color: var(--accent-blue);
+        }
+        .cred-save-btn {
+            padding: 5px 12px;
+            font-size: 11px;
+            font-weight: 600;
+            border-radius: 8px;
+            border: none;
+            cursor: pointer;
+            background: var(--gradient-primary);
+            color: #fff;
+            transition: opacity 0.2s;
+            white-space: nowrap;
+        }
+        .cred-save-btn:hover { opacity: 0.85; }
+        .cred-save-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .cred-status-ok { color: #10b981; font-size: 11px; font-weight: 600; }
+        .cred-status-fail { color: #ef4444; font-size: 11px; font-weight: 600; }
+        .cred-status-none { color: var(--text-muted); font-size: 11px; }
     </style>
 </head>
 
@@ -782,16 +819,36 @@
                                     <th>İsim / Açıklama</th>
                                     <th>Kota (MB)</th>
                                     <th>Durum</th>
+                                    <th style="min-width:220px">🔑 Şifre Tanımla</th>
                                     <th>Atamalar ve Yetki</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 ${mbs.map(mb => `
-                                <tr>
+                                <tr id="mb-row-${mb.id}">
                                     <td style="font-weight:600">${mb.address}</td>
                                     <td>${mb.display_name || '-'}</td>
                                     <td>${mb.quota_mb || 0} MB</td>
                                     <td><span class="status-pill ${mb.active ? 'active' : 'inactive'}">${mb.active ? 'Aktif' : 'Pasif'}</span></td>
+                                    <td>
+                                        <div class="inline-cred-form">
+                                            <input 
+                                                type="password"
+                                                class="inline-cred-input"
+                                                id="cred-input-${mb.id}"
+                                                placeholder="Şifre girin..."
+                                                onkeydown="if(event.key==='Enter') saveMailboxCredential(${mb.id}, '${mb.address}')"
+                                            >
+                                            <button 
+                                                class="cred-save-btn"
+                                                id="cred-btn-${mb.id}"
+                                                onclick="saveMailboxCredential(${mb.id}, '${mb.address}')"
+                                            >💾 Kaydet</button>
+                                        </div>
+                                        <div id="cred-status-${mb.id}" class="cred-status-none" style="margin-top:4px; font-size:11px">
+                                            ${mb.credential_status === 'present' ? '<span class="cred-status-ok">✅ Şifre tanımlı</span>' : '<span class="cred-status-none">⬜ Henüz şifre girilmedi</span>'}
+                                        </div>
+                                    </td>
                                     <td>
                                         <button class="compose-btn" style="padding:4px 12px; font-size:11px" onclick="openAssignMailbox(${mb.id}, '${mb.address}')">🔑 Kullanıcı & Yetki Atama</button>
                                     </td>
@@ -808,6 +865,49 @@
 
         function filterDomains() {
             renderDomains();
+        }
+
+        async function saveMailboxCredential(mailboxId, address) {
+            const input = document.getElementById(`cred-input-${mailboxId}`);
+            const btn = document.getElementById(`cred-btn-${mailboxId}`);
+            const statusEl = document.getElementById(`cred-status-${mailboxId}`);
+            const password = input.value.trim();
+
+            if (!password) {
+                input.style.borderColor = 'var(--accent-red)';
+                setTimeout(() => input.style.borderColor = '', 1500);
+                return;
+            }
+
+            btn.disabled = true;
+            btn.textContent = '⏳ Kaydediliyor...';
+            statusEl.innerHTML = '<span class="cred-status-none">⏳ IMAP doğrulanıyor...</span>';
+
+            try {
+                const res = await apiFetch(`/api/v1/rbac/mailboxes/${mailboxId}/credentials`, {
+                    method: 'POST',
+                    body: JSON.stringify({ password })
+                });
+                const data = await res.json();
+
+                if (res.ok && data.ok) {
+                    input.value = '';
+                    input.style.borderColor = '';
+                    if (data.imap_verified) {
+                        statusEl.innerHTML = '<span class="cred-status-ok">✅ Şifre kaydedildi & IMAP doğrulandı</span>';
+                    } else {
+                        const errMsg = data.error ? ` (${data.error})` : '';
+                        statusEl.innerHTML = `<span class="cred-status-fail">⚠️ Şifre kaydedildi fakat IMAP doğrulanamadı${errMsg}</span>`;
+                    }
+                } else {
+                    statusEl.innerHTML = `<span class="cred-status-fail">❌ Hata: ${data.error || 'Bilinmeyen hata'}</span>`;
+                }
+            } catch (e) {
+                statusEl.innerHTML = `<span class="cred-status-fail">❌ Bağlantı hatası: ${e.message}</span>`;
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '💾 Kaydet';
+            }
         }
 
         async function runDiscovery(instanceId) {

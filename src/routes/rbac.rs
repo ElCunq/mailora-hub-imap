@@ -33,6 +33,11 @@ pub struct MailboxAssignmentRequest {
     pub can_manage: bool,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct SetMailboxCredentialsRequest {
+    pub password: String,
+}
+
 #[derive(Debug, Serialize)]
 pub struct MyPermissionsResponse {
     pub user_id: i64,
@@ -160,6 +165,110 @@ async fn assign_mailbox_user(
     }
 }
 
+/// POST /api/v1/rbac/mailboxes/:mailbox_id/credentials
+/// SuperAdmin veya DomainAdmin'in posta kutusuna şifre tanımlaması için
+async fn set_mailbox_credentials(
+    auth_user: AuthUser,
+    State(pool): State<SqlitePool>,
+    Path(mailbox_id): Path<i64>,
+    Json(req): Json<SetMailboxCredentialsRequest>,
+) -> impl IntoResponse {
+    let auth_svc = AuthorizationService::new(&pool);
+    let mb_repo = MailboxRepository::new(&pool);
+
+    // Sadece SuperAdmin veya ilgili domain admin işlem yapabilir
+    let is_super = auth_svc.is_super_admin(auth_user.id).await.unwrap_or(false);
+    if !is_super {
+        let mb = match mb_repo.get_by_id(mailbox_id).await {
+            Ok(m) => m,
+            Err(_) => return (StatusCode::NOT_FOUND, Json(serde_json::json!({ "error": "Posta kutusu bulunamadı" }))).into_response(),
+        };
+        match auth_svc.can_manage_domain(auth_user.id, mb.domain_id).await {
+            Ok(true) => {}
+            _ => return (StatusCode::FORBIDDEN, Json(serde_json::json!({ "error": "Bu işlem için yetkiniz yok" }))).into_response(),
+        }
+    }
+
+    if req.password.trim().is_empty() {
+        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "error": "Şifre boş olamaz" }))).into_response();
+    }
+
+    // Posta kutusu adresini al
+    let mb = match mb_repo.get_by_id(mailbox_id).await {
+        Ok(m) => m,
+        Err(_) => return (StatusCode::NOT_FOUND, Json(serde_json::json!({ "error": "Posta kutusu bulunamadı" }))).into_response(),
+    };
+
+    // Şifreyi şifrele ve kaydet
+    let encrypted = crate::services::crypto::encrypt_secret(&req.password);
+    match mb_repo.save_credentials(mailbox_id, &mb.address, &encrypted).await {
+        Ok(_) => {
+            // IMAP bağlantısını doğrula (timeout ile)
+            let mb_clone = mb.clone();
+            let imap_host = {
+                // Instance bilgisini domain üzerinden çek
+                let imap: Option<String> = sqlx::query_scalar(
+                    "SELECT mi.imap_host FROM mailcow_instances mi 
+                     JOIN domains d ON d.mailcow_instance_id = mi.id 
+                     WHERE d.id = ?"
+                )
+                .bind(mb_clone.domain_id)
+                .fetch_optional(&pool)
+                .await
+                .unwrap_or(None);
+                imap.unwrap_or_default()
+            };
+            let imap_port: u16 = sqlx::query_scalar::<_, i64>(
+                "SELECT mi.imap_port FROM mailcow_instances mi 
+                 JOIN domains d ON d.mailcow_instance_id = mi.id 
+                 WHERE d.id = ?"
+            )
+            .bind(mb.domain_id)
+            .fetch_optional(&pool)
+            .await
+            .ok()
+            .flatten()
+            .unwrap_or(993) as u16;
+
+            let mut verified = false;
+            let mut verify_error: Option<String> = None;
+            if !imap_host.is_empty() {
+                match tokio::time::timeout(
+                    std::time::Duration::from_secs(5),
+                    crate::imap::conn::connect(&imap_host, imap_port, &mb.address, &req.password),
+                ).await {
+                    Ok(Ok(mut sess)) => {
+                        let _ = sess.session.logout().await;
+                        verified = true;
+                        // Doğrulama durumunu güncelle
+                        let _ = sqlx::query(
+                            "UPDATE mailbox_credentials SET verification_status = 'ok', last_verified_at = datetime('now'), verification_error = NULL WHERE mailbox_id = ?"
+                        ).bind(mailbox_id).execute(&pool).await;
+                    }
+                    Ok(Err(e)) => {
+                        verify_error = Some(format!("IMAP doğrulama hatası: {}", e));
+                        let _ = sqlx::query(
+                            "UPDATE mailbox_credentials SET verification_status = 'failed', last_verified_at = datetime('now'), verification_error = ? WHERE mailbox_id = ?"
+                        ).bind(verify_error.as_deref()).bind(mailbox_id).execute(&pool).await;
+                    }
+                    Err(_) => {
+                        verify_error = Some("IMAP bağlantı zaman aşımı (5s)".to_string());
+                    }
+                }
+            }
+
+            (StatusCode::OK, Json(serde_json::json!({
+                "ok": true,
+                "mailbox_id": mailbox_id,
+                "address": mb.address,
+                "imap_verified": verified,
+                "error": verify_error
+            }))).into_response()
+        },
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": e.to_string() }))).into_response(),
+    }
+}
+
 pub fn routes<S>(pool: &SqlitePool) -> Router<S>
 where
     S: Send + Sync + Clone + 'static,
@@ -171,4 +280,5 @@ where
         .route("/users/:user_id/role", post(update_user_role))
         .route("/domains/:domain_id/admins/:user_id", post(assign_domain_admin).delete(revoke_domain_admin))
         .route("/mailboxes/:mailbox_id/assignments", post(assign_mailbox_user))
+        .route("/mailboxes/:mailbox_id/credentials", post(set_mailbox_credentials))
 }
