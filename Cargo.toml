@@ -39,6 +39,8 @@ aes-gcm = { version = "0.10", features = ["aes"] }
 rand = "0.8"
 bcrypt = "0.17.1"
 async-native-tls = "0.6.0"
+regex = "1"
+urlencoding = "2"
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }

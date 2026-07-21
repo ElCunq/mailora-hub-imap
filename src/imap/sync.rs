@@ -582,7 +582,7 @@ pub async fn fetch_message_body_in(
     }
 }
 
-fn format_address(a: &async_imap::imap_proto::Address<'_>) -> String {
+pub fn format_address(a: &async_imap::imap_proto::Address<'_>) -> String {
     let name = a.name.as_ref().map(|n| decode_subject(n)).unwrap_or_default();
     let mailbox = a.mailbox.as_ref().map(|b| String::from_utf8_lossy(b).to_string()).unwrap_or_default();
     let host = a.host.as_ref().map(|b| String::from_utf8_lossy(b).to_string()).unwrap_or_default();

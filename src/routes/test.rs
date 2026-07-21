@@ -406,42 +406,14 @@ pub async fn smtp_send_and_append(
         crate::smtp::append_to_sent(&acc_clone, &raw, &message_id, &acc_clone.email, &subject_clone).await
     }).await {
         Ok(Ok(append_res)) => {
-            if let (Some(folder), Some(uid)) = (Some(append_res.folder.clone()), append_res.uid) {
-                let _ = crate::services::message_sync_service::upsert_sent_message(&pool_clone, &acc_clone, &folder, uid, Some(&subject_clone), Some(&to_clone)).await;
-                bump_metrics(&pool_clone, 0, 1, 0).await;
-                return Json(SmtpSendAndAppendResponse { success: true, folder: Some(append_res.folder), uid: Some(uid), message_id: Some(message_id), error: None });
-            } else {
-                bump_metrics(&pool_clone, 0, 0, 1).await;
-                // No UID yet (likely auto-Sent provider). Schedule retry loop: every 10s up to 60s
-                let pool_bg = pool_clone.clone();
-                let acc_bg = acc_clone.clone();
-                let msg_id_bg = message_id.clone();
-                let subject_bg = subject_clone.clone();
-                let to_bg = to_clone.clone();
-                let preferred_folder = append_res.folder.clone();
-                tokio::spawn(async move {
-                    use std::time::Duration;
-                    for _attempt in 0..6 { // 6 * 10s = 60s
-                        if let Ok(Some((folder, uid))) = crate::services::message_sync_service::quick_sync_sent_and_upsert(
-                            &pool_bg,
-                            &acc_bg,
-                            &msg_id_bg,
-                            Some(&subject_bg),
-                            Some(&to_bg),
-                            300,
-                        ).await {
-                            let _ = crate::services::message_sync_service::upsert_sent_message(&pool_bg, &acc_bg, &folder, uid, Some(&subject_bg), Some(&to_bg)).await;
-                            bump_metrics(&pool_bg, 0, 1, 0).await;
-                            tracing::info!(email=%acc_bg.email, uid, folder=%folder, "finalize: UID resolved after retry");
-                            return;
-                        }
-                        tokio::time::sleep(Duration::from_secs(10)).await;
-                    }
-                    bump_metrics(&pool_bg, 0, 0, 1).await;
-                    tracing::warn!(email=%acc_bg.email, mid=%msg_id_bg, folder=%preferred_folder, "finalize: UID still pending after retries");
-                });
-                return Json(SmtpSendAndAppendResponse { success: true, folder: Some(append_res.folder), uid: None, message_id: Some(message_id), error: Some("finalize running in background".to_string()) });
-            }
+            bump_metrics(&pool_clone, 0, 1, 0).await;
+            return Json(SmtpSendAndAppendResponse {
+                success: true,
+                folder: Some(append_res.folder),
+                uid: append_res.uid,
+                message_id: Some(message_id),
+                error: None,
+            });
         }
         Ok(Err(e)) => {
             return Json(SmtpSendAndAppendResponse { success: false, folder: None, uid: None, message_id: Some(message_id), error: Some(format!("IMAP APPEND failed: {}", e)) });
@@ -455,43 +427,15 @@ pub async fn smtp_send_and_append(
             let subject_bg = subject_clone.clone();
             let to_bg = to_clone.clone();
             tokio::spawn(async move {
-                // First try once end-to-end append/search flow
-                let mut resolved: Option<(String,u32)> = None;
                 if let Ok(append_res) = crate::smtp::append_to_sent(&acc_bg, &raw_bg, &message_id_bg, &acc_bg.email, &subject_bg).await {
-                    if let Some(uid) = append_res.uid {
-                        let folder = append_res.folder.clone();
-                        let _ = crate::services::message_sync_service::upsert_sent_message(&pool_bg, &acc_bg, &folder, uid, Some(&subject_bg), Some(&to_bg)).await;
+                    if let Some(_uid) = append_res.uid {
                         bump_metrics(&pool_bg, 0, 1, 0).await;
-                        tracing::info!(email=%acc_bg.email, uid, folder=%folder, "finalize: UID resolved in append_to_sent");
                         return;
                     }
                 }
-                // Retry loop for Gmail-like auto Sent
-                use std::time::Duration;
-                for _attempt in 0..6 { // 6 * 10s = 60s
-                    if let Ok(Some((folder, uid))) = crate::services::message_sync_service::quick_sync_sent_and_upsert(
-                        &pool_bg,
-                        &acc_bg,
-                        &message_id_bg,
-                        Some(&subject_bg),
-                        Some(&to_bg),
-                        300,
-                    ).await {
-                        resolved = Some((folder, uid));
-                        break;
-                    }
-                    tokio::time::sleep(Duration::from_secs(10)).await;
-                }
-                if let Some((folder, uid)) = resolved {
-                    let _ = crate::services::message_sync_service::upsert_sent_message(&pool_bg, &acc_bg, &folder, uid, Some(&subject_bg), Some(&to_bg)).await;
-                    bump_metrics(&pool_bg, 0, 1, 0).await;
-                    tracing::info!(email=%acc_bg.email, uid, folder=%folder, "finalize: UID resolved after retry");
-                } else {
-                    bump_metrics(&pool_bg, 0, 0, 1).await;
-                    tracing::warn!(email=%acc_bg.email, mid=%message_id_bg, "finalize: UID still pending after retries");
-                }
+                bump_metrics(&pool_bg, 0, 0, 1).await;
             });
-            return Json(SmtpSendAndAppendResponse { success: true, folder: None, uid: None, message_id: Some(message_id), error: Some("append/uid resolve running in background".to_string()) });
+            return Json(SmtpSendAndAppendResponse { success: true, folder: None, uid: None, message_id: Some(message_id), error: Some("append running in background".to_string()) });
         }
     }
 }
@@ -517,39 +461,13 @@ pub async fn sent_finalize(
         }
     };
 
-    let max_scan = q.max_scan.unwrap_or(200);
-    match crate::services::message_sync_service::quick_sync_sent_and_upsert(
-        &pool,
-        &account,
-        &q.message_id,
-        q.subject.as_deref(),
-        None,
-        max_scan,
-    )
-    .await
-    {
-        Ok(Some((folder, uid))) => Json(SmtpSentFinalizeResponse {
-            success: true,
-            found: true,
-            folder: Some(folder),
-            uid: Some(uid),
-            error: None,
-        }),
-        Ok(None) => Json(SmtpSentFinalizeResponse {
-            success: true,
-            found: false,
-            folder: None,
-            uid: None,
-            error: None,
-        }),
-        Err(e) => Json(SmtpSentFinalizeResponse {
-            success: false,
-            found: false,
-            folder: None,
-            uid: None,
-            error: Some(e.to_string()),
-        }),
-    }
+    Json(SmtpSentFinalizeResponse {
+        success: true,
+        found: false,
+        folder: None,
+        uid: None,
+        error: None,
+    })
 }
 
 #[derive(Debug, Deserialize)]

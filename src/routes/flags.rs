@@ -52,39 +52,5 @@ pub async fn update_flags(
         return Json(json!({"ok": false, "error": e.to_string()}));
     }
 
-    // Update DB flags snapshot
-    let flags_json = serde_json::to_string(&{
-        let mut v = Vec::new();
-        if req.seen.unwrap_or(false) { v.push("\\Seen"); }
-        if req.flagged.unwrap_or(false) { v.push("\\Flagged"); }
-        if req.deleted.unwrap_or(false) { v.push("\\Deleted"); }
-        v
-    }).unwrap_or("[]".into());
-
-    let is_seen = req.seen.unwrap_or(false);
-    let is_flagged = req.flagged.unwrap_or(false);
-    let is_deleted = req.deleted.unwrap_or(false);
-
-    let _ = sqlx::query(
-        r#"INSERT INTO messages (
-               account_id, folder, uid, flags, is_seen, is_answered, is_flagged, is_deleted, is_draft, size, synced_at
-           ) VALUES (?, ?, ?, ?, ?, 0, ?, ?, 0, 0, datetime('now'))
-           ON CONFLICT (account_id, folder, uid) DO UPDATE SET
-               flags = excluded.flags,
-               is_seen = excluded.is_seen,
-               is_flagged = excluded.is_flagged,
-               is_deleted = excluded.is_deleted,
-               synced_at = datetime('now')"#
-    )
-    .bind(&account_id)
-    .bind(&folder)
-    .bind(uid as i64)
-    .bind(&flags_json)
-    .bind(is_seen)
-    .bind(is_flagged)
-    .bind(is_deleted)
-    .execute(&pool)
-    .await;
-
     Json(json!({"ok": true}))
 }

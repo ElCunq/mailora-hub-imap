@@ -403,45 +403,7 @@ pub async fn attachments_handler(
 
     let found_folder = req_folder.to_string();
 
-    // Persist to DB: resolve message_id then replace attachments, using the found folder
-    if !atts.is_empty() {
-        let msg_row = sqlx::query_scalar::<_, i64>(
-            "SELECT id FROM messages WHERE account_id = ? AND folder = ? AND uid = ?",
-        )
-        .bind(&q.accountId)
-        .bind(&found_folder)
-        .bind(q.uid as i64)
-        .fetch_optional(&pool)
-        .await
-        .map_err(int_err)?;
 
-        if let Some(msg_id) = msg_row {
-            // Replace all attachments for this message_id
-            let _ = sqlx::query("DELETE FROM attachments WHERE message_id = ?")
-                .bind(msg_id)
-                .execute(&pool)
-                .await;
-            for a in &atts {
-                let _ = sqlx::query(
-                    r#"INSERT INTO attachments(message_id, filename, content_type, size, content_id, is_inline, data, file_path)
-                        VALUES(?,?,?,?,?,0,NULL,NULL)"#,
-                )
-                .bind(msg_id)
-                .bind(a.filename.as_deref())
-                .bind(a.content_type.as_deref())
-                .bind(a.size.map(|v| v as i64))
-                .bind(Option::<String>::None)
-                .execute(&pool)
-                .await;
-            }
-            let has_any = !atts.is_empty();
-            let _ = sqlx::query("UPDATE messages SET has_attachments = ? WHERE id = ?")
-                .bind(if has_any { 1 } else { 0 })
-                .bind(msg_id)
-                .execute(&pool)
-                .await;
-        }
-    }
 
     Ok(Json(atts))
 }

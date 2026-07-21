@@ -1,11 +1,11 @@
-/// Unified Inbox - aggregates messages from all accounts
 use axum::{extract::{State, Query}, http::StatusCode, Json};
 use crate::rbac::AuthUser;
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
-use sqlx::Row; // for try_get in dynamic row access
+use futures::StreamExt;
+use serde_json::json;
 
-#[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct UnifiedMessage {
     pub account_id: String,
     pub folder: String,
@@ -29,185 +29,191 @@ pub struct UnifiedInboxResponse {
 pub struct UnifiedQuery {
     pub limit: Option<u32>,
     pub offset: Option<u32>,
-    pub unread_only: Option<bool>,
     pub folder: Option<String>,
-    pub cursor_ts: Option<i64>,
-    pub cursor_id: Option<i64>,
 }
 
-/// GET /unified/inbox - Returns all INBOX messages from all accounts, sorted by date
+/// GET /unified/inbox - Returns aggregated messages from all assigned/viewable mailboxes statelessly
 pub async fn unified_inbox(
     State(pool): State<SqlitePool>,
     auth_user: AuthUser,
     Query(q): Query<UnifiedQuery>
 ) -> Result<Json<UnifiedInboxResponse>, StatusCode> {
-    let limit = q.limit.unwrap_or(100).min(500) as i64;
-    let offset = q.offset.unwrap_or(0) as i64;
-    let folder_orig = q.folder.unwrap_or_else(|| "INBOX".to_string());
-    let folder_str = folder_orig.to_lowercase();
-    let folder_cond = match folder_str.as_str() {
-        "inbox" => "(m.folder_kind = 'inbox' OR LOWER(m.folder) = 'inbox')".to_string(),
-        "sent" => "(m.folder_kind = 'sent' OR LOWER(m.folder) LIKE '%sent%' OR LOWER(m.folder) LIKE '%gönderilmiş%' OR LOWER(m.folder) LIKE '%g&apy%')".to_string(),
-        "drafts" => "(m.folder_kind = 'drafts' OR LOWER(m.folder) LIKE '%draft%' OR LOWER(m.folder) LIKE '%taslak%')".to_string(),
-        "spam" => "(m.folder_kind = 'junk' OR LOWER(m.folder) LIKE '%spam%' OR LOWER(m.folder) LIKE '%junk%')".to_string(),
-        "trash" => "(m.folder_kind = 'trash' OR LOWER(m.folder) LIKE '%trash%' OR LOWER(m.folder) LIKE '%bin%' OR LOWER(m.folder) LIKE '%çöp%' OR LOWER(m.folder) LIKE '%&amc%')".to_string(),
-        _ => format!("m.folder = '{}'", folder_orig.replace("'", "''")),
-    };
-
-    let unread_filter = if q.unread_only.unwrap_or(false) {
-        "AND (m.is_seen = 0 OR (m.is_seen IS NULL AND m.flags NOT LIKE '%\\Seen%'))"
-    } else {
-        ""
-    };
+    let folder = q.folder.unwrap_or_else(|| "INBOX".to_string());
     
-    let cursor_filter = match (q.cursor_ts, q.cursor_id) {
-        (Some(ts), Some(id)) => format!("AND (m.internal_date_ts < {ts} OR (m.internal_date_ts = {ts} AND m.id < {id}))"),
-        _ => "".to_string(),
-    };
-
-    // Admin sees all, Member sees only assigned
-    let snooze_filter = "AND (m.snoozed_until IS NULL OR m.snoozed_until <= datetime('now'))";
-
-    let messages = if auth_user.role == "Admin" {
-        let unread_filter_adm = if q.unread_only.unwrap_or(false) {
-            "AND (m.is_seen = 0 OR (m.is_seen IS NULL AND m.flags NOT LIKE '%\\Seen%'))"
-        } else {
-            ""
-        };
-        let sql = format!(
-            "SELECT m.account_id, m.folder, m.uid, m.message_id, m.subject, m.from_addr, m.to_addr, m.date, m.flags, m.size \
-             FROM messages m WHERE {} {} {} {} ORDER BY m.internal_date_ts DESC, m.id DESC LIMIT ? OFFSET ?",
-            folder_cond, unread_filter_adm, snooze_filter, cursor_filter
-        );
-        sqlx::query_as::<_, UnifiedMessage>(&sql)
-            .bind(limit)
-            .bind(offset)
+    // Resolve which accounts/mailboxes are viewable by this user (RBAC)
+    let accounts = if auth_user.role == "Admin" || auth_user.role == "SuperAdmin" {
+        sqlx::query_as::<_, crate::models::account::Account>("SELECT * FROM accounts")
             .fetch_all(&pool)
             .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
     } else {
-        let sql = format!(
-            "SELECT m.account_id, m.folder, m.uid, m.message_id, m.subject, m.from_addr, m.to_addr, m.date, m.flags, m.size \
-             FROM messages m \
-             JOIN user_accounts ua ON m.account_id = ua.account_id \
-             WHERE {} AND ua.user_id = ? {} {} {} ORDER BY m.internal_date_ts DESC, m.id DESC LIMIT ? OFFSET ?",
-            folder_cond, unread_filter, snooze_filter, cursor_filter
-        );
-        sqlx::query_as::<_, UnifiedMessage>(&sql)
-            .bind(auth_user.id)
-            .bind(limit)
-            .bind(offset)
-            .fetch_all(&pool)
-            .await
+        // Members see only assigned mailboxes
+        sqlx::query_as::<_, crate::models::account::Account>(
+            "SELECT a.* FROM accounts a 
+             JOIN user_accounts ua ON a.id = ua.account_id 
+             WHERE ua.user_id = ?"
+        )
+        .bind(auth_user.id)
+        .fetch_all(&pool)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
     };
 
-    let messages = messages
-        .map_err(|e| {
-            tracing::error!("Failed to fetch unified inbox: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
-
-    // Decode encoded-word subjects if necessary
-    let messages: Vec<UnifiedMessage> = messages
-        .into_iter()
-        .map(|mut m| {
-            if let Some(ref s) = m.subject {
-                if s.contains("=?") { m.subject = Some(crate::imap::sync::decode_subject(s.as_bytes())); }
+    let mut tasks = Vec::new();
+    for acc in accounts {
+        let folder_clone = folder.clone();
+        let limit_val = q.limit.unwrap_or(30).min(50) as u32;
+        tasks.push(tokio::spawn(async move {
+            let mut acc_dec = acc.clone();
+            if acc_dec.password.is_empty() {
+                if let Ok(a) = acc_dec.clone().with_password() { acc_dec = a; } else { return vec![]; }
             }
-            m
-        })
-        .collect();
+            if acc_dec.password.is_empty() { return vec![]; }
 
-    let total = messages.len();
-    Ok(Json(UnifiedInboxResponse { messages, total }))
+            let mut imap = match crate::imap::conn::connect(&acc_dec.imap_host, acc_dec.imap_port, &acc_dec.email, &acc_dec.password).await {
+                Ok(c) => c,
+                Err(_) => return vec![],
+            };
+
+            let folder_meta = match imap.session.select(&folder_clone).await {
+                Ok(meta) => meta,
+                Err(_) => {
+                    let _ = imap.session.logout().await;
+                    return vec![];
+                }
+            };
+
+            if folder_meta.exists == 0 {
+                let _ = imap.session.logout().await;
+                return vec![];
+            }
+
+            let start = if folder_meta.exists > limit_val { folder_meta.exists - limit_val + 1 } else { 1 };
+            let range = format!("{}:{}", start, folder_meta.exists);
+
+            let mut fetches = match imap.session.fetch(&range, "UID ENVELOPE FLAGS INTERNALDATE RFC822.SIZE").await {
+                Ok(f) => f,
+                Err(_) => return vec![],
+            };
+
+            let mut msgs = Vec::new();
+            while let Some(item) = fetches.next().await {
+                if let Ok(f) = item {
+                    let uid = f.uid.unwrap_or(0) as i64;
+                    let env = f.envelope();
+                    let subject = env
+                        .and_then(|e| e.subject.as_ref())
+                        .map(|b| crate::imap::sync::decode_subject(b));
+                    let from = env
+                        .and_then(|e| e.from.as_ref())
+                        .and_then(|v| v.get(0))
+                        .map(|addr| crate::imap::sync::format_address(addr));
+                    let to = env
+                        .and_then(|e| e.to.as_ref())
+                        .and_then(|v| v.get(0))
+                        .map(|addr| crate::imap::sync::format_address(addr));
+                    let date = f.internal_date().map(|d| d.to_rfc3339());
+                    let flags: Vec<String> = f.flags().map(|fl| format!("{:?}", fl)).collect();
+                    let flags_str = serde_json::to_string(&flags).unwrap_or("[]".to_string());
+
+                    msgs.push(UnifiedMessage {
+                        account_id: acc_dec.id.clone(),
+                        folder: folder_clone.clone(),
+                        uid,
+                        message_id: None,
+                        subject,
+                        from_addr: from,
+                        to_addr: to,
+                        date,
+                        flags: Some(flags_str),
+                        size: f.size.map(|s| s as i64),
+                    });
+                }
+            }
+            drop(fetches);
+            let _ = imap.session.logout().await;
+            msgs
+        }));
+    }
+
+    let mut merged = Vec::new();
+    for t in tasks {
+        if let Ok(res) = t.await {
+            merged.extend(res);
+        }
+    }
+
+    // Sort by date descending (using simple string comparison on ISO-8601 date, or timestamp)
+    merged.sort_by(|a, b| {
+        let a_date = a.date.as_deref().unwrap_or("");
+        let b_date = b.date.as_deref().unwrap_or("");
+        b_date.cmp(a_date)
+    });
+
+    let total = merged.len();
+    Ok(Json(UnifiedInboxResponse { messages: merged, total }))
 }
 
-/// GET /unified/events - Returns recent events (IN/OUT)
-#[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
-pub struct EventRecord {
-    pub id: i64,
-    pub direction: String,
-    pub mailbox: String,
-    pub actor: Option<String>,
-    pub peer: Option<String>,
-    pub subject: Option<String>,
-    pub ts: i64,
-}
-
+/// GET /unified/events - Stub/Compat
 #[derive(Debug, Serialize)]
 pub struct EventsResponse {
-    pub events: Vec<EventRecord>,
+    pub events: Vec<String>,
     pub total: usize,
 }
-
-pub async fn unified_events(
-    State(pool): State<SqlitePool>,
-    auth_user: AuthUser,
-) -> Result<Json<EventsResponse>, StatusCode> {
-    let events = if auth_user.role == "Admin" {
-        sqlx::query_as!(
-            EventRecord,
-            r#"
-            SELECT id as "id!", direction as "direction!", mailbox as "mailbox!", 
-                   actor, peer, subject, ts as "ts!"
-            FROM events
-            ORDER BY ts DESC
-            LIMIT 100
-            "#
-        )
-        .fetch_all(&pool)
-        .await
-    } else {
-         sqlx::query_as!(
-            EventRecord,
-            r#"
-            SELECT e.id as "id!", e.direction as "direction!", e.mailbox as "mailbox!", 
-                   e.actor, e.peer, e.subject, e.ts as "ts!"
-            FROM events e
-            JOIN user_accounts ua ON e.mailbox = ua.account_id
-            WHERE ua.user_id = ?
-            ORDER BY e.ts DESC
-            LIMIT 100
-            "#,
-            auth_user.id
-        )
-        .fetch_all(&pool)
-        .await
-    };
-
-    let events = events.map_err(|e| {
-        tracing::error!("Failed to fetch events: {e}");
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
-
-    let total = events.len();
-    Ok(Json(EventsResponse { events, total }))
+pub async fn unified_events() -> Result<Json<EventsResponse>, StatusCode> {
+    Ok(Json(EventsResponse { events: vec![], total: 0 }))
 }
 
-/// GET /unified/unread - Returns unread message counters
+/// GET /unified/unread - Returns unread message counters statelessly
 #[derive(Debug, Serialize)]
-pub struct UnreadCounters { pub total_unread: i64, pub per_account: Vec<(String,i64)> }
+pub struct UnreadCounters {
+    pub total_unread: i64,
+    pub per_account: Vec<(String, i64)>,
+}
 
 pub async fn unified_unread(
-    State(pool): State<SqlitePool>, 
-    auth_user: AuthUser
+    State(pool): State<SqlitePool>,
+    auth_user: AuthUser,
 ) -> Result<Json<UnreadCounters>, StatusCode> {
-    // Only count messages that are NOT snoozed
-    let snooze_filter = "(snoozed_until IS NULL OR snoozed_until <= datetime('now'))";
-
-    let rows = if auth_user.role == "Admin" {
-         let sql = format!("SELECT account_id, COUNT(*) as c FROM messages WHERE (folder_kind='inbox' OR LOWER(folder)='inbox') AND (is_seen = 0 OR (is_seen IS NULL AND flags NOT LIKE '%\\Seen%')) AND {} GROUP BY account_id", snooze_filter);
-         sqlx::query(&sql)
-            .fetch_all(&pool).await
+    let accounts = if auth_user.role == "Admin" || auth_user.role == "SuperAdmin" {
+        sqlx::query_as::<_, crate::models::account::Account>("SELECT * FROM accounts")
+            .fetch_all(&pool)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
     } else {
-         let sql = format!("SELECT m.account_id, COUNT(*) as c FROM messages m JOIN user_accounts ua ON m.account_id = ua.account_id WHERE (m.folder_kind='inbox' OR LOWER(m.folder)='inbox') AND (m.is_seen = 0 OR (m.is_seen IS NULL AND m.flags NOT LIKE '%\\Seen%')) AND {} AND ua.user_id = ? GROUP BY m.account_id", snooze_filter);
-         sqlx::query(&sql)
-            .bind(auth_user.id)
-            .fetch_all(&pool).await
+        sqlx::query_as::<_, crate::models::account::Account>(
+            "SELECT a.* FROM accounts a 
+             JOIN user_accounts ua ON a.id = ua.account_id 
+             WHERE ua.user_id = ?"
+        )
+        .bind(auth_user.id)
+        .fetch_all(&pool)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
     };
 
-    let rows = rows.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let mut per_account = Vec::new();
-    let mut total = 0i64;
-    for r in rows { if let (Ok(acc), Ok(c)) = (r.try_get::<String,_>("account_id"), r.try_get::<i64,_>("c")) { per_account.push((acc.clone(), c)); total += c; } }
-    Ok(Json(UnreadCounters { total_unread: total, per_account }))
+    let mut total_unread = 0i64;
+
+    for acc in accounts {
+        let mut acc_dec = acc.clone();
+        if acc_dec.password.is_empty() {
+            if let Ok(a) = acc_dec.clone().with_password() { acc_dec = a; } else { continue; }
+        }
+        if acc_dec.password.is_empty() { continue; }
+
+        if let Ok(mut imap) = crate::imap::conn::connect(&acc_dec.imap_host, acc_dec.imap_port, &acc_dec.email, &acc_dec.password).await {
+            if let Ok(folder_meta) = imap.session.select("INBOX").await {
+                // Fetch unread count directly via IMAP SEARCH UNSEEN
+                if let Ok(unseen_uids) = imap.session.uid_search("UNSEEN").await {
+                    let count = unseen_uids.len() as i64;
+                    per_account.push((acc_dec.id.clone(), count));
+                    total_unread += count;
+                }
+            }
+            let _ = imap.session.logout().await;
+        }
+    }
+
+    Ok(Json(UnreadCounters { total_unread, per_account }))
 }
