@@ -23,7 +23,8 @@ pub struct MailcowInstance {
 pub struct CreateMailcowInstance {
     pub name: String,
     pub base_url: String,
-    pub api_key_encrypted: String,
+    pub api_key: Option<String>,
+    pub api_key_encrypted: Option<String>,
     pub imap_host: String,
     pub imap_port: i64,
     pub smtp_host: String,

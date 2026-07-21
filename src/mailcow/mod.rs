@@ -17,6 +17,11 @@ impl<'a> MailcowRepository<'a> {
 
     pub async fn create(&self, req: CreateMailcowInstance) -> Result<MailcowInstance> {
         let enabled = req.enabled.unwrap_or(true);
+        let key_encrypted = if let Some(ref raw) = req.api_key {
+            crate::services::crypto::encrypt_secret(raw)
+        } else {
+            req.api_key_encrypted.clone().unwrap_or_default()
+        };
         let id: i64 = sqlx::query_scalar(
             r#"INSERT INTO mailcow_instances (name, base_url, api_key_encrypted, imap_host, imap_port, smtp_host, smtp_port, enabled)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -24,7 +29,7 @@ impl<'a> MailcowRepository<'a> {
         )
         .bind(&req.name)
         .bind(&req.base_url)
-        .bind(&req.api_key_encrypted)
+        .bind(&key_encrypted)
         .bind(&req.imap_host)
         .bind(req.imap_port)
         .bind(&req.smtp_host)

@@ -13,3 +13,5 @@ services:
       - DATABASE_URL=sqlite:///data/mailora_v3.db
       - RUST_LOG=info,mailora_hub_imap=debug
       - MAILORA_ENV=production
+      - MAILCOW_URL
+      - MAILCOW_API_KEY
