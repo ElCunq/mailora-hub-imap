@@ -269,6 +269,59 @@ async fn set_mailbox_credentials(
     }
 }
 
+/// GET /api/v1/rbac/domains
+async fn list_domains(
+    auth_user: AuthUser,
+    State(pool): State<SqlitePool>,
+) -> impl IntoResponse {
+    let auth_svc = AuthorizationService::new(&pool);
+    let dom_repo = DomainRepository::new(&pool);
+
+    let is_super = auth_svc.is_super_admin(auth_user.id).await.unwrap_or(false);
+    if is_super {
+        match dom_repo.list_all().await {
+            Ok(list) => (StatusCode::OK, Json(list)).into_response(),
+            Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": e.to_string() }))).into_response(),
+        }
+    } else {
+        match dom_repo.list_user_domains(auth_user.id).await {
+            Ok(list) => (StatusCode::OK, Json(list)).into_response(),
+            Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": e.to_string() }))).into_response(),
+        }
+    }
+}
+
+/// GET /api/v1/rbac/mailboxes
+async fn list_mailboxes(
+    auth_user: AuthUser,
+    State(pool): State<SqlitePool>,
+) -> impl IntoResponse {
+    let auth_svc = AuthorizationService::new(&pool);
+    let mb_repo = MailboxRepository::new(&pool);
+    let dom_repo = DomainRepository::new(&pool);
+
+    let is_super = auth_svc.is_super_admin(auth_user.id).await.unwrap_or(false);
+    if is_super {
+        match mb_repo.list_all().await {
+            Ok(list) => (StatusCode::OK, Json(list)).into_response(),
+            Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": e.to_string() }))).into_response(),
+        }
+    } else {
+        let user_domains = match dom_repo.list_user_domains(auth_user.id).await {
+            Ok(list) => list,
+            Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": e.to_string() }))).into_response(),
+        };
+
+        let mut all_mbs = Vec::new();
+        for dom in user_domains {
+            if let Ok(mbs) = mb_repo.list_by_domain(dom.id).await {
+                all_mbs.extend(mbs);
+            }
+        }
+        (StatusCode::OK, Json(all_mbs)).into_response()
+    }
+}
+
 pub fn routes<S>(pool: &SqlitePool) -> Router<S>
 where
     S: Send + Sync + Clone + 'static,
@@ -278,7 +331,9 @@ where
     Router::new()
         .route("/me/permissions", get(get_my_permissions))
         .route("/users/:user_id/role", post(update_user_role))
+        .route("/domains", get(list_domains))
         .route("/domains/:domain_id/admins/:user_id", post(assign_domain_admin).delete(revoke_domain_admin))
+        .route("/mailboxes", get(list_mailboxes))
         .route("/mailboxes/:mailbox_id/assignments", post(assign_mailbox_user))
         .route("/mailboxes/:mailbox_id/credentials", post(set_mailbox_credentials))
 }

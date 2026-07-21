@@ -128,4 +128,14 @@ impl<'a> DomainRepository<'a> {
 
         Ok(domains)
     }
+
+    pub async fn list_all(&self) -> Result<Vec<MailcowDomain>> {
+        let domains = sqlx::query_as::<_, MailcowDomain>(
+            "SELECT id, mailcow_instance_id, external_id, name, active, quota, mailbox_limit, last_seen_at, deleted_at, created_at, updated_at FROM domains WHERE deleted_at IS NULL ORDER BY name ASC",
+        )
+        .fetch_all(self.pool)
+        .await?;
+
+        Ok(domains)
+    }
 }

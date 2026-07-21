@@ -675,7 +675,7 @@
                         <td>${i.base_url}</td>
                         <td>${i.imap_host}:${i.imap_port}</td>
                         <td>${i.smtp_host}:${i.smtp_port}</td>
-                        <td><span class="status-pill ${i.active ? 'active' : 'inactive'}">${i.active ? 'Aktif' : 'Pasif'}</span></td>
+                        <td><span class="status-pill ${i.enabled ? 'active' : 'inactive'}">${i.enabled ? 'Aktif' : 'Pasif'}</span></td>
                         <td style="color:var(--text-muted); font-size:12px">${i.last_discovery_at || 'Hiç çalıştırılmadı'}</td>
                         <td>
                             <button class="compose-btn" style="padding:4px 10px; font-size:11px" onclick="runDiscovery(${i.id})">🚀 Keşif</button>

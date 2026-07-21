@@ -250,4 +250,14 @@ impl<'a> MailboxRepository<'a> {
 
         Ok(res)
     }
+
+    pub async fn list_all(&self) -> Result<Vec<MailcowMailbox>> {
+        let mbs = sqlx::query_as::<_, MailcowMailbox>(
+            "SELECT id, domain_id, external_id, address, local_part, display_name, active, quota, used_quota, credential_status, connection_status, sync_status, last_seen_at, deleted_at, created_at, updated_at FROM mailboxes WHERE deleted_at IS NULL ORDER BY address ASC",
+        )
+        .fetch_all(self.pool)
+        .await?;
+
+        Ok(mbs)
+    }
 }
