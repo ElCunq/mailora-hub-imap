@@ -390,7 +390,7 @@ pub async fn attachments_handler(
     let req_folder = q.folder.as_deref().unwrap_or("INBOX");
 
     // Try requested folder first
-    let mut atts = crate::imap::sync::list_attachments(
+    let atts = crate::imap::sync::list_attachments(
         &creds.host,
         creds.port,
         &creds.email,

@@ -2,6 +2,7 @@
 
 // IMAP module exports connection helpers and folder listing
 pub mod conn;
+pub mod coordinator;
 pub mod folders;
 pub mod idle;
 pub mod sync;

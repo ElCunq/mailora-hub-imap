@@ -10,3 +10,4 @@ pub mod auth_service;
 pub mod scheduler;
 pub mod message_service;
 pub mod idle_watcher_service;
+pub mod crypto;

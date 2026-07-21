@@ -26,7 +26,14 @@ pub struct UnifiedInboxResponse {
 }
 
 #[derive(Debug, Deserialize)]
-pub struct UnifiedQuery { pub limit: Option<u32>, pub offset: Option<u32>, pub unread_only: Option<bool>, pub folder: Option<String> }
+pub struct UnifiedQuery {
+    pub limit: Option<u32>,
+    pub offset: Option<u32>,
+    pub unread_only: Option<bool>,
+    pub folder: Option<String>,
+    pub cursor_ts: Option<i64>,
+    pub cursor_id: Option<i64>,
+}
 
 /// GET /unified/inbox - Returns all INBOX messages from all accounts, sorted by date
 pub async fn unified_inbox(
@@ -39,25 +46,38 @@ pub async fn unified_inbox(
     let folder_orig = q.folder.unwrap_or_else(|| "INBOX".to_string());
     let folder_str = folder_orig.to_lowercase();
     let folder_cond = match folder_str.as_str() {
-        "inbox" => "LOWER(m.folder) = 'inbox'".to_string(),
-        "sent" => "(LOWER(m.folder) LIKE '%sent%' OR LOWER(m.folder) LIKE '%gönderilmiş%' OR LOWER(m.folder) LIKE '%g&apy%')".to_string(),
-        "drafts" => "(LOWER(m.folder) LIKE '%draft%' OR LOWER(m.folder) LIKE '%taslak%')".to_string(),
-        "spam" => "(LOWER(m.folder) LIKE '%spam%' OR LOWER(m.folder) LIKE '%junk%')".to_string(),
-        "trash" => "(LOWER(m.folder) LIKE '%trash%' OR LOWER(m.folder) LIKE '%bin%' OR LOWER(m.folder) LIKE '%çöp%' OR LOWER(m.folder) LIKE '%&amc%')".to_string(),
+        "inbox" => "(m.folder_kind = 'inbox' OR LOWER(m.folder) = 'inbox')".to_string(),
+        "sent" => "(m.folder_kind = 'sent' OR LOWER(m.folder) LIKE '%sent%' OR LOWER(m.folder) LIKE '%gönderilmiş%' OR LOWER(m.folder) LIKE '%g&apy%')".to_string(),
+        "drafts" => "(m.folder_kind = 'drafts' OR LOWER(m.folder) LIKE '%draft%' OR LOWER(m.folder) LIKE '%taslak%')".to_string(),
+        "spam" => "(m.folder_kind = 'junk' OR LOWER(m.folder) LIKE '%spam%' OR LOWER(m.folder) LIKE '%junk%')".to_string(),
+        "trash" => "(m.folder_kind = 'trash' OR LOWER(m.folder) LIKE '%trash%' OR LOWER(m.folder) LIKE '%bin%' OR LOWER(m.folder) LIKE '%çöp%' OR LOWER(m.folder) LIKE '%&amc%')".to_string(),
         _ => format!("m.folder = '{}'", folder_orig.replace("'", "''")),
     };
 
-    let unread_filter = if q.unread_only.unwrap_or(false) { "AND (m.flags NOT LIKE '%\\Seen%')" } else { "" };
+    let unread_filter = if q.unread_only.unwrap_or(false) {
+        "AND (m.is_seen = 0 OR (m.is_seen IS NULL AND m.flags NOT LIKE '%\\Seen%'))"
+    } else {
+        ""
+    };
     
+    let cursor_filter = match (q.cursor_ts, q.cursor_id) {
+        (Some(ts), Some(id)) => format!("AND (m.internal_date_ts < {ts} OR (m.internal_date_ts = {ts} AND m.id < {id}))"),
+        _ => "".to_string(),
+    };
+
     // Admin sees all, Member sees only assigned
     let snooze_filter = "AND (m.snoozed_until IS NULL OR m.snoozed_until <= datetime('now'))";
 
     let messages = if auth_user.role == "Admin" {
-        let unread_filter_adm = if q.unread_only.unwrap_or(false) { "AND (m.flags NOT LIKE '%\\Seen%')" } else { "" };
+        let unread_filter_adm = if q.unread_only.unwrap_or(false) {
+            "AND (m.is_seen = 0 OR (m.is_seen IS NULL AND m.flags NOT LIKE '%\\Seen%'))"
+        } else {
+            ""
+        };
         let sql = format!(
             "SELECT m.account_id, m.folder, m.uid, m.message_id, m.subject, m.from_addr, m.to_addr, m.date, m.flags, m.size \
-             FROM messages m WHERE {} {} {} ORDER BY m.date DESC LIMIT ? OFFSET ?",
-            folder_cond, unread_filter_adm, snooze_filter
+             FROM messages m WHERE {} {} {} {} ORDER BY m.internal_date_ts DESC, m.id DESC LIMIT ? OFFSET ?",
+            folder_cond, unread_filter_adm, snooze_filter, cursor_filter
         );
         sqlx::query_as::<_, UnifiedMessage>(&sql)
             .bind(limit)
@@ -69,8 +89,8 @@ pub async fn unified_inbox(
             "SELECT m.account_id, m.folder, m.uid, m.message_id, m.subject, m.from_addr, m.to_addr, m.date, m.flags, m.size \
              FROM messages m \
              JOIN user_accounts ua ON m.account_id = ua.account_id \
-             WHERE {} AND ua.user_id = ? {} {} ORDER BY m.date DESC LIMIT ? OFFSET ?",
-            folder_cond, unread_filter, snooze_filter
+             WHERE {} AND ua.user_id = ? {} {} {} ORDER BY m.internal_date_ts DESC, m.id DESC LIMIT ? OFFSET ?",
+            folder_cond, unread_filter, snooze_filter, cursor_filter
         );
         sqlx::query_as::<_, UnifiedMessage>(&sql)
             .bind(auth_user.id)
@@ -175,11 +195,11 @@ pub async fn unified_unread(
     let snooze_filter = "(snoozed_until IS NULL OR snoozed_until <= datetime('now'))";
 
     let rows = if auth_user.role == "Admin" {
-         let sql = format!("SELECT account_id, COUNT(*) as c FROM messages WHERE folder='INBOX' AND (flags NOT LIKE '%\\Seen%') AND {} GROUP BY account_id", snooze_filter);
+         let sql = format!("SELECT account_id, COUNT(*) as c FROM messages WHERE (folder_kind='inbox' OR LOWER(folder)='inbox') AND (is_seen = 0 OR (is_seen IS NULL AND flags NOT LIKE '%\\Seen%')) AND {} GROUP BY account_id", snooze_filter);
          sqlx::query(&sql)
             .fetch_all(&pool).await
     } else {
-         let sql = format!("SELECT m.account_id, COUNT(*) as c FROM messages m JOIN user_accounts ua ON m.account_id = ua.account_id WHERE m.folder='INBOX' AND (m.flags NOT LIKE '%\\Seen%') AND {} AND ua.user_id = ? GROUP BY m.account_id", snooze_filter);
+         let sql = format!("SELECT m.account_id, COUNT(*) as c FROM messages m JOIN user_accounts ua ON m.account_id = ua.account_id WHERE (m.folder_kind='inbox' OR LOWER(m.folder)='inbox') AND (m.is_seen = 0 OR (m.is_seen IS NULL AND m.flags NOT LIKE '%\\Seen%')) AND {} AND ua.user_id = ? GROUP BY m.account_id", snooze_filter);
          sqlx::query(&sql)
             .bind(auth_user.id)
             .fetch_all(&pool).await

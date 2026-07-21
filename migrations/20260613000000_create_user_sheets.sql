@@ -1,5 +1,0 @@
-CREATE TABLE IF NOT EXISTS user_sheets (
-    user_id INTEGER PRIMARY KEY,
-    sheet_data TEXT NOT NULL,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-);

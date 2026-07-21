@@ -1,3 +1,6 @@
+pub mod authorization;
+pub use authorization::{AuthorizationService, MailboxPermissions, Permission};
+
 use axum::{
     async_trait,
     extract::FromRequestParts,
@@ -51,7 +54,7 @@ where
 
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
         let auth_user = AuthUser::from_request_parts(parts, state).await?;
-        if auth_user.role == "Admin" {
+        if auth_user.role == "Admin" || auth_user.role == "SuperAdmin" || auth_user.role == "DomainAdmin" {
             Ok(AdminUser(auth_user))
         } else {
             Err((StatusCode::FORBIDDEN, "Admin rights required"))

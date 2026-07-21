@@ -59,15 +59,7 @@
                             <span class="app-icon-img">✉️</span>
                             <span class="app-icon-label">E-posta</span>
                         </a>
-                        <a href="/static/calendar.html" class="app-icon">
-                            <span class="app-icon-img">📅</span>
-                            <span class="app-icon-label">Takvim</span>
-                        </a>
-                        <a href="/static/sheets.html" class="app-icon">
-                            <span class="app-icon-img">📊</span>
-                            <span class="app-icon-label">Tablo</span>
-                        </a>
-                        <a href="/static/admin.html" class="app-icon">
+                        <a href="/static/admin.html" id="launcher-admin" class="app-icon" style="display:none;">
                             <span class="app-icon-img">🛡️</span>
                             <span class="app-icon-label">Admin</span>
                         </a>
@@ -91,6 +83,9 @@
                     <button onclick="window.location.href='/static/add_account.html'" id="btn-add-account"
                         style="display:none; flex:1; padding:6px; background:rgba(16,185,129,0.15); border:1px solid rgba(16,185,129,0.3); border-radius:6px; color:#10b981; font-size:11px; font-weight:600; cursor:pointer;">+
                         Hesap</button>
+                    <button onclick="window.location.href='/static/admin.html'" id="btn-admin-panel"
+                        style="display:none; flex:1; padding:6px; background:rgba(139,92,246,0.15); border:1px solid rgba(139,92,246,0.3); border-radius:6px; color:#8b5cf6; font-size:11px; font-weight:600; cursor:pointer;">🛡️
+                        Admin</button>
                     <button onclick="mailora.sync()"
                         style="flex:1; padding:6px; background:rgba(59,130,246,0.15); border:1px solid rgba(59,130,246,0.3); border-radius:6px; color:var(--accent-blue); font-size:11px; font-weight:600; cursor:pointer;">🔄
                         Sync</button>
@@ -98,8 +93,11 @@
             </div>
             <script>
                 document.getElementById('sidebar-user').textContent = localStorage.getItem('auth_user') || 'User';
-                if (localStorage.getItem('auth_role') === 'Admin') {
+                const r = localStorage.getItem('auth_role');
+                if (['Admin', 'SuperAdmin', 'DomainAdmin'].includes(r)) {
                     document.getElementById('btn-add-account').style.display = 'block';
+                    document.getElementById('btn-admin-panel').style.display = 'block';
+                    document.getElementById('launcher-admin').style.display = 'flex';
                 }
             </script>
             <div class="section-label">Hesaplar</div>

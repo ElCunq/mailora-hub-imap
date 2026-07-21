@@ -4,14 +4,22 @@ use std::sync::Arc;
 use tower_http::services::ServeDir;
 use tracing_subscriber::EnvFilter;
 
+mod audit;
+mod config;
 mod db;
+mod domains;
 mod imap;
+mod mailboxes;
+mod mailcow;
 mod models;
 mod persist;
 mod rbac;
 mod routes;
 mod services;
 mod smtp;
+#[path = "telemetry/mod.rs"]
+mod telemetry;
+mod users;
 
 #[derive(Clone)]
 struct AppState {

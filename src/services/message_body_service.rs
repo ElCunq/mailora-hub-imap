@@ -60,8 +60,7 @@ pub async fn fetch_message_body(account: &Account, uid: u32, folder: Option<&str
         .await?
         .ok_or_else(|| anyhow::anyhow!("message not found"))?;
     let body_text = fetched.body.clone();
-    let mut html_opt = fetched.html_body.clone();
-    let mut html_opt = fetched.html_body.clone();
+    let html_opt = fetched.html_body.clone();
     // Optimization: Do NOT sanitize here. The frontend uses a sandboxed iframe.
     // Backend sanitization was stripping essential email struct/styles causing blank screens.
     // if let Some(html) = html_opt.as_ref() { ... }

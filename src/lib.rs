@@ -1,7 +1,11 @@
 // filepath: /mailora-hub-imap/mailora-hub-imap/src/lib.rs
+pub mod audit;
 pub mod config;
 pub mod db;
+pub mod domains;
 pub mod imap;
+pub mod mailboxes;
+pub mod mailcow;
 pub mod models;
 pub mod persist;
 pub mod rbac;
@@ -10,7 +14,7 @@ pub mod services;
 pub mod smtp;
 #[path = "telemetry/mod.rs"]
 pub mod telemetry; // explicitly use directory module
-                   // pub mod stalwart_client; // Deprecated - using direct IMAP/SMTP now
+pub mod users;
 
 // static dizini altındaki kaynakları include_str! ile alıyoruz.
 // const _: () = {

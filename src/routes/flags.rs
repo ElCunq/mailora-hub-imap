@@ -61,28 +61,28 @@ pub async fn update_flags(
         v
     }).unwrap_or("[]".into());
 
-    // Fallback: ensure message row exists
-    let exists: bool = sqlx::query_scalar("SELECT COUNT(*) > 0 FROM messages WHERE account_id=? AND folder=? AND uid=?")
-        .bind(&account_id).bind(&folder).bind(uid as i64)
-        .fetch_one(&pool).await.unwrap_or(false);
-    if !exists {
-        let _ = sqlx::query("INSERT INTO messages (account_id, folder, uid, subject, from_addr, to_addr, date, flags, size, synced_at) VALUES (?,?,?,?,?,?,?,?,0, datetime('now'))")
-            .bind(&account_id).bind(&folder).bind(uid as i64)
-            .bind(Option::<String>::None) // subject
-            .bind(Option::<String>::None) // from_addr
-            .bind(Option::<String>::None) // to_addr
-            .bind(Option::<String>::None) // date
-            .bind(&flags_json)
-            .execute(&pool).await;
-    }
+    let is_seen = req.seen.unwrap_or(false);
+    let is_flagged = req.flagged.unwrap_or(false);
+    let is_deleted = req.deleted.unwrap_or(false);
 
     let _ = sqlx::query(
-        "UPDATE messages SET flags = ?, synced_at = datetime('now') WHERE account_id = ? AND folder = ? AND uid = ?",
+        r#"INSERT INTO messages (
+               account_id, folder, uid, flags, is_seen, is_answered, is_flagged, is_deleted, is_draft, size, synced_at
+           ) VALUES (?, ?, ?, ?, ?, 0, ?, ?, 0, 0, datetime('now'))
+           ON CONFLICT (account_id, folder, uid) DO UPDATE SET
+               flags = excluded.flags,
+               is_seen = excluded.is_seen,
+               is_flagged = excluded.is_flagged,
+               is_deleted = excluded.is_deleted,
+               synced_at = datetime('now')"#
     )
-    .bind(flags_json)
     .bind(&account_id)
     .bind(&folder)
     .bind(uid as i64)
+    .bind(&flags_json)
+    .bind(is_seen)
+    .bind(is_flagged)
+    .bind(is_deleted)
     .execute(&pool)
     .await;
 

@@ -77,14 +77,13 @@ CREATE TRIGGER IF NOT EXISTS messages_ai AFTER INSERT ON messages BEGIN
 END;
 
 CREATE TRIGGER IF NOT EXISTS messages_ad AFTER DELETE ON messages BEGIN
-    DELETE FROM messages_fts WHERE rowid = old.id;
+    INSERT INTO messages_fts(messages_fts, rowid, subject, from_addr, to_addr, body_plain)
+    VALUES('delete', old.id, old.subject, old.from_addr, old.to_addr, old.body_plain);
 END;
 
 CREATE TRIGGER IF NOT EXISTS messages_au AFTER UPDATE ON messages BEGIN
-    UPDATE messages_fts SET
-        subject = new.subject,
-        from_addr = new.from_addr,
-        to_addr = new.to_addr,
-        body_plain = new.body_plain
-    WHERE rowid = new.id;
+    INSERT INTO messages_fts(messages_fts, rowid, subject, from_addr, to_addr, body_plain)
+    VALUES('delete', old.id, old.subject, old.from_addr, old.to_addr, old.body_plain);
+    INSERT INTO messages_fts(rowid, subject, from_addr, to_addr, body_plain)
+    VALUES (new.id, new.subject, new.from_addr, new.to_addr, new.body_plain);
 END;

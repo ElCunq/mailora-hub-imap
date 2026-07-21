@@ -405,54 +405,73 @@ async fn save_message_to_db(
         }
     }
 
-    // Check if exists
-    let exists: bool = sqlx::query_scalar(
-        "SELECT COUNT(*) > 0 FROM messages WHERE account_id = ? AND folder = ? AND uid = ?",
+    let is_seen = flags.contains(&"\\Seen".to_string());
+    let is_answered = flags.contains(&"\\Answered".to_string());
+    let is_flagged = flags.contains(&"\\Flagged".to_string());
+    let is_deleted = flags.contains(&"\\Deleted".to_string());
+    let is_draft = flags.contains(&"\\Draft".to_string());
+    let folder_kind = if folder.eq_ignore_ascii_case("inbox") {
+        Some("inbox")
+    } else if folder.eq_ignore_ascii_case("sent") || folder.to_lowercase().contains("sent") {
+        Some("sent")
+    } else if folder.eq_ignore_ascii_case("drafts") {
+        Some("drafts")
+    } else if folder.eq_ignore_ascii_case("trash") || folder.to_lowercase().contains("deleted") {
+        Some("trash")
+    } else if folder.eq_ignore_ascii_case("junk") || folder.eq_ignore_ascii_case("spam") {
+        Some("junk")
+    } else if folder.eq_ignore_ascii_case("archive") {
+        Some("archive")
+    } else {
+        None
+    };
+    let internal_date_ts = chrono::DateTime::parse_from_rfc3339(&date).map(|dt| dt.timestamp()).unwrap_or(0);
+
+    // Try update/insert atomic UPSERT
+    let res = sqlx::query(
+        r#"INSERT INTO messages (
+               account_id, folder, uid, message_id,
+               subject, from_addr, to_addr, date,
+               flags, is_seen, is_answered, is_flagged, is_deleted, is_draft, folder_kind, internal_date_ts,
+               size, has_attachments, synced_at
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+           ON CONFLICT (account_id, folder, uid) DO UPDATE SET
+               message_id = COALESCE(NULLIF(excluded.message_id, ''), messages.message_id),
+               subject = COALESCE(NULLIF(excluded.subject, ''), messages.subject),
+               from_addr = COALESCE(NULLIF(excluded.from_addr, ''), messages.from_addr),
+               to_addr = COALESCE(NULLIF(excluded.to_addr, ''), messages.to_addr),
+               date = COALESCE(NULLIF(excluded.date, ''), messages.date),
+               flags = excluded.flags,
+               is_seen = excluded.is_seen,
+               is_answered = excluded.is_answered,
+               is_flagged = excluded.is_flagged,
+               is_deleted = excluded.is_deleted,
+               is_draft = excluded.is_draft,
+               folder_kind = COALESCE(excluded.folder_kind, messages.folder_kind),
+               internal_date_ts = CASE WHEN excluded.internal_date_ts > 0 THEN excluded.internal_date_ts ELSE messages.internal_date_ts END,
+               size = CASE WHEN excluded.size > 0 THEN excluded.size ELSE messages.size END,
+               synced_at = datetime('now')"#
     )
     .bind(&account.id)
     .bind(folder)
     .bind(uid)
-    .fetch_one(pool)
+    .bind(message_id)
+    .bind(&subject)
+    .bind(&from)
+    .bind(&to)
+    .bind(date)
+    .bind(&flags_json)
+    .bind(is_seen)
+    .bind(is_answered)
+    .bind(is_flagged)
+    .bind(is_deleted)
+    .bind(is_draft)
+    .bind(folder_kind)
+    .bind(internal_date_ts)
+    .bind(size as i64)
+    .bind(has_atts)
+    .execute(pool)
     .await?;
-
-    if exists {
-        // Update flags only
-        sqlx::query(
-            "UPDATE messages SET flags = ?, synced_at = datetime('now') WHERE account_id = ? AND folder = ? AND uid = ?",
-        )
-        .bind(&flags_json)
-        .bind(&account.id)
-        .bind(folder)
-        .bind(uid)
-        .execute(pool)
-        .await?;
-
-        Ok(false) // Updated
-    } else {
-        // Insert new message
-        sqlx::query(
-            r#"
-            INSERT INTO messages (
-                account_id, folder, uid, message_id,
-                subject, from_addr, to_addr, date,
-                flags, size, has_attachments,
-                synced_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
-            "#,
-        )
-        .bind(&account.id)
-        .bind(folder)
-        .bind(uid)
-        .bind(message_id)
-        .bind(&subject)
-        .bind(&from)
-        .bind(&to)
-        .bind(date)
-        .bind(&flags_json)
-        .bind(size as i64)
-        .bind(has_atts)
-        .execute(pool)
-        .await?;
 
         // If we have attachments, persist them
         if has_atts {
@@ -486,8 +505,7 @@ async fn save_message_to_db(
             }
         }
 
-        Ok(true) // New
-    }
+        Ok(res.rows_affected() > 0)
 }
 
 /// Sync all folders for an account
@@ -514,7 +532,6 @@ pub async fn sync_account_messages(pool: &SqlitePool, account: &Account) -> Resu
         let mut stream = folders;
         while let Some(name_result) = stream.next().await {
             if let Ok(name) = name_result {
-                // name.name() returns &str directly, no need for from_utf8
                 folder_names.push(name.name().to_string());
             }
         }
@@ -535,6 +552,12 @@ pub async fn sync_account_messages(pool: &SqlitePool, account: &Account) -> Resu
         }
     }
 
+    // Update account last_sync_ts
+    let _ = sqlx::query("UPDATE accounts SET last_sync_ts = strftime('%s', 'now') WHERE id = ?")
+        .bind(&account.id)
+        .execute(pool)
+        .await;
+
     Ok(stats)
 }
 
@@ -549,34 +572,25 @@ pub async fn upsert_sent_message(
 ) -> Result<()> {
     let flags_json = serde_json::to_string(&vec!["\\Seen".to_string()])?;
 
-    // Try update, else insert
-    let updated = sqlx::query(
-        "UPDATE messages SET subject = COALESCE(?, subject), to_addr = COALESCE(?, to_addr), flags = ?, synced_at = datetime('now') WHERE account_id = ? AND folder = ? AND uid = ?",
+    sqlx::query(
+        r#"INSERT INTO messages (
+               account_id, folder, uid, subject, to_addr, flags, is_seen, is_answered, is_flagged, is_deleted, is_draft, folder_kind, internal_date_ts, size, synced_at, internal_date
+           ) VALUES (?, ?, ?, ?, ?, ?, 1, 0, 0, 0, 0, 'sent', strftime('%s', 'now'), 0, datetime('now'), datetime('now'))
+           ON CONFLICT (account_id, folder, uid) DO UPDATE SET
+               subject = COALESCE(excluded.subject, messages.subject),
+               to_addr = COALESCE(excluded.to_addr, messages.to_addr),
+               flags = excluded.flags,
+               is_seen = 1,
+               synced_at = datetime('now')"#
     )
-    .bind(subject)
-    .bind(to)
-    .bind(&flags_json)
     .bind(&account.id)
     .bind(folder)
     .bind(uid as i64)
+    .bind(subject)
+    .bind(to)
+    .bind(&flags_json)
     .execute(pool)
-    .await?
-    .rows_affected();
-
-    if updated == 0 {
-        sqlx::query(
-            r#"INSERT OR IGNORE INTO messages (account_id, folder, uid, subject, to_addr, flags, size, synced_at, internal_date)
-               VALUES (?, ?, ?, ?, ?, ?, 0, datetime('now'), datetime('now'))"#,
-        )
-        .bind(&account.id)
-        .bind(folder)
-        .bind(uid as i64)
-        .bind(subject)
-        .bind(to)
-        .bind(&flags_json)
-        .execute(pool)
-        .await?;
-    }
+    .await?;
 
     Ok(())
 }

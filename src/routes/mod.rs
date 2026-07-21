@@ -24,6 +24,9 @@ pub mod flags;
 pub mod settings;
 pub mod snooze;
 pub mod outbox;
+pub mod mailcow;
+pub mod rbac;
+pub mod audit;
 
 #[derive(Deserialize)]
 #[allow(non_snake_case)]
@@ -131,22 +134,40 @@ async fn send_action(
     State(pool): State<sqlx::SqlitePool>,
     AxumJson(req): AxumJson<SendReq>
 ) -> impl IntoResponse {
-    // Check if account exists (validate)
-    let account_res = sqlx::query("SELECT id FROM accounts WHERE id = ?")
-        .bind(&req.accountId)
-        .fetch_optional(&pool)
-        .await;
-
-    if matches!(account_res, Ok(None)) {
-             // Fallback for legacy "1"
-             if req.accountId == "1" {
-                 // allow legacy
-             } else {
-                 return AxumJson(serde_json::json!({"ok": false, "error": "Account not found"})).into_response();
-             }
+    let mut is_valid = false;
+    if let Ok(mailbox_id) = req.accountId.parse::<i64>() {
+        let mb_res = sqlx::query_scalar::<_, i64>("SELECT id FROM mailboxes WHERE id = ? AND active = 1")
+            .bind(mailbox_id)
+            .fetch_optional(&pool)
+            .await;
+        if matches!(mb_res, Ok(Some(_))) {
+            if let Some(ref a) = auth {
+                let auth_svc = crate::rbac::AuthorizationService::new(&pool);
+                if auth_svc.check_mailbox_permission(a.id, mailbox_id, crate::rbac::Permission::Send).await.unwrap_or(false)
+                    || auth_svc.is_super_admin(a.id).await.unwrap_or(false)
+                {
+                    is_valid = true;
+                }
+            } else {
+                is_valid = true;
+            }
+        }
     }
 
-    // Queue email
+    if !is_valid {
+        let account_res = sqlx::query("SELECT id FROM accounts WHERE id = ?")
+            .bind(&req.accountId)
+            .fetch_optional(&pool)
+            .await;
+        if matches!(account_res, Ok(Some(_))) || req.accountId == "1" {
+            is_valid = true;
+        }
+    }
+
+    if !is_valid {
+        return AxumJson(serde_json::json!({"ok": false, "error": "Account or Mailbox not found or permission denied"})).into_response();
+    }
+
     match crate::services::outbox_service::queue_email(
         &pool,
         &req.accountId,
@@ -154,7 +175,7 @@ async fn send_action(
         &req.subject,
         &req.body
     ).await {
-        Ok(_) => {
+        Ok(id) => {
             let user_id = auth.map(|a| a.id);
             crate::rbac::log_event(
                 &pool,
@@ -163,7 +184,19 @@ async fn send_action(
                 "SEND_QUEUED",
                 &format!("Queued email to: {}", req.to)
             ).await;
-            AxumJson(serde_json::json!({"ok": true, "message": "Email queued"})).into_response()
+            let audit_svc = crate::audit::AuditService::new(&pool);
+            let _ = audit_svc.record_action(
+                user_id,
+                "queue_email",
+                "outbox",
+                Some(&id),
+                None,
+                req.accountId.parse::<i64>().ok(),
+                Some(&format!("{{\"to\": \"{}\", \"subject\": \"{}\"}}", req.to, req.subject)),
+                None,
+                None,
+            ).await;
+            AxumJson(serde_json::json!({"ok": true, "message": "Email queued", "outbox_id": id})).into_response()
         },
         Err(e) => AxumJson(serde_json::json!({"ok": false, "error": e})).into_response(),
     }
@@ -226,4 +259,11 @@ where
         .route("/outbox", get(outbox::list_outbox))
         .route("/outbox/:id", get(outbox::get_outbox).delete(outbox::delete_outbox))
         .route("/outbox/:id/retry", post(outbox::retry_outbox))
+        // ─── Mailcow v3 Management & Discovery ────────────────────────────────
+        .nest("/api/v1/mailcow", mailcow::routes(pool))
+        // ─── RBAC & Authorization Management ──────────────────────────────────
+        .nest("/api/v1/rbac", rbac::routes(pool))
+        // ─── Audit & Sync Logs ────────────────────────────────────────────────
+        .nest("/api/v1/audit", audit::routes(pool))
+        .nest("/api/v3/audit", audit::routes(pool))
 }

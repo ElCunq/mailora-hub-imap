@@ -254,10 +254,11 @@ pub async fn list_accounts(
     auth: AuthUser,
     State(pool): State<SqlitePool>,
 ) -> Result<Json<Vec<AccountResponse>>, StatusCode> {
-    let accounts = if auth.role == "Admin" {
+    let mut responses: Vec<AccountResponse> = Vec::new();
+
+    let accounts = if auth.role == "Admin" || auth.role == "SuperAdmin" {
         account_service::list_accounts(&pool).await
     } else {
-        // Filter for assigned accounts
         sqlx::query_as::<_, Account>(
             "SELECT a.* FROM accounts a JOIN user_accounts ua ON a.id = ua.account_id WHERE ua.user_id = ?"
         )
@@ -270,16 +271,41 @@ pub async fn list_accounts(
         })
     };
 
-    match accounts {
-        Ok(accs) => {
-            let response: Vec<AccountResponse> = accs.into_iter().map(Into::into).collect();
-            Ok(Json(response))
-        }
-        Err(e) => {
-            tracing::error!("Failed to list accounts: {}", e);
-            Err(StatusCode::INTERNAL_SERVER_ERROR)
+    if let Ok(accs) = accounts {
+        for acc in accs {
+            responses.push(acc.into());
         }
     }
+
+    let auth_svc = crate::rbac::AuthorizationService::new(&pool);
+    let all_mailboxes = sqlx::query_as::<_, crate::mailboxes::Mailbox>("SELECT * FROM mailboxes WHERE deleted_at IS NULL AND active = 1")
+        .fetch_all(&pool)
+        .await
+        .unwrap_or_default();
+
+    let all_ids: Vec<i64> = all_mailboxes.iter().map(|m| m.id).collect();
+    let viewable_ids = auth_svc.filter_viewable_mailboxes(auth.id, &all_ids).await.unwrap_or_default();
+    for mb in all_mailboxes {
+        if viewable_ids.contains(&mb.id) {
+            responses.push(AccountResponse {
+                id: mb.id.to_string(),
+                email: mb.address.clone(),
+                provider: "mailcow".to_string(),
+                display_name: mb.display_name.clone(),
+                imap_host: "mailcow-imap".to_string(),
+                imap_port: 993,
+                smtp_host: "mailcow-smtp".to_string(),
+                smtp_port: 587,
+                enabled: mb.active,
+                last_sync_ts: None,
+                color: Some("#3b82f6".to_string()),
+                carddav_url: None,
+                caldav_url: None,
+            });
+        }
+    }
+
+    Ok(Json(responses))
 }
 
 async fn check_account_access(
