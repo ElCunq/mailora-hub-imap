@@ -66,18 +66,42 @@ pub async fn seed_mailcow_instance_from_env(pool: &SqlitePool) {
 pub fn start(pool: SqlitePool) {
     let discovery_pool = pool.clone();
     tokio::spawn(async move {
+        // Startup log: Print all instances currently in DB
+        let mc_repo = crate::mailcow::MailcowRepository::new(&discovery_pool);
+        match mc_repo.list_all().await {
+            Ok(insts) => {
+                info!(count = insts.len(), "Loaded Mailcow instances from database");
+                for i in &insts {
+                    info!(id = i.id, name = %i.name, url = %i.base_url, enabled = i.enabled, "Instance details");
+                }
+            }
+            Err(e) => {
+                warn!(error = %e.to_string(), "Failed to query Mailcow instances from database at startup");
+            }
+        }
+
         let service = crate::mailcow::discovery::DiscoveryService::new(&discovery_pool);
         loop {
-            match service.run_discovery_all().await {
-                Ok(summaries) => {
-                    if summaries.is_empty() {
-                        info!("Mailcow discovery: no instances configured yet. Add one from the admin panel or set MAILCOW_URL + MAILCOW_API_KEY env vars.");
-                    } else {
-                        info!(instances = summaries.len(), "Periodic Mailcow discovery completed successfully");
+            // Count instances to log correctly
+            let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM mailcow_instances")
+                .fetch_one(&discovery_pool)
+                .await
+                .unwrap_or(0);
+
+            if count == 0 {
+                info!("Mailcow discovery: no instances configured yet. Add one from the admin panel or set MAILCOW_URL + MAILCOW_API_KEY env vars.");
+            } else {
+                match service.run_discovery_all().await {
+                    Ok(summaries) => {
+                        if !summaries.is_empty() {
+                            info!(instances = summaries.len(), "Periodic Mailcow discovery completed successfully");
+                        } else {
+                            info!("Periodic Mailcow discovery check completed (0 successful instances, check for errors/warnings above)");
+                        }
                     }
-                }
-                Err(e) => {
-                    warn!(error = %e.to_string(), "Periodic Mailcow discovery encountered error");
+                    Err(e) => {
+                        warn!(error = %e.to_string(), "Periodic Mailcow discovery encountered error");
+                    }
                 }
             }
             tokio::time::sleep(Duration::from_secs(30)).await;

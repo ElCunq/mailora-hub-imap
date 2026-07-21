@@ -1,4 +1,5 @@
 use anyhow::Result;
+use tracing::{info, warn};
 use chrono::Utc;
 use sqlx::SqlitePool;
 use crate::domains::model::UpsertDomain;
@@ -139,10 +140,21 @@ impl<'a> DiscoveryService<'a> {
 
         for inst in instances {
             if !inst.enabled {
+                info!(id = inst.id, name = %inst.name, "Mailcow instance is disabled, skipping discovery");
                 continue;
             }
-            if let Ok(sum) = self.run_discovery_for_instance(inst.id).await {
-                summaries.push(sum);
+            match self.run_discovery_for_instance(inst.id).await {
+                Ok(sum) => {
+                    summaries.push(sum);
+                }
+                Err(e) => {
+                    warn!(
+                        id = inst.id,
+                        name = %inst.name,
+                        error = %e.to_string(),
+                        "Mailcow discovery failed for instance"
+                    );
+                }
             }
         }
 
