@@ -1,56 +1,56 @@
 {
   "db_name": "SQLite",
-  "query": "\n            SELECT id as \"id!\", direction as \"direction!\", mailbox as \"mailbox!\", \n                   actor, peer, subject, ts as \"ts!\"\n            FROM events\n            ORDER BY ts DESC\n            LIMIT 100\n            ",
+  "query": "SELECT id, user_id, account_id, action, details, ip_address, CAST(created_at AS TEXT) as created_at FROM event_logs ORDER BY created_at DESC LIMIT 50",
   "describe": {
     "columns": [
       {
-        "name": "id!",
+        "name": "id",
         "ordinal": 0,
         "type_info": "Integer"
       },
       {
-        "name": "direction!",
+        "name": "user_id",
         "ordinal": 1,
-        "type_info": "Text"
+        "type_info": "Integer"
       },
       {
-        "name": "mailbox!",
+        "name": "account_id",
         "ordinal": 2,
         "type_info": "Text"
       },
       {
-        "name": "actor",
+        "name": "action",
         "ordinal": 3,
         "type_info": "Text"
       },
       {
-        "name": "peer",
+        "name": "details",
         "ordinal": 4,
         "type_info": "Text"
       },
       {
-        "name": "subject",
+        "name": "ip_address",
         "ordinal": 5,
         "type_info": "Text"
       },
       {
-        "name": "ts!",
+        "name": "created_at",
         "ordinal": 6,
-        "type_info": "Integer"
+        "type_info": "Text"
       }
     ],
     "parameters": {
       "Right": 0
     },
     "nullable": [
-      true,
-      false,
       false,
       true,
+      true,
+      false,
       true,
       true,
       false
     ]
   },
-  "hash": "6f9ac25eae6b8724913a9ccf038c0b838a2d59198cf77dcc3e61b02bd2afacf0"
+  "hash": "ae7c230f76b7695847e9ace48483d6ed2361e4bd5a8a4e3165b904179e3625ee"
 }
