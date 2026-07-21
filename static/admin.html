@@ -660,7 +660,8 @@
             try {
                 const res = await apiFetch('/api/v1/mailcow/instances');
                 if (!res.ok) return;
-                allInstances = await res.json();
+                const json = await res.json();
+                allInstances = json.data || [];
                 document.getElementById('stat-instances').textContent = allInstances.length;
 
                 const tbody = document.getElementById('mailcow-tbody');
