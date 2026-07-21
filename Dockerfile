@@ -1,6 +1,5 @@
 # Build stage - Base with cargo-chef
-FROM rust:slim-bookworm AS chef
-RUN cargo install cargo-chef
+FROM lukemathwalker/cargo-chef:latest-rust-slim-bookworm AS chef
 WORKDIR /app
 
 # Install build dependencies

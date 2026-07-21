@@ -371,8 +371,9 @@
                                 <th>ID</th>
                                 <th>Kullanıcı Adı</th>
                                 <th>E-posta</th>
+                                <th>Yedek E-posta (Fallback)</th>
                                 <th>Mevcut Rol</th>
-                                <th>Rol Değiştir</th>
+                                <th>İlişkili Domainler</th>
                                 <th>İşlemler</th>
                             </tr>
                         </thead>
@@ -496,6 +497,10 @@
                     <input type="email" id="user-email" class="compose-input" placeholder="john@example.com">
                 </div>
                 <div>
+                    <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">Yedek E-posta (Fallback Email)</label>
+                    <input type="email" id="user-fallback" class="compose-input" placeholder="yedek@example.com">
+                </div>
+                <div>
                     <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">Şifre</label>
                     <input type="password" id="user-pass" class="compose-input" placeholder="Güçlü şifre">
                 </div>
@@ -507,10 +512,55 @@
                         <option value="SuperAdmin">SuperAdmin</option>
                     </select>
                 </div>
+                <div>
+                    <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:6px;">İlişkili Domainler (Domain Grupları)</label>
+                    <div id="add-user-domains-list" style="display:flex; flex-direction:column; gap:6px; max-height:120px; overflow-y:auto; border:1px solid var(--border); padding:8px; border-radius:8px;">
+                        <!-- Checkboxes will be populated here -->
+                    </div>
+                </div>
             </div>
             <div class="modal-footer">
                 <button class="toolbar-btn" onclick="closeModal('modal-user')">İptal</button>
                 <button class="send-btn" onclick="submitAddUser()">👤 Oluştur</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Edit User Details -->
+    <div id="modal-edit-user" class="modal-overlay" style="display:none">
+        <div class="modal-content" style="max-width:440px">
+            <div class="modal-header">
+                <h3>👥 Kullanıcı Düzenle</h3>
+                <button class="modal-close" onclick="closeModal('modal-edit-user')">✕</button>
+            </div>
+            <div class="modal-body" style="display:flex; flex-direction:column; gap:12px;">
+                <input type="hidden" id="edit-user-id">
+                <div>
+                    <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">Kullanıcı Adı / E-posta</label>
+                    <input type="text" id="edit-user-username" class="compose-input" readonly style="opacity:0.6; cursor:not-allowed;">
+                </div>
+                <div>
+                    <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">Yedek E-posta (Fallback Email)</label>
+                    <input type="email" id="edit-user-fallback" class="compose-input" placeholder="yedek@example.com">
+                </div>
+                <div>
+                    <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">Kullanıcı Rolü</label>
+                    <select id="edit-user-role" class="compose-input" style="background:var(--bg-primary);">
+                        <option value="User">User</option>
+                        <option value="DomainAdmin">DomainAdmin</option>
+                        <option value="SuperAdmin">SuperAdmin</option>
+                    </select>
+                </div>
+                <div>
+                    <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:6px;">İlişkili Domainler (Domain Grupları)</label>
+                    <div id="edit-user-domains-list" style="display:flex; flex-direction:column; gap:6px; max-height:120px; overflow-y:auto; border:1px solid var(--border); padding:8px; border-radius:8px;">
+                        <!-- Checkboxes will be populated here -->
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="toolbar-btn" onclick="closeModal('modal-edit-user')">İptal</button>
+                <button class="send-btn" onclick="submitEditUser()">💾 Güncelle</button>
             </div>
         </div>
     </div>
@@ -701,18 +751,20 @@
                 tbody.innerHTML = allUsers.map(u => `
                     <tr>
                         <td>#${u.id}</td>
-                        <td style="font-weight:600">${u.username}</td>
+                        <td style="font-weight:600">${u.username || '-'}</td>
                         <td>${u.email || '-'}</td>
+                        <td>${u.fallback_email || '-'}</td>
                         <td><span class="badge-role ${u.role}">${u.role}</span></td>
                         <td>
-                            <select class="compose-input" style="padding:4px 8px; width:130px; font-size:12px" onchange="changeUserRole(${u.id}, this.value)">
-                                <option value="User" ${u.role === 'User' || u.role === 'Member' ? 'selected' : ''}>User</option>
-                                <option value="DomainAdmin" ${u.role === 'DomainAdmin' ? 'selected' : ''}>DomainAdmin</option>
-                                <option value="SuperAdmin" ${u.role === 'SuperAdmin' || u.role === 'Admin' ? 'selected' : ''}>SuperAdmin</option>
-                            </select>
+                            <div style="font-size:11px; color:var(--text-muted)">
+                                ${u.domain_names && u.domain_names.length > 0 ? u.domain_names.join(', ') : '-'}
+                            </div>
                         </td>
                         <td>
-                            <button class="att-rm" onclick="deleteUser(${u.id}, '${u.username}')">🗑️ Sil</button>
+                            <div style="display:flex; gap:6px;">
+                                <button class="compose-btn" style="padding:4px 10px; font-size:11px" onclick="openEditUserModal(${u.id})">✏️ Düzenle</button>
+                                <button class="att-rm" style="padding:4px 10px; font-size:11px" onclick="deleteUser(${u.id}, '${u.username}')">🗑️ Sil</button>
+                            </div>
                         </td>
                     </tr>
                 `).join('');
@@ -721,29 +773,53 @@
             }
         }
 
-        async function changeUserRole(id, role) {
-            try {
-                const res = await apiFetch(`/api/v1/rbac/users/${id}/role`, {
-                    method: 'POST',
-                    body: JSON.stringify({ role })
-                });
-                if (res.ok) {
-                    alert('Kullanıcı rolü güncellendi');
-                    loadUsers();
-                } else {
-                    const res2 = await apiFetch(`/admin/users/${id}/role`, {
-                        method: 'PATCH',
-                        body: JSON.stringify({ role })
-                    });
-                    if (res2.ok) {
-                        alert('Rol güncellendi');
-                        loadUsers();
-                    } else {
-                        alert('Rol değiştirilemedi');
-                    }
-                }
-            } catch (e) {
-                console.error(e);
+        function openEditUserModal(userId) {
+            const u = allUsers.find(user => user.id === userId);
+            if (!u) return;
+
+            document.getElementById('edit-user-id').value = u.id;
+            document.getElementById('edit-user-username').value = u.username || u.email || '';
+            document.getElementById('edit-user-fallback').value = u.fallback_email || '';
+            document.getElementById('edit-user-role').value = u.role;
+
+            const domainsListDiv = document.getElementById('edit-user-domains-list');
+            if (allDomains && allDomains.length > 0) {
+                domainsListDiv.innerHTML = allDomains.map(d => {
+                    const isChecked = u.domains && u.domains.includes(d.id) ? 'checked' : '';
+                    return `
+                        <label style="display:flex; align-items:center; gap:8px; font-size:12px; cursor:pointer; color:var(--text-primary);">
+                            <input type="checkbox" name="edit-user-domain-checkbox" value="${d.id}" ${isChecked}>
+                            ${d.name}
+                        </label>
+                    `;
+                }).join('');
+            } else {
+                domainsListDiv.innerHTML = '<span style="font-size:11px; color:var(--text-muted)">Kayıtlı domain bulunamadı</span>';
+            }
+
+            document.getElementById('modal-edit-user').style.display = 'flex';
+        }
+
+        async function submitEditUser() {
+            const userId = parseInt(document.getElementById('edit-user-id').value);
+            const fallback_email = document.getElementById('edit-user-fallback').value;
+            const role = document.getElementById('edit-user-role').value;
+
+            const checkedDomBoxes = document.querySelectorAll('input[name="edit-user-domain-checkbox"]:checked');
+            const domain_ids = Array.from(checkedDomBoxes).map(cb => parseInt(cb.value));
+
+            const res = await apiFetch(`/api/v1/rbac/users/${userId}`, {
+                method: 'POST',
+                body: JSON.stringify({ role, fallback_email: fallback_email || null, domain_ids })
+            });
+
+            if (res.ok) {
+                alert('Kullanıcı başarıyla güncellendi!');
+                closeModal('modal-edit-user');
+                loadUsers();
+            } else {
+                const data = await res.json();
+                alert('Hata: ' + (data.error || 'Güncelleme başarısız'));
             }
         }
 
@@ -784,7 +860,7 @@
             const query = document.getElementById('domain-search').value.toLowerCase();
 
             const filteredDomains = allDomains.filter(d => 
-                d.domain.toLowerCase().includes(query) ||
+                d.name.toLowerCase().includes(query) ||
                 allMailboxes.some(m => m.domain_id === d.id && m.address.toLowerCase().includes(query))
             );
 
@@ -801,62 +877,57 @@
                         <div style="display:flex; align-items:center; gap:12px;">
                             <span style="font-size:18px">🌐</span>
                             <div>
-                                <div style="font-weight:700; font-size:15px; color:var(--text-primary)">${d.domain}</div>
-                                <div style="font-size:11px; color:var(--text-muted)">Kota: ${d.max_mailboxes || 'Sınırsız'} Mail Kutusu</div>
+                                <div style="font-weight:700; font-size:15px; color:var(--text-primary)">${d.name}</div>
+                                <div style="font-size:11px; color:var(--text-muted)">Kota: ${d.mailbox_limit || 'Sınırsız'} Mail Kutusu</div>
                             </div>
                         </div>
                         <div style="display:flex; align-items:center; gap:12px;" onclick="event.stopPropagation()">
                             <span class="status-pill ${d.active ? 'active' : 'inactive'}">${d.active ? 'Aktif' : 'Pasif'}</span>
-                            <button class="toolbar-btn" style="padding:6px 12px; font-size:12px;" onclick="openAssignDomainAdmin(${d.id}, '${d.domain}')">➕ Domain Admin Atama</button>
+                            <button class="toolbar-btn" style="padding:6px 12px; font-size:12px;" onclick="openAssignDomainAdmin(${d.id}, '${d.name}')">➕ Domain Admin Atama</button>
                         </div>
                     </div>
                     <div class="domain-card-body">
                         <h4 style="margin:0 0 12px 0; font-size:13px; color:var(--text-secondary)">📬 Bu Domain Altındaki Mail Kutuları (${mbs.length})</h4>
                         ${mbs.length === 0 ? '<p style="font-size:12px; color:var(--text-muted)">Henüz mail kutusu keşfedilmedi</p>' : `
-                        <table class="data-table">
-                            <thead>
-                                <tr>
-                                    <th>E-posta Adresi</th>
-                                    <th>İsim / Açıklama</th>
-                                    <th>Kota (MB)</th>
-                                    <th>Durum</th>
-                                    <th style="min-width:220px">🔑 Şifre Tanımla</th>
-                                    <th>Atamalar ve Yetki</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                ${mbs.map(mb => `
-                                <tr id="mb-row-${mb.id}">
-                                    <td style="font-weight:600">${mb.address}</td>
-                                    <td>${mb.display_name || '-'}</td>
-                                    <td>${mb.quota_mb || 0} MB</td>
-                                    <td><span class="status-pill ${mb.active ? 'active' : 'inactive'}">${mb.active ? 'Aktif' : 'Pasif'}</span></td>
-                                    <td>
-                                        <div class="inline-cred-form">
-                                            <input 
-                                                type="password"
-                                                class="inline-cred-input"
-                                                id="cred-input-${mb.id}"
-                                                placeholder="Şifre girin..."
-                                                onkeydown="if(event.key==='Enter') saveMailboxCredential(${mb.id}, '${mb.address}')"
-                                            >
-                                            <button 
-                                                class="cred-save-btn"
-                                                id="cred-btn-${mb.id}"
-                                                onclick="saveMailboxCredential(${mb.id}, '${mb.address}')"
-                                            >💾 Kaydet</button>
-                                        </div>
-                                        <div id="cred-status-${mb.id}" class="cred-status-none" style="margin-top:4px; font-size:11px">
-                                            ${mb.credential_status === 'present' ? '<span class="cred-status-ok">✅ Şifre tanımlı</span>' : '<span class="cred-status-none">⬜ Henüz şifre girilmedi</span>'}
-                                        </div>
-                                    </td>
-                                    <td>
-                                        <button class="compose-btn" style="padding:4px 12px; font-size:11px" onclick="openAssignMailbox(${mb.id}, '${mb.address}')">🔑 Kullanıcı & Yetki Atama</button>
-                                    </td>
-                                </tr>
-                                `).join('')}
-                            </tbody>
-                        </table>
+                            <table class="data-table" style="font-size:12px">
+                                <thead>
+                                    <tr>
+                                        <th>Mail Kutusu Adresi</th>
+                                        <th>Görünen Ad</th>
+                                        <th>Bağlantı</th>
+                                        <th>Kota Durumu</th>
+                                        <th>Şifre Girişi & İstemci Bağlantısı</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${mbs.map(m => {
+                                        const connectionText = m.connection_status === 'ok' 
+                                            ? '<span class="status-pill active">✅ Başarılı</span>'
+                                            : '<span class="status-pill inactive">❌ Doğrulanmadı</span>';
+                                        
+                                        const quotaText = m.quota 
+                                            ? `${(m.used_quota / (1024*1024)).toFixed(1)}MB / ${(m.quota / (1024*1024)).toFixed(1)}MB`
+                                            : 'Sınırsız';
+
+                                        return `
+                                            <tr>
+                                                <td style="font-weight:600">${m.address}</td>
+                                                <td>${m.display_name || '-'}</td>
+                                                <td>${connectionText}</td>
+                                                <td>${quotaText}</td>
+                                                <td>
+                                                    <div style="display:flex; align-items:center; gap:8px;">
+                                                        <input type="password" id="mbox-pass-${m.id}" class="compose-input" style="padding:4px 8px; font-size:11px; width:160px" placeholder="İstemci şifresini girin...">
+                                                        <button class="compose-btn" style="padding:4px 8px; font-size:11px" onclick="saveMailboxCredentials(${m.id})">💾 Kaydet</button>
+                                                        <button class="toolbar-btn" style="padding:4px 8px; font-size:11px" onclick="openAssignMailbox(${m.id}, '${m.address}')">👤 Yetkilendir</button>
+                                                        <span id="mbox-status-${m.id}"></span>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        `;
+                                    }).join('')}
+                                </tbody>
+                            </table>
                         `}
                     </div>
                 </div>
@@ -868,21 +939,21 @@
             renderDomains();
         }
 
-        async function saveMailboxCredential(mailboxId, address) {
-            const input = document.getElementById(`cred-input-${mailboxId}`);
-            const btn = document.getElementById(`cred-btn-${mailboxId}`);
-            const statusEl = document.getElementById(`cred-status-${mailboxId}`);
-            const password = input.value.trim();
+        async function saveMailboxCredentials(mailboxId) {
+            const input = document.getElementById(`mbox-pass-${mailboxId}`);
+            const password = input.value;
+            const statusEl = document.getElementById(`mbox-status-${mailboxId}`);
+            const btn = input.nextElementSibling;
 
             if (!password) {
-                input.style.borderColor = 'var(--accent-red)';
-                setTimeout(() => input.style.borderColor = '', 1500);
+                alert('Lütfen bir şifre girin');
+                input.style.borderColor = 'red';
                 return;
             }
 
             btn.disabled = true;
-            btn.textContent = '⏳ Kaydediliyor...';
-            statusEl.innerHTML = '<span class="cred-status-none">⏳ IMAP doğrulanıyor...</span>';
+            btn.textContent = '⏳...';
+            statusEl.innerHTML = '<span class="cred-status-none">⏳...</span>';
 
             try {
                 const res = await apiFetch(`/api/v1/rbac/mailboxes/${mailboxId}/credentials`, {
@@ -895,16 +966,15 @@
                     input.value = '';
                     input.style.borderColor = '';
                     if (data.imap_verified) {
-                        statusEl.innerHTML = '<span class="cred-status-ok">✅ Şifre kaydedildi & IMAP doğrulandı</span>';
+                        statusEl.innerHTML = '<span class="cred-status-ok">✅</span>';
                     } else {
-                        const errMsg = data.error ? ` (${data.error})` : '';
-                        statusEl.innerHTML = `<span class="cred-status-fail">⚠️ Şifre kaydedildi fakat IMAP doğrulanamadı${errMsg}</span>`;
+                        statusEl.innerHTML = '<span class="cred-status-fail">⚠️</span>';
                     }
                 } else {
-                    statusEl.innerHTML = `<span class="cred-status-fail">❌ Hata: ${data.error || 'Bilinmeyen hata'}</span>`;
+                    statusEl.innerHTML = '<span class="cred-status-fail">❌</span>';
                 }
             } catch (e) {
-                statusEl.innerHTML = `<span class="cred-status-fail">❌ Bağlantı hatası: ${e.message}</span>`;
+                statusEl.innerHTML = '<span class="cred-status-fail">❌</span>';
             } finally {
                 btn.disabled = false;
                 btn.textContent = '💾 Kaydet';
@@ -973,12 +1043,31 @@
         }
 
         function openAddUserModal() {
+            document.getElementById('user-name').value = '';
+            document.getElementById('user-email').value = '';
+            document.getElementById('user-fallback').value = '';
+            document.getElementById('user-pass').value = '';
+            document.getElementById('user-role').value = 'User';
+            
+            const domainsListDiv = document.getElementById('add-user-domains-list');
+            if (allDomains && allDomains.length > 0) {
+                domainsListDiv.innerHTML = allDomains.map(d => `
+                    <label style="display:flex; align-items:center; gap:8px; font-size:12px; cursor:pointer; color:var(--text-primary)">
+                        <input type="checkbox" name="add-user-domain-checkbox" value="${d.id}">
+                        ${d.name}
+                    </label>
+                `).join('');
+            } else {
+                domainsListDiv.innerHTML = '<span style="font-size:11px; color:var(--text-muted)">Kayıtlı domain bulunamadı</span>';
+            }
+
             document.getElementById('modal-user').style.display = 'flex';
         }
 
         async function submitAddUser() {
             const username = document.getElementById('user-name').value;
             const email = document.getElementById('user-email').value;
+            const fallback_email = document.getElementById('user-fallback').value;
             const password = document.getElementById('user-pass').value;
             const role = document.getElementById('user-role').value;
 
@@ -987,11 +1076,31 @@
                 return;
             }
 
+            const checkedDomBoxes = document.querySelectorAll('input[name="add-user-domain-checkbox"]:checked');
+            const domain_ids = Array.from(checkedDomBoxes).map(cb => parseInt(cb.value));
+
             const res = await apiFetch('/accounts', {
                 method: 'POST',
                 body: JSON.stringify({ email: email || `${username}@mailora.local`, password, provider: 'mailcow', display_name: username })
             });
-            // Or via admin endpoint
+
+            if (res.ok) {
+                await loadUsers();
+                const matchedUser = allUsers.find(u => u.username === username);
+                if (matchedUser) {
+                    await apiFetch(`/api/v1/rbac/users/${matchedUser.id}`, {
+                        method: 'POST',
+                        body: JSON.stringify({
+                            role,
+                            fallback_email: fallback_email || null,
+                            domain_ids
+                        })
+                    });
+                }
+            } else {
+                alert('Kullanıcı eklenemedi!');
+            }
+
             closeModal('modal-user');
             loadUsers();
         }

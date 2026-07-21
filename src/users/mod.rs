@@ -15,14 +15,15 @@ impl<'a> UserRepository<'a> {
 
     pub async fn create(&self, req: CreateUserRequest) -> Result<MailoraUser> {
         let id: i64 = sqlx::query_scalar(
-            r#"INSERT INTO users (email, username, password_hash, role, created_at, updated_at)
-               VALUES (?, ?, ?, ?, datetime('now'), datetime('now'))
+            r#"INSERT INTO users (email, username, password_hash, role, fallback_email, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'))
                RETURNING id"#,
         )
         .bind(&req.email)
         .bind(&req.email)
         .bind(&req.password_hash)
         .bind(&req.role)
+        .bind(&req.fallback_email)
         .fetch_one(self.pool)
         .await?;
 
@@ -31,7 +32,7 @@ impl<'a> UserRepository<'a> {
 
     pub async fn get_by_id(&self, id: i64) -> Result<MailoraUser> {
         let user = sqlx::query_as::<_, MailoraUser>(
-            "SELECT id, email, username, password_hash, role FROM users WHERE id = ?",
+            "SELECT id, email, username, password_hash, role, fallback_email FROM users WHERE id = ?",
         )
         .bind(id)
         .fetch_one(self.pool)
@@ -42,7 +43,7 @@ impl<'a> UserRepository<'a> {
 
     pub async fn get_by_email(&self, email: &str) -> Result<MailoraUser> {
         let user = sqlx::query_as::<_, MailoraUser>(
-            "SELECT id, email, username, password_hash, role FROM users WHERE email = ? OR username = ?",
+            "SELECT id, email, username, password_hash, role, fallback_email FROM users WHERE email = ? OR username = ?",
         )
         .bind(email)
         .bind(email)
@@ -54,7 +55,7 @@ impl<'a> UserRepository<'a> {
 
     pub async fn list_all(&self) -> Result<Vec<MailoraUser>> {
         let users = sqlx::query_as::<_, MailoraUser>(
-            "SELECT id, email, username, password_hash, role FROM users ORDER BY id ASC",
+            "SELECT id, email, username, password_hash, role, fallback_email FROM users ORDER BY id ASC",
         )
         .fetch_all(self.pool)
         .await?;

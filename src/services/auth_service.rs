@@ -3,6 +3,29 @@ use anyhow::Result;
 use sqlx::SqlitePool;
 use bcrypt::{hash, verify, DEFAULT_COST};
 
+pub async fn auto_assign_user_domain(pool: &SqlitePool, user_id: i64, username: &str) {
+    if let Some(domain_part) = username.split('@').nth(1) {
+        let domain_id: Option<i64> = sqlx::query_scalar(
+            "SELECT id FROM domains WHERE name = ? AND deleted_at IS NULL"
+        )
+        .bind(domain_part)
+        .fetch_optional(pool)
+        .await
+        .unwrap_or(None);
+
+        if let Some(did) = domain_id {
+            let _ = sqlx::query(
+                "INSERT OR IGNORE INTO user_domain_assignments (user_id, domain_id, created_at)
+                 VALUES (?, ?, datetime('now'))"
+            )
+            .bind(user_id)
+            .bind(did)
+            .execute(pool)
+            .await;
+        }
+    }
+}
+
 pub async fn register_user(pool: &SqlitePool, req: CreateUserReq) -> Result<User> {
     let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM users")
         .fetch_one(pool)
@@ -20,6 +43,9 @@ pub async fn register_user(pool: &SqlitePool, req: CreateUserReq) -> Result<User
     .bind(role)
     .fetch_one(pool)
     .await?;
+
+    // Auto-assign to domain group if username is an email address
+    auto_assign_user_domain(pool, id, &req.username).await;
 
     let user = sqlx::query_as::<_, User>("SELECT * FROM users WHERE id = ?")
         .bind(id)
@@ -80,6 +106,9 @@ pub async fn verify_user(pool: &SqlitePool, username: &str, password: &str) -> R
                 .bind(&hash_str)
                 .fetch_one(pool)
                 .await?;
+
+                // Auto-assign to domain group if username is an email address
+                auto_assign_user_domain(pool, id, username).await;
 
                 let encrypted = crate::services::crypto::encrypt_secret(password);
                 let _ = sqlx::query(

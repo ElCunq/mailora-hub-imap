@@ -34,6 +34,7 @@ pub struct MailoraUser {
     #[serde(skip)]
     pub password_hash: String,
     pub role: String,
+    pub fallback_email: Option<String>,
 }
 
 impl MailoraUser {
@@ -50,4 +51,5 @@ pub struct CreateUserRequest {
     pub email: String,
     pub password_hash: String,
     pub role: String,
+    pub fallback_email: Option<String>,
 }
