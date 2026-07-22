@@ -70,17 +70,53 @@ pub async fn get_folder_messages(
     let account = crate::services::account_service::get_account(&pool, &account_id)
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
-        .ok_or_else(|| (StatusCode::NOT_FOUND, "Account not found".to_string()))?
-        .with_password()
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        .ok_or_else(|| (StatusCode::NOT_FOUND, "Account not found".to_string()))?;
+
+    let acc_with_pass = account.clone().with_password().ok();
+    let password = acc_with_pass.as_ref().map(|a| a.password.clone()).unwrap_or_default();
+
+    let host = if account.imap_host.trim().is_empty() || account.imap_host == "localhost" || account.imap_host == "127.0.0.1" {
+        std::env::var("MAILCOW_IMAP_HOST").unwrap_or_else(|_| "10.0.1.1".to_string())
+    } else {
+        account.imap_host.clone()
+    };
+
+    if password.is_empty() {
+        return Ok(Json(json!({
+            "account_id": account_id,
+            "folder": folder,
+            "count": 0,
+            "messages": [],
+        })));
+    }
 
     // Connect to local IMAP/Dovecot
-    let mut imap = crate::imap::conn::connect(&account.imap_host, account.imap_port, &account.email, &account.password)
-        .await
-        .map_err(|e| (StatusCode::BAD_GATEWAY, e.to_string()))?;
+    let mut imap = match crate::imap::conn::connect(&host, account.imap_port, &account.email, &password).await {
+        Ok(c) => c,
+        Err(_) => {
+            return Ok(Json(json!({
+                "account_id": account_id,
+                "folder": folder,
+                "count": 0,
+                "messages": [],
+            })));
+        }
+    };
     let session = &mut imap.session;
 
-    let folder_meta = session.select(&folder).await.map_err(|e| (StatusCode::BAD_GATEWAY, e.to_string()))?;
+    let folder_meta = match session.select(&folder).await {
+        Ok(m) => m,
+        Err(_) => {
+            let _ = session.logout().await;
+            return Ok(Json(json!({
+                "account_id": account_id,
+                "folder": folder,
+                "count": 0,
+                "messages": [],
+            })));
+        }
+    };
+
     if folder_meta.exists == 0 {
         let _ = session.logout().await;
         return Ok(Json(json!({
