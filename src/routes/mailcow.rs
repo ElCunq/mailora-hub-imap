@@ -22,6 +22,7 @@ where
         )
         .route("/discovery/run/:id", post(run_discovery))
         .route("/discovery/run-all", post(run_discovery_all))
+        .route("/webhook", post(handle_webhook))
 }
 
 async fn list_instances(State(pool): State<SqlitePool>) -> impl IntoResponse {
@@ -137,4 +138,39 @@ async fn run_discovery_all(State(pool): State<SqlitePool>) -> impl IntoResponse 
         )
             .into_response(),
     }
+}
+
+#[derive(Debug, serde::Deserialize, serde::Serialize)]
+pub struct MailcowWebhookPayload {
+    pub event: Option<String>,
+    pub action: Option<String>,
+    pub username: Option<String>,
+    pub mailbox: Option<String>,
+    pub rcpt: Option<String>,
+    pub domain: Option<String>,
+}
+
+async fn handle_webhook(
+    State(pool): State<SqlitePool>,
+    Json(payload): Json<MailcowWebhookPayload>,
+) -> impl IntoResponse {
+    let target = payload.username
+        .clone()
+        .or(payload.mailbox.clone())
+        .or(payload.rcpt.clone())
+        .unwrap_or_default();
+
+    if !target.is_empty() {
+        let meta_str = serde_json::to_string(&payload).unwrap_or_default();
+        let _ = sqlx::query(
+            "INSERT INTO audit_logs (actor_user_id, action, resource_type, resource_id, metadata_json, created_at)
+             VALUES (NULL, 'webhook_received', 'MAILCOW_WEBHOOK', ?, ?, datetime('now'))"
+        )
+        .bind(&target)
+        .bind(&meta_str)
+        .execute(&pool)
+        .await;
+    }
+
+    (StatusCode::OK, Json(serde_json::json!({ "ok": true, "received": true }))).into_response()
 }
