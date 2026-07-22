@@ -295,15 +295,24 @@ async fn set_mailbox_credentials(
                         let _ = sqlx::query(
                             "UPDATE mailbox_credentials SET verification_status = 'ok', last_verified_at = datetime('now'), verification_error = NULL WHERE mailbox_id = ?"
                         ).bind(mailbox_id).execute(&pool).await;
+                        let _ = sqlx::query(
+                            "UPDATE mailboxes SET connection_status = 'ok', updated_at = datetime('now') WHERE id = ?"
+                        ).bind(mailbox_id).execute(&pool).await;
                     }
                     Ok(Err(e)) => {
                         verify_error = Some(format!("IMAP doğrulama hatası: {}", e));
                         let _ = sqlx::query(
                             "UPDATE mailbox_credentials SET verification_status = 'failed', last_verified_at = datetime('now'), verification_error = ? WHERE mailbox_id = ?"
                         ).bind(verify_error.as_deref()).bind(mailbox_id).execute(&pool).await;
+                        let _ = sqlx::query(
+                            "UPDATE mailboxes SET connection_status = 'failed', updated_at = datetime('now') WHERE id = ?"
+                        ).bind(mailbox_id).execute(&pool).await;
                     }
                     Err(_) => {
                         verify_error = Some("IMAP bağlantı zaman aşımı (5s)".to_string());
+                        let _ = sqlx::query(
+                            "UPDATE mailboxes SET connection_status = 'failed', updated_at = datetime('now') WHERE id = ?"
+                        ).bind(mailbox_id).execute(&pool).await;
                     }
                 }
             }

@@ -985,20 +985,23 @@
                     input.value = '';
                     input.style.borderColor = '';
                     if (data.imap_verified) {
-                        statusEl.innerHTML = '<span class="cred-status-ok">✅</span>';
+                        alert(`✅ ${data.address} için şifre doğrulandı ve kaydedildi!`);
                     } else {
-                        statusEl.innerHTML = '<span class="cred-status-fail">⚠️</span>';
+                        alert(`⚠️ Şifre kaydedildi ancak IMAP doğrulaması başarısız: ${data.verify_error || 'Bağlanılamadı'}`);
                     }
+                    await loadDomainsAndMailboxes();
                 } else {
-                    statusEl.innerHTML = '<span class="cred-status-fail">❌</span>';
+                    alert('Hata: ' + (data.error || 'Şifre kaydedilemedi'));
                 }
             } catch (e) {
-                statusEl.innerHTML = '<span class="cred-status-fail">❌</span>';
+                console.error("setMailboxPassword error:", e);
+                alert('Şifre kaydedilirken hata oluştu');
             } finally {
                 btn.disabled = false;
                 btn.textContent = '💾 Kaydet';
             }
         }
+        window.saveMailboxCredentials = setMailboxPassword;
 
         async function runDiscovery(instanceId) {
             try {
@@ -1134,8 +1137,10 @@
             if (res.ok) {
                 alert('Domain Admin başarıyla atandı!');
                 closeModal('modal-domain-admin');
+                await Promise.allSettled([loadUsers(), loadDomainsAndMailboxes()]);
             } else {
-                alert('Atama başarısız!');
+                const data = await res.json().catch(() => ({}));
+                alert('Atama başarısız: ' + (data.error || 'Bilinmeyen hata'));
             }
         }
 
