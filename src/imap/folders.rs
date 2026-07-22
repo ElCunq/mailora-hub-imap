@@ -18,7 +18,10 @@ async fn connect_and_login(
     pass: &str,
 ) -> Result<Session<tokio_util::compat::Compat<tokio_native_tls::TlsStream<TcpStream>>>> {
     let tcp = TcpStream::connect((host, port)).await?;
-    let tls = TlsConnector::builder().build()?;
+    let tls = TlsConnector::builder()
+        .danger_accept_invalid_certs(true)
+        .danger_accept_invalid_hostnames(true)
+        .build()?;
     let tls = tokio_native_tls::TlsConnector::from(tls);
     let tls_stream = tls.connect(host, tcp).await?;
     let compat = tls_stream.compat();

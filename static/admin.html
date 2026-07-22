@@ -996,12 +996,13 @@
             } catch (e) {
                 console.error("setMailboxPassword error:", e);
                 alert('Şifre kaydedilirken hata oluştu');
-            } finally {
-                btn.disabled = false;
-                btn.textContent = '💾 Kaydet';
+                if (btn) {
+                    btn.disabled = false;
+                    btn.textContent = '💾 Kaydet';
+                }
             }
         }
-        window.saveMailboxCredentials = setMailboxPassword;
+        window.setMailboxPassword = saveMailboxCredentials;
 
         async function runDiscovery(instanceId) {
             try {

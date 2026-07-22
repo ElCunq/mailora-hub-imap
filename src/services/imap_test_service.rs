@@ -86,7 +86,8 @@ pub async fn test_imap_connection(account: &Account) -> Result<ImapConnectionTes
             ))?;
         let tls_connector = TlsConnector::from(
             native_tls::TlsConnector::builder()
-                .danger_accept_invalid_certs(false)
+                .danger_accept_invalid_certs(true)
+                .danger_accept_invalid_hostnames(true)
                 .build()
                 .context("Failed to build TLS connector")?,
         );
@@ -232,7 +233,11 @@ pub async fn fetch_recent_messages(account: &Account, limit: u32, folder: &str) 
     } else {
         // TLS connection
         let tcp_stream = TcpStream::connect((&account.imap_host as &str, account.imap_port)).await?;
-        let tls_connector = TlsConnector::from(native_tls::TlsConnector::builder().build()?);
+        let tls_raw = native_tls::TlsConnector::builder()
+            .danger_accept_invalid_certs(true)
+            .danger_accept_invalid_hostnames(true)
+            .build()?;
+        let tls_connector = TlsConnector::from(tls_raw);
         let tls_stream = tls_connector.connect(&account.imap_host, tcp_stream).await?;
         let client = async_imap::Client::new(tls_stream.compat());
         let mut session = client.login(&email, &password).await.map_err(|e| anyhow::anyhow!("Login failed: {}", e.0))?;

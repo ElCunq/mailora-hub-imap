@@ -26,7 +26,8 @@ pub async fn connect(host: &str, port: u16, user: &str, pass: &str) -> Result<Im
             let tcp = TcpStream::connect((host, port)).await?;
             let tls = TlsConnector::builder()
                 .danger_accept_invalid_certs(true)
-                .build()?; // TODO: remove danger in prod
+                .danger_accept_invalid_hostnames(true)
+                .build()?;
             let tls = tokio_native_tls::TlsConnector::from(tls);
             let tls_stream = tls.connect(host, tcp).await?;
             let compat = tls_stream.compat();

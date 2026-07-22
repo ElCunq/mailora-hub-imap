@@ -81,7 +81,10 @@ pub async fn initial_snapshot(
         });
     } else {
         let tcp = TcpStream::connect((host, port)).await?;
-        let tls = TlsConnector::builder().build()?;
+        let tls = TlsConnector::builder()
+            .danger_accept_invalid_certs(true)
+            .danger_accept_invalid_hostnames(true)
+            .build()?;
         let tls = tokio_native_tls::TlsConnector::from(tls);
         let tls_stream = tls.connect(host, tcp).await?;
         let client = async_imap::Client::new(tls_stream.compat());
@@ -193,7 +196,10 @@ pub async fn fetch_new_since(
         return Ok((new_last, out));
     } else {
         let tcp = TcpStream::connect((host, port)).await?;
-        let tls = TlsConnector::builder().build()?;
+        let tls = TlsConnector::builder()
+            .danger_accept_invalid_certs(true)
+            .danger_accept_invalid_hostnames(true)
+            .build()?;
         let tls = tokio_native_tls::TlsConnector::from(tls);
         let tls_stream = tls.connect(host, tcp).await?;
         let client = async_imap::Client::new(tls_stream.compat());
@@ -436,7 +442,10 @@ pub async fn fetch_message_body_in(
         }));
     } else {
         let tcp = TcpStream::connect((host, port)).await?;
-        let tls = TlsConnector::builder().build()?;
+        let tls = TlsConnector::builder()
+            .danger_accept_invalid_certs(true)
+            .danger_accept_invalid_hostnames(true)
+            .build()?;
         let tls = tokio_native_tls::TlsConnector::from(tls);
         let tls_stream = tls.connect(host, tcp).await?;
         let client = async_imap::Client::new(tls_stream.compat());
@@ -613,6 +622,7 @@ pub async fn list_attachments(
     let tcp = TcpStream::connect((host, port)).await?;
     let tls = TlsConnector::builder()
         .danger_accept_invalid_certs(true)
+        .danger_accept_invalid_hostnames(true)
         .build()?;
     let tls = tokio_native_tls::TlsConnector::from(tls);
     let tls_stream = tls.connect(host, tcp).await?;
@@ -713,7 +723,10 @@ pub async fn fetch_attachment_part(
 ) -> Result<Option<(Vec<u8>, Option<String>, Option<String>)>> {
     use futures::StreamExt;
     let tcp = TcpStream::connect((host, port)).await?;
-    let tls = TlsConnector::builder().build()?;
+    let tls = TlsConnector::builder()
+        .danger_accept_invalid_certs(true)
+        .danger_accept_invalid_hostnames(true)
+        .build()?;
     let tls = tokio_native_tls::TlsConnector::from(tls);
     let tls_stream = tls.connect(host, tcp).await?;
     let client = async_imap::Client::new(tls_stream.compat());

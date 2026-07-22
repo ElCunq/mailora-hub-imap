@@ -95,7 +95,10 @@ async fn run_idle_session(
 }
 
 async fn connect_and_login(host: &str, port: u16, user: &str, pass: &str) -> Result<ImapSession> {
-    let tls = native_tls::TlsConnector::builder().build()?;
+    let tls = native_tls::TlsConnector::builder()
+        .danger_accept_invalid_certs(true)
+        .danger_accept_invalid_hostnames(true)
+        .build()?;
     let tls = tokio_native_tls::TlsConnector::from(tls);
     let stream = TcpStream::connect((host, port)).await?;
     let tls_stream = tls.connect(host, stream).await?;

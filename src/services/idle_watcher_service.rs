@@ -192,7 +192,11 @@ async fn idle_session(
         .await
         .context("TCP connect failed")?;
 
-    let tls_connector = TlsConnector::from(native_tls::TlsConnector::builder().build()?);
+    let tls_raw = native_tls::TlsConnector::builder()
+        .danger_accept_invalid_certs(true)
+        .danger_accept_invalid_hostnames(true)
+        .build()?;
+    let tls_connector = TlsConnector::from(tls_raw);
 
     let tls_stream = tls_connector
         .connect(&account.imap_host, tcp_stream)
