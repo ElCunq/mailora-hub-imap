@@ -850,8 +850,16 @@
                     apiFetch('/api/v1/rbac/domains'),
                     apiFetch('/api/v1/rbac/mailboxes')
                 ]);
-                if (dRes.ok) allDomains = await dRes.json();
-                if (mRes.ok) allMailboxes = await mRes.json();
+                if (dRes.ok) {
+                    const dData = await dRes.json();
+                    allDomains = Array.isArray(dData) ? dData : (dData.domains || []);
+                }
+                if (mRes.ok) {
+                    const mData = await mRes.json();
+                    allMailboxes = Array.isArray(mData) ? mData : (mData.mailboxes || []);
+                }
+                if (!Array.isArray(allDomains)) allDomains = [];
+                if (!Array.isArray(allMailboxes)) allMailboxes = [];
 
                 document.getElementById('stat-domains').textContent = allDomains.length;
                 document.getElementById('stat-mailboxes').textContent = allMailboxes.length;
@@ -864,11 +872,15 @@
 
         function renderDomains() {
             const container = document.getElementById('domains-container');
-            const query = document.getElementById('domain-search').value.toLowerCase();
+            const searchInput = document.getElementById('domain-search');
+            const query = searchInput ? searchInput.value.toLowerCase() : '';
+
+            if (!Array.isArray(allDomains)) allDomains = [];
+            if (!Array.isArray(allMailboxes)) allMailboxes = [];
 
             const filteredDomains = allDomains.filter(d => 
-                d.name.toLowerCase().includes(query) ||
-                allMailboxes.some(m => m.domain_id === d.id && m.address.toLowerCase().includes(query))
+                (d.name || '').toLowerCase().includes(query) ||
+                allMailboxes.some(m => m.domain_id === d.id && (m.address || '').toLowerCase().includes(query))
             );
 
             if (filteredDomains.length === 0) {
@@ -1158,9 +1170,10 @@
             try {
                 const res = await apiFetch('/outbox');
                 if (!res.ok) return;
-                const outbox = await res.json();
+                const json = await res.json();
+                const outbox = Array.isArray(json) ? json : (json.outbox || []);
                 const tbody = document.getElementById('outbox-tbody');
-                if (outbox.length === 0) {
+                if (!Array.isArray(outbox) || outbox.length === 0) {
                     tbody.innerHTML = '<tr><td colspan="7" style="text-align:center">Outbox kuyruğu boş</td></tr>';
                     return;
                 }

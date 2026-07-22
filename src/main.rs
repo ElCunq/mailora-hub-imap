@@ -83,6 +83,10 @@ async fn main() -> Result<()> {
             tracing::info!("seed skipped: {e}");
         }
 
+        if let Err(e) = seed_super_admin_if_empty(&pool).await {
+            tracing::warn!("superadmin seed failed: {e}");
+        }
+
         if let Err(e) = db::normalize_legacy_dates(&pool).await {
             tracing::warn!("date normalization failed: {e}");
         }
@@ -202,6 +206,31 @@ fn db_file_path(url: &str) -> Option<std::path::PathBuf> {
         return Some(std::path::PathBuf::from(rest));
     }
     None
+}
+
+async fn seed_super_admin_if_empty(pool: &sqlx::SqlitePool) -> Result<()> {
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM users")
+        .fetch_one(pool)
+        .await?;
+
+    if count == 0 {
+        let username = std::env::var("ADMIN_USERNAME").unwrap_or_else(|_| "admin".to_string());
+        let password = std::env::var("ADMIN_PASSWORD").unwrap_or_else(|_| "admin123".to_string());
+        let hash_str = bcrypt::hash(&password, bcrypt::DEFAULT_COST)?;
+
+        let _ = sqlx::query(
+            "INSERT INTO users (username, email, password_hash, role, created_at, updated_at) 
+             VALUES (?, ?, ?, 'SuperAdmin', datetime('now'), datetime('now'))"
+        )
+        .bind(&username)
+        .bind(&username)
+        .bind(&hash_str)
+        .execute(pool)
+        .await?;
+
+        tracing::info!("Seeded default SuperAdmin user '{}' with initial credentials.", username);
+    }
+    Ok(())
 }
 
 // index.html serve için routes/mod.rs içinde root_page kullanılıyor.
