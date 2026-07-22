@@ -30,7 +30,13 @@ pub struct MailcowClient {
 impl MailcowClient {
     pub fn new(base_url: impl Into<String>, api_key: impl Into<String>) -> Self {
         let mut base_url = base_url.into();
-        if base_url.ends_with('/') {
+        while base_url.ends_with('/') {
+            base_url.pop();
+        }
+        if base_url.ends_with("/api") {
+            base_url.truncate(base_url.len() - 4);
+        }
+        while base_url.ends_with('/') {
             base_url.pop();
         }
         let client = Client::builder()
@@ -53,12 +59,11 @@ impl MailcowClient {
 
     pub async fn fetch_domains(&self) -> Result<Vec<DiscoveredDomain>> {
         let url = format!("{}/api/v1/get/domain/all", self.base_url);
-        let resp = self
-            .client
-            .get(&url)
-            .header("X-API-Key", &self.api_key)
-            .send()
-            .await?;
+        let mut req = self.client.get(&url);
+        if !self.api_key.trim().is_empty() {
+            req = req.header("X-API-Key", &self.api_key);
+        }
+        let resp = req.send().await?;
 
         if !resp.status().is_success() {
             let status = resp.status();
@@ -76,12 +81,11 @@ impl MailcowClient {
 
     pub async fn fetch_mailboxes(&self) -> Result<Vec<DiscoveredMailbox>> {
         let url = format!("{}/api/v1/get/mailbox/all", self.base_url);
-        let resp = self
-            .client
-            .get(&url)
-            .header("X-API-Key", &self.api_key)
-            .send()
-            .await?;
+        let mut req = self.client.get(&url);
+        if !self.api_key.trim().is_empty() {
+            req = req.header("X-API-Key", &self.api_key);
+        }
+        let resp = req.send().await?;
 
         if !resp.status().is_success() {
             let status = resp.status();

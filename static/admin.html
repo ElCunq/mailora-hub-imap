@@ -699,11 +699,13 @@
         let allInstances = [];
 
         async function init() {
-            await loadInstances();
-            await loadUsers();
-            await loadDomainsAndMailboxes();
-            await loadOutbox();
-            await loadRecentDashboardLogs();
+            await Promise.allSettled([
+                loadInstances(),
+                loadUsers(),
+                loadDomainsAndMailboxes(),
+                loadOutbox(),
+                loadRecentDashboardLogs()
+            ]);
         }
 
         async function loadInstances() {
@@ -711,7 +713,7 @@
                 const res = await apiFetch('/api/v1/mailcow/instances');
                 if (!res.ok) return;
                 const json = await res.json();
-                allInstances = json.data || [];
+                allInstances = Array.isArray(json.data) ? json.data : (Array.isArray(json) ? json : []);
                 document.getElementById('stat-instances').textContent = allInstances.length;
 
                 const tbody = document.getElementById('mailcow-tbody');
@@ -744,10 +746,15 @@
                     res = await apiFetch('/admin/users');
                 }
                 if (!res.ok) return;
-                allUsers = await res.json();
+                const data = await res.json();
+                allUsers = Array.isArray(data) ? data : (data.users || []);
                 document.getElementById('stat-users').textContent = allUsers.length;
 
                 const tbody = document.getElementById('users-tbody');
+                if (allUsers.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center">Kullanıcı bulunamadı</td></tr>';
+                    return;
+                }
                 tbody.innerHTML = allUsers.map(u => `
                     <tr>
                         <td>#${u.id}</td>
@@ -1186,66 +1193,106 @@
         }
 
         async function loadAuditLogs() {
-            const res = await apiFetch('/api/v3/audit/logs?limit=100');
-            if (!res.ok) return;
-            const logs = await res.json();
-            const container = document.getElementById('audit-log-list');
-            container.innerHTML = logs.map(l => `
-                <div class="log-row">
-                    <span class="log-time">${l.created_at.split('.')[0].replace('T', ' ')}</span>
-                    <span class="log-level info">AUDIT</span>
-                    <span class="log-source">[${l.category}.${l.action}]</span>
-                    <span class="log-msg">User: ${l.user_id || '-'} — ${l.details_json || ''}</span>
-                </div>
-            `).join('') || '<div style="padding:16px; text-align:center; color:var(--text-muted)">Log bulunamadı</div>';
+            try {
+                const res = await apiFetch('/api/v3/audit/logs?limit=100');
+                if (!res.ok) return;
+                const json = await res.json();
+                const logs = Array.isArray(json) ? json : (json.logs || []);
+                const container = document.getElementById('audit-log-list');
+                if (!Array.isArray(logs) || logs.length === 0) {
+                    container.innerHTML = '<div style="padding:16px; text-align:center; color:var(--text-muted)">Log bulunamadı</div>';
+                    return;
+                }
+                container.innerHTML = logs.map(l => {
+                    const timeStr = l.created_at ? l.created_at.split('.')[0].replace('T', ' ') : '-';
+                    return `
+                    <div class="log-row">
+                        <span class="log-time">${timeStr}</span>
+                        <span class="log-level info">${(l.resource_type || 'SYSTEM').toUpperCase()}</span>
+                        <span class="log-source">[${l.action}]</span>
+                        <span class="log-msg">Kullanıcı: #${l.actor_user_id || '-'} — ${l.metadata_json || ''}</span>
+                    </div>
+                `}).join('');
+            } catch (e) {
+                console.error("loadAuditLogs error:", e);
+            }
         }
 
         async function loadSendLogs() {
-            const res = await apiFetch('/api/v3/audit/send?limit=100');
-            if (!res.ok) return;
-            const logs = await res.json();
-            const container = document.getElementById('send-log-list');
-            container.innerHTML = logs.map(l => `
-                <div class="log-row">
-                    <span class="log-time">${l.created_at.split('.')[0].replace('T', ' ')}</span>
-                    <span class="log-level ${l.status === 'sent' ? 'success' : 'error'}">${l.status.toUpperCase()}</span>
-                    <span class="log-source">[Mailbox #${l.mailbox_id}]</span>
-                    <span class="log-msg">Kime: ${l.to_addresses} — Konu: ${l.subject || '-'} (${l.error_message || 'Başarılı'})</span>
-                </div>
-            `).join('') || '<div style="padding:16px; text-align:center; color:var(--text-muted)">Gönderim logu bulunamadı</div>';
+            try {
+                const res = await apiFetch('/api/v3/audit/send?limit=100');
+                if (!res.ok) return;
+                const json = await res.json();
+                const logs = Array.isArray(json) ? json : (json.send_audit || []);
+                const container = document.getElementById('send-log-list');
+                if (!Array.isArray(logs) || logs.length === 0) {
+                    container.innerHTML = '<div style="padding:16px; text-align:center; color:var(--text-muted)">Gönderim logu bulunamadı</div>';
+                    return;
+                }
+                container.innerHTML = logs.map(l => {
+                    const timeStr = l.created_at ? l.created_at.split('.')[0].replace('T', ' ') : '-';
+                    return `
+                    <div class="log-row">
+                        <span class="log-time">${timeStr}</span>
+                        <span class="log-level ${l.status === 'sent' ? 'success' : 'error'}">${(l.status || 'PENDING').toUpperCase()}</span>
+                        <span class="log-source">[Mailbox #${l.mailbox_id}]</span>
+                        <span class="log-msg">Gönderen: ${l.from_address} — Alıcı: ${l.recipients} (${l.smtp_response || l.status})</span>
+                    </div>
+                `}).join('');
+            } catch (e) {
+                console.error("loadSendLogs error:", e);
+            }
         }
 
         async function loadSyncLogs() {
-            const res = await apiFetch('/api/v3/audit/sync-runs?limit=100');
-            if (!res.ok) return;
-            const logs = await res.json();
-            const container = document.getElementById('sync-log-list');
-            container.innerHTML = logs.map(l => `
-                <div class="log-row">
-                    <span class="log-time">${l.started_at.split('.')[0].replace('T', ' ')}</span>
-                    <span class="log-level ${l.status === 'ok' ? 'success' : 'warn'}">${l.status.toUpperCase()}</span>
-                    <span class="log-source">[Mailbox #${l.mailbox_id} - ${l.folder_name}]</span>
-                    <span class="log-msg">Taranan: ${l.messages_seen}, Yeni/Güncellenen: ${l.messages_updated}, Süre: ${l.duration_ms}ms (${l.error_message || ''})</span>
-                </div>
-            `).join('') || '<div style="padding:16px; text-align:center; color:var(--text-muted)">Sync raporu bulunamadı</div>';
+            try {
+                const res = await apiFetch('/api/v3/audit/sync-runs?limit=100');
+                if (!res.ok) return;
+                const json = await res.json();
+                const logs = Array.isArray(json) ? json : (json.sync_runs || []);
+                const container = document.getElementById('sync-log-list');
+                if (!Array.isArray(logs) || logs.length === 0) {
+                    container.innerHTML = '<div style="padding:16px; text-align:center; color:var(--text-muted)">Sync raporu bulunamadı</div>';
+                    return;
+                }
+                container.innerHTML = logs.map(l => {
+                    const timeStr = l.started_at ? l.started_at.split('.')[0].replace('T', ' ') : '-';
+                    return `
+                    <div class="log-row">
+                        <span class="log-time">${timeStr}</span>
+                        <span class="log-level ${l.status === 'ok' ? 'success' : 'warn'}">${(l.status || 'INFO').toUpperCase()}</span>
+                        <span class="log-source">[Mailbox #${l.mailbox_id} - ${l.folder_name || 'All'}]</span>
+                        <span class="log-msg">Yeni: ${l.new_count || 0}, Güncellenen: ${l.updated_count || 0}, Süre: ${l.duration_ms || 0}ms ${l.error_message ? '(' + l.error_message + ')' : ''}</span>
+                    </div>
+                `}).join('');
+            } catch (e) {
+                console.error("loadSyncLogs error:", e);
+            }
         }
 
         async function loadRecentDashboardLogs() {
             try {
                 const res = await apiFetch('/api/v3/audit/logs?limit=15');
                 if (!res.ok) return;
-                const logs = await res.json();
+                const json = await res.json();
+                const logs = Array.isArray(json) ? json : (json.logs || []);
                 const container = document.getElementById('dashboard-recent-logs');
-                container.innerHTML = logs.map(l => `
+                if (!Array.isArray(logs) || logs.length === 0) {
+                    container.innerHTML = '<div style="padding:16px; text-align:center; color:var(--text-muted)">Kayıt bulunamadı</div>';
+                    return;
+                }
+                container.innerHTML = logs.map(l => {
+                    const timeStr = l.created_at ? l.created_at.split('.')[0].replace('T', ' ') : '-';
+                    return `
                     <div class="log-row">
-                        <span class="log-time">${l.created_at.split('.')[0].replace('T', ' ')}</span>
-                        <span class="log-level info">${l.category.toUpperCase()}</span>
+                        <span class="log-time">${timeStr}</span>
+                        <span class="log-level info">${(l.resource_type || 'SYSTEM').toUpperCase()}</span>
                         <span class="log-source">[${l.action}]</span>
-                        <span class="log-msg">Kullanıcı #${l.user_id || '-'} (${l.details_json || ''})</span>
+                        <span class="log-msg">Kullanıcı #${l.actor_user_id || '-'} (${l.metadata_json || ''})</span>
                     </div>
-                `).join('') || '<div style="padding:16px; text-align:center; color:var(--text-muted)">Kayıt bulunamadı</div>';
+                `}).join('');
             } catch (e) {
-                console.error(e);
+                console.error("loadRecentDashboardLogs error:", e);
             }
         }
 
