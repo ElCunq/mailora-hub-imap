@@ -22,15 +22,34 @@ pub struct UpdateUserRoleRequest {
 #[derive(Debug, Deserialize)]
 pub struct MailboxAssignmentRequest {
     pub user_id: i64,
+    pub permissions: Option<Vec<String>>,
+    #[serde(default)]
     pub can_view: bool,
+    #[serde(default)]
     pub can_read: bool,
+    #[serde(default)]
     pub can_reply: bool,
+    #[serde(default)]
     pub can_send: bool,
+    #[serde(default)]
     pub can_send_as: bool,
+    #[serde(default)]
     pub can_mark_read: bool,
+    #[serde(default)]
     pub can_move: bool,
+    #[serde(default)]
     pub can_delete: bool,
+    #[serde(default)]
     pub can_manage: bool,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreateUserReq {
+    pub username: String,
+    pub password: String,
+    pub role: Option<String>,
+    pub fallback_email: Option<String>,
+    pub domain_ids: Option<Vec<i64>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -165,17 +184,31 @@ async fn assign_mailbox_user(
         _ => return (StatusCode::FORBIDDEN, Json(serde_json::json!({ "error": "Domain management rights required" }))).into_response(),
     }
 
-    let perms = (
-        req.can_view,
-        req.can_read,
-        req.can_reply,
-        req.can_send,
-        req.can_send_as,
-        req.can_mark_read,
-        req.can_move,
-        req.can_delete,
-        req.can_manage,
-    );
+    let perms = if let Some(ref list) = req.permissions {
+        (
+            list.iter().any(|p| p.eq_ignore_ascii_case("view")),
+            list.iter().any(|p| p.eq_ignore_ascii_case("read")),
+            list.iter().any(|p| p.eq_ignore_ascii_case("reply")),
+            list.iter().any(|p| p.eq_ignore_ascii_case("send")),
+            list.iter().any(|p| p.eq_ignore_ascii_case("sendas")),
+            list.iter().any(|p| p.eq_ignore_ascii_case("markread")),
+            list.iter().any(|p| p.eq_ignore_ascii_case("move")),
+            list.iter().any(|p| p.eq_ignore_ascii_case("delete")),
+            list.iter().any(|p| p.eq_ignore_ascii_case("manage")),
+        )
+    } else {
+        (
+            req.can_view,
+            req.can_read,
+            req.can_reply,
+            req.can_send,
+            req.can_send_as,
+            req.can_mark_read,
+            req.can_move,
+            req.can_delete,
+            req.can_manage,
+        )
+    };
 
     match mb_repo.assign_user(req.user_id, mailbox_id, perms, Some(auth_user.id)).await {
         Ok(assign) => (StatusCode::OK, Json(serde_json::json!({ "ok": true, "assignment": assign }))).into_response(),
@@ -432,6 +465,68 @@ async fn list_users(
     (StatusCode::OK, Json(result)).into_response()
 }
 
+/// POST /api/v1/rbac/users
+async fn create_user(
+    auth_user: AuthUser,
+    State(pool): State<SqlitePool>,
+    Json(req): Json<CreateUserReq>,
+) -> impl IntoResponse {
+    let auth_svc = AuthorizationService::new(&pool);
+    let is_super = auth_svc.is_super_admin(auth_user.id).await.unwrap_or(false);
+
+    if req.username.trim().is_empty() || req.password.trim().is_empty() {
+        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "error": "Kullanıcı adı ve şifre zorunludur" }))).into_response();
+    }
+
+    let role = req.role.unwrap_or_else(|| "User".to_string());
+    if role == "SuperAdmin" && !is_super {
+        return (StatusCode::FORBIDDEN, Json(serde_json::json!({ "error": "Sadece SuperAdmin yetki verebilir" }))).into_response();
+    }
+
+    let hash_str = match bcrypt::hash(&req.password, bcrypt::DEFAULT_COST) {
+        Ok(h) => h,
+        Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": e.to_string() }))).into_response(),
+    };
+
+    let user_id = match sqlx::query_scalar::<_, i64>(
+        "INSERT INTO users (username, email, password_hash, role, fallback_email, created_at, updated_at) 
+         VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now')) 
+         RETURNING id"
+    )
+    .bind(&req.username)
+    .bind(&req.username)
+    .bind(&hash_str)
+    .bind(&role)
+    .bind(req.fallback_email.as_deref())
+    .fetch_one(&pool)
+    .await {
+        Ok(id) => id,
+        Err(e) => return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "error": format!("Kullanıcı eklenemedi: {}", e) }))).into_response(),
+    };
+
+    // Auto assign domain groups if provided or matching email
+    if let Some(domain_ids) = req.domain_ids {
+        for did in domain_ids {
+            if role == "DomainAdmin" {
+                let dom_repo = DomainRepository::new(&pool);
+                let _ = dom_repo.assign_admin(user_id, did, Some(auth_user.id)).await;
+            } else {
+                let _ = sqlx::query(
+                    "INSERT OR IGNORE INTO user_domain_assignments (user_id, domain_id, created_at) VALUES (?, ?, datetime('now'))"
+                )
+                .bind(user_id)
+                .bind(did)
+                .execute(&pool)
+                .await;
+            }
+        }
+    } else {
+        crate::services::auth_service::auto_assign_user_domain(&pool, user_id, &req.username).await;
+    }
+
+    (StatusCode::OK, Json(serde_json::json!({ "ok": true, "id": user_id }))).into_response()
+}
+
 /// POST /api/v1/rbac/users/:user_id
 async fn update_user_details(
     auth_user: AuthUser,
@@ -589,7 +684,7 @@ where
     let _ = pool;
     Router::new()
         .route("/me/permissions", get(get_my_permissions))
-        .route("/users", get(list_users))
+        .route("/users", get(list_users).post(create_user))
         .route("/users/:user_id", post(update_user_details))
         .route("/users/:user_id/role", post(update_user_role))
         .route("/domains", get(list_domains))

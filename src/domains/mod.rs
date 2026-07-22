@@ -100,6 +100,12 @@ impl<'a> DomainRepository<'a> {
         .fetch_one(self.pool)
         .await?;
 
+        // Update user role to DomainAdmin if not SuperAdmin
+        let _ = sqlx::query("UPDATE users SET role = 'DomainAdmin', updated_at = datetime('now') WHERE id = ? AND role != 'SuperAdmin'")
+            .bind(user_id)
+            .execute(self.pool)
+            .await;
+
         Ok(assignment)
     }
 

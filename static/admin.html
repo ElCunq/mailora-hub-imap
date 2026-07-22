@@ -1079,30 +1079,25 @@
             const checkedDomBoxes = document.querySelectorAll('input[name="add-user-domain-checkbox"]:checked');
             const domain_ids = Array.from(checkedDomBoxes).map(cb => parseInt(cb.value));
 
-            const res = await apiFetch('/accounts', {
+            const res = await apiFetch('/api/v1/rbac/users', {
                 method: 'POST',
-                body: JSON.stringify({ email: email || `${username}@mailora.local`, password, provider: 'mailcow', display_name: username })
+                body: JSON.stringify({
+                    username: email || username,
+                    password,
+                    role,
+                    fallback_email: fallback_email || null,
+                    domain_ids
+                })
             });
 
             if (res.ok) {
-                await loadUsers();
-                const matchedUser = allUsers.find(u => u.username === username);
-                if (matchedUser) {
-                    await apiFetch(`/api/v1/rbac/users/${matchedUser.id}`, {
-                        method: 'POST',
-                        body: JSON.stringify({
-                            role,
-                            fallback_email: fallback_email || null,
-                            domain_ids
-                        })
-                    });
-                }
+                alert('Kullanıcı başarıyla oluşturuldu!');
+                closeModal('modal-user');
+                loadUsers();
             } else {
-                alert('Kullanıcı eklenemedi!');
+                const data = await res.json().catch(() => ({}));
+                alert('Kullanıcı eklenemedi: ' + (data.error || 'Bilinmeyen hata'));
             }
-
-            closeModal('modal-user');
-            loadUsers();
         }
 
         function openAssignDomainAdmin(domainId, domainName) {

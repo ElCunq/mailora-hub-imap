@@ -161,6 +161,60 @@ pub async fn list_accounts(pool: &SqlitePool) -> Result<Vec<Account>> {
         });
     }
 
+    // Also include mailboxes that have credentials configured
+    let mb_rows = sqlx::query(
+        r#"SELECT m.id, m.address, m.display_name, mc.password_encrypted,
+                  mi.imap_host, mi.imap_port, mi.smtp_host, mi.smtp_port
+           FROM mailboxes m
+           JOIN mailbox_credentials mc ON m.id = mc.mailbox_id
+           JOIN domains d ON m.domain_id = d.id
+           JOIN mailcow_instances mi ON d.mailcow_instance_id = mi.id"#
+    )
+    .fetch_all(pool)
+    .await
+    .unwrap_or_default();
+
+    for row in mb_rows {
+        let mb_id: i64 = row.try_get("id").unwrap_or_default();
+        let address: String = row.try_get("address").unwrap_or_default();
+        let id_str = mb_id.to_string();
+
+        if !accounts.iter().any(|a| a.id == id_str || a.email == address) {
+            let display_name: Option<String> = row.try_get("display_name").ok();
+            let pass_enc: String = row.try_get("password_encrypted").unwrap_or_default();
+            let imap_host: String = row.try_get("imap_host").unwrap_or_default();
+            let imap_port: i64 = row.try_get("imap_port").unwrap_or(993);
+            let smtp_host: String = row.try_get("smtp_host").unwrap_or_default();
+            let smtp_port: i64 = row.try_get("smtp_port").unwrap_or(587);
+
+            let decrypted_pass = crate::services::crypto::decrypt_secret(&pass_enc).unwrap_or_default();
+            let creds_enc = Account::encode_credentials(&address, &decrypted_pass);
+
+            accounts.push(Account {
+                id: id_str,
+                email: address,
+                provider: EmailProvider::Custom,
+                display_name,
+                imap_host,
+                imap_port: imap_port as u16,
+                smtp_host,
+                smtp_port: smtp_port as u16,
+                credentials_encrypted: creds_enc,
+                enabled: true,
+                sync_frequency_secs: 300,
+                last_sync_ts: None,
+                created_at: 0,
+                updated_at: 0,
+                append_policy: None,
+                sent_folder_hint: None,
+                color: None,
+                carddav_url: None,
+                caldav_url: None,
+                password: decrypted_pass,
+            });
+        }
+    }
+
     Ok(accounts)
 }
 
@@ -222,7 +276,60 @@ pub async fn get_account(pool: &SqlitePool, account_id: &str) -> Result<Option<A
 
             Some(acc)
         }
-        None => None,
+        None => {
+            let mb_row = sqlx::query(
+                r#"SELECT m.id, m.address, m.display_name, mc.password_encrypted,
+                          mi.imap_host, mi.imap_port, mi.smtp_host, mi.smtp_port
+                   FROM mailboxes m
+                   JOIN mailbox_credentials mc ON m.id = mc.mailbox_id
+                   JOIN domains d ON m.domain_id = d.id
+                   JOIN mailcow_instances mi ON d.mailcow_instance_id = mi.id
+                   WHERE CAST(m.id AS TEXT) = ? OR m.address = ?"#
+            )
+            .bind(account_id)
+            .bind(account_id)
+            .fetch_optional(pool)
+            .await?;
+
+            if let Some(row) = mb_row {
+                let mb_id: i64 = row.try_get("id").unwrap_or_default();
+                let address: String = row.try_get("address").unwrap_or_default();
+                let display_name: Option<String> = row.try_get("display_name").ok();
+                let pass_enc: String = row.try_get("password_encrypted").unwrap_or_default();
+                let imap_host: String = row.try_get("imap_host").unwrap_or_default();
+                let imap_port: i64 = row.try_get("imap_port").unwrap_or(993);
+                let smtp_host: String = row.try_get("smtp_host").unwrap_or_default();
+                let smtp_port: i64 = row.try_get("smtp_port").unwrap_or(587);
+
+                let decrypted_pass = crate::services::crypto::decrypt_secret(&pass_enc).unwrap_or_default();
+                let creds_enc = Account::encode_credentials(&address, &decrypted_pass);
+
+                Some(Account {
+                    id: mb_id.to_string(),
+                    email: address,
+                    provider: EmailProvider::Custom,
+                    display_name,
+                    imap_host,
+                    imap_port: imap_port as u16,
+                    smtp_host,
+                    smtp_port: smtp_port as u16,
+                    credentials_encrypted: creds_enc,
+                    enabled: true,
+                    sync_frequency_secs: 300,
+                    last_sync_ts: None,
+                    created_at: 0,
+                    updated_at: 0,
+                    append_policy: None,
+                    sent_folder_hint: None,
+                    color: None,
+                    carddav_url: None,
+                    caldav_url: None,
+                    password: decrypted_pass,
+                })
+            } else {
+                None
+            }
+        }
     })
 }
 

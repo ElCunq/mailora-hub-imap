@@ -68,14 +68,18 @@ async function ensureFoldersLoaded(accountId) {
     try {
         const r = await apiFetch(`/test/folders/${encodeURIComponent(accountId)}`);
         const list = await r.json();
+        if (!Array.isArray(list)) {
+            folderCache[accountId] = [];
+            return;
+        }
         folderCache[accountId] = list;
         const map = {};
         const find = (flags, names) => {
-            const byFlag = list.find(f => f.flags.some(fl => flags.some(target => fl.toLowerCase() === target.toLowerCase())));
+            const byFlag = list.find(f => f.flags && f.flags.some(fl => flags.some(target => fl.toLowerCase() === target.toLowerCase())));
             if (byFlag) return byFlag.name;
-            const byName = list.find(f => { const n = f.name.toLowerCase(); return names.some(target => n === target || n.endsWith('/' + target) || n.endsWith('.' + target)); });
+            const byName = list.find(f => { const n = (f.name || '').toLowerCase(); return names.some(target => n === target || n.endsWith('/' + target) || n.endsWith('.' + target)); });
             if (byName) return byName.name;
-            const byFuzzy = list.find(f => names.some(target => f.name.toLowerCase().includes(target)));
+            const byFuzzy = list.find(f => names.some(target => (f.name || '').toLowerCase().includes(target)));
             return byFuzzy ? byFuzzy.name : null;
         };
         map['INBOX'] = 'INBOX';
@@ -86,7 +90,7 @@ async function ensureFoldersLoaded(accountId) {
         map['Spam'] = find(['\\Junk', '\\Spam'], ['spam', 'junk', 'gereksiz']);
         folderMappings[accountId] = map;
     } catch (e) {
-        console.error("Folder resolution failed:", e);
+        console.warn("Folder resolution fallback:", e);
         folderCache[accountId] = [];
     }
 }
@@ -94,9 +98,13 @@ async function ensureFoldersLoaded(accountId) {
 export async function resolveFolderName(accountId, folder) {
     const generics = ['Inbox', 'INBOX', 'Sent', 'Drafts', 'Trash', 'Spam'];
     if (generics.includes(folder)) {
-        await ensureFoldersLoaded(accountId);
-        const map = folderMappings[accountId];
-        if (map && map[folder]) return map[folder];
+        try {
+            await ensureFoldersLoaded(accountId);
+            const map = folderMappings[accountId];
+            if (map && map[folder]) return map[folder];
+        } catch (e) {
+            console.warn("Error resolving folder name:", e);
+        }
     }
     return folder;
 }
